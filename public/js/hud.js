@@ -24,7 +24,8 @@ window.PBHud = (function () {
                 <span><b>ASSIST.</b><span id="h-a">0</span></span>
               </div>
               <div class="box hud-scorebox">
-                <div class="hud-score"><span class="a">AZUL</span><span id="h-sa">0</span><span class="muted">x</span><span id="h-sb">0</span><span class="b">VERMELHO</span></div>
+                <div class="hud-score" id="h-teamscore"><span class="a">AZUL</span><span id="h-sa">0</span><span class="muted">x</span><span id="h-sb">0</span><span class="b">VERMELHO</span></div>
+                <div class="hud-score hud-ffa" id="h-ffa" style="display:none"></div>
                 <div class="hud-round" id="h-round"></div>
               </div>
               <div class="box hud-jump" id="h-jumpbox"><div id="h-jump"></div><div class="bar blue"><i id="h-jbar"></i></div></div>
@@ -34,7 +35,7 @@ window.PBHud = (function () {
           <div class="hud-cell-right"><div class="hud-feed" id="h-feed"></div></div>
         </div>
         <div class="hud-center" id="h-center"></div>
-        <div class="hud-help">WASD/Setas: andar · Mouse: mirar · Clique esquerdo: atirar/facada · Espaço: super pulo · 1: arma · 2: faca · R: recarregar</div>`;
+        <div class="hud-help">WASD/Setas: andar · Mouse: mirar · Clique esquerdo: atirar/facada · Botão direito: bomba (segure para mirar) · Espaço: super pulo · 1: arma · 2: faca · R: recarregar</div>`;
       container.appendChild(this.el);
       this.$ = (id) => this.el.querySelector('#' + id);
       this.feed = [];
@@ -65,11 +66,24 @@ window.PBHud = (function () {
       this.set('h-sb', String(s.sc ? s.sc.B : 0));
       let rt = '';
       if (s.rt != null) { const m = Math.floor(s.rt / 60), sec = Math.floor(s.rt % 60); rt = ` · <span class="${s.rt <= 10 ? 'warn' : ''}">⏱ ${m}:${String(sec).padStart(2, '0')}</span>`; }
-      this.set('h-round', opts.sandbox ? 'Modo teste' : `Round ${s.rd || 1} de ${s.tr || 1}${rt}`);
+      const md = s.md || 'rounds', dm = md === 'tdm' || md === 'ffa';
+      const modeName = md === 'tdm' ? 'Mata-mata em equipe' : 'Cada um por si';
+      this.set('h-round', opts.sandbox ? 'Modo teste' : dm ? `${modeName} · meta ${s.kl} abates${rt}` : `Round ${s.rd || 1} de ${s.tr || 1}${rt}`);
+      // placar: times, ou líder no cada-um-por-si
+      const ffa = md === 'ffa' && !opts.sandbox;
+      this.$('h-teamscore').style.display = ffa ? 'none' : '';
+      this.$('h-ffa').style.display = ffa ? '' : 'none';
+      if (ffa) {
+        const ranked = s.p.slice().sort((a, b) => b.st[0] - a.st[0] || a.st[1] - b.st[1]);
+        const lead = ranked[0], pos = me ? ranked.findIndex((p) => p.id === me.id) + 1 : 0;
+        const nm = (id) => PB.esc(opts.nameOf ? opts.nameOf(id) : '?');
+        this.set('h-ffa', lead ? `🏆 <span class="lead">${nm(lead.id)}</span> ${lead.st[0]}${me ? ` <span class="muted">·</span> Você ${me.st[0]} <small>(${pos}º)</small>` : ''}` : '');
+      }
       let center = '';
-      if (s.ph === 'countdown') center = `${Math.ceil(s.pu)}<small>Round ${s.rd}</small>`;
+      if (s.ph === 'countdown') center = `${Math.ceil(s.pu)}<small>${dm ? modeName : 'Round ' + s.rd}</small>`;
       else if (s.ph === 'roundEnd') center = opts.roundMsg || '';
-      else if (me && !me.al && !opts.sandbox) center = '<small>Você foi eliminado — aguarde o próximo round</small>';
+      else if (me && !me.al && !opts.sandbox) center = dm ? `<small>Renascendo em ${Math.ceil(me.rs || 0)}s...</small>` : '<small>Você foi eliminado — aguarde o próximo round</small>';
+      else if (me && me.sp) center = '<small>🛡️ Protegido — já já pode atirar</small>';
       this.set('h-center', center);
       const lg = s.lg;
       let lt = '';
@@ -86,6 +100,7 @@ window.PBHud = (function () {
 
       let hearts = '';
       for (let i = 0; i < cfg.lives; i++) hearts += `<span class="${i < me.l ? '' : 'lost'}">❤️</span>`;
+      if (cfg.bombCount > 0) hearts += ` <span class="hud-bombs ${me.bo > 0 ? '' : 'lost'}" title="Bomba (botão direito)">💣×${me.bo || 0}</span>`;
       this.set('h-hearts', hearts);
       this.$('h-w1').classList.toggle('on', me.w === 1);
       this.$('h-w2').classList.toggle('on', me.w === 2);
@@ -126,6 +141,7 @@ window.PBHud = (function () {
     };
     if (h.mouseEl) {
       h.mouseEl.addEventListener('mousedown', (e) => {
+        if (e.button === 2 && h.enabled() && h.onBomb) { e.preventDefault(); h.onBomb(true); return; }
         if (e.button !== 0 || !h.enabled()) return;
         e.preventDefault();
         if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
@@ -134,6 +150,7 @@ window.PBHud = (function () {
       h.mouseEl.addEventListener('contextmenu', (e) => e.preventDefault());
       window.addEventListener('mouseup', (e) => {
         if (e.button === 0 && keys.fire) { keys.fire = false; h.onChange(Object.assign({}, keys)); }
+        if (e.button === 2 && h.onBomb) h.onBomb(false);
       });
     }
     function isTyping(e) {

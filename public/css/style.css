@@ -175,3 +175,9 @@ input[type=color] { width: 56px; height: 40px; border: 1px solid var(--line); bo
 .hud-hearts { font-size: 15px; line-height: 17px; letter-spacing: 2px; white-space: nowrap; }
 .hud-ammo-sub { display: none; }
 .hud-feed { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; font-size: 14px; }
+
+.hud-ffa { font-size: 17px; white-space: nowrap; }
+.hud-ffa .lead { color: #ffcc33; }
+.hud-ffa small { font-size: 12px; color: var(--muted); }
+.hud-bombs { font-size: 13px; letter-spacing: 0; margin-left: 6px; }
+.hud-bombs.lost { opacity: .3; filter: grayscale(1); }

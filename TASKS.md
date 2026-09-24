@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 24/09/2026 — v0.2.1 no ar em https://point-ball.onrender.com
+Última atualização: 24/09/2026 — v0.3.0 (branch `dev`, aguardando teste) · no ar: v0.2.1 em https://point-ball.onrender.com
 
 ---
 
@@ -158,6 +158,23 @@
 - [x] Rastro do tiro na cor do time (no claro e no escuro)
 - [x] Avatares sem foto na sala/vitória usam a cor do time
 - [x] Subido para GitHub/Render
+
+## 8.9 v0.3.0 — bomba, níveis de bot e modos mata-mata (pedido em casa)
+- [x] Super pulo carrega em **15 s**
+- [x] Borda do personagem = **carregamento do próximo tiro** (fecha o círculo = pronto); azul forte / vermelho forte; também mostra a recarga do pente
+- [x] Removida a borda branca do próprio personagem (o nome amarelo já diferencia)
+- [x] **Bomba** no botão direito: segurar mostra o círculo de alcance e onde vai cair; soltar fora do círculo = vai no limite naquela direção; dentro = cai onde soltou
+  - 1 bomba por round (no mata-mata, 1 por vida); voa por cima dos muros, explode depois de 0,6 s no chão, tira 1 vida de inimigos no raio (muro protege, sem fogo amigo)
+  - ajustes no /teste (grupo "Bomba")
+- [x] **Níveis de bot:** Fácil, Média, Semi-pro (o de antes, um pouco mais difícil) e Profissional (mira mais precisa, prevê o movimento, usa bomba)
+- [x] **Modo mata-mata em equipe:** placar = abates do time; renasce em 2 s no seu lado do mapa
+- [x] **Modo cada um por si:** todo mundo é inimigo (você azul, os outros vermelhos); ranking por abates
+- [x] Tempo 1/2/3/5 min e limite 20/25/30/50 abates (acaba no que vier primeiro)
+- [x] Renascer: longe dos inimigos, 1 s piscando mais claro, sem tomar dano e sem poder atirar (vale nos dois mata-matas)
+- [x] Tela de vitória por modo (time vencedor / ranking)
+- [x] Enviado para a branch `dev` do GitHub (não afeta o site até juntar na `main`)
+- [~] **Caique:** testar no localhost (`git pull` + `git checkout dev`)
+- [ ] Juntar `dev` na `main` para publicar no Render
 
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
 - [ ] Sons (tiro, batida na parede, acerto, faca, pulo)

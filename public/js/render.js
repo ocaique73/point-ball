@@ -4,6 +4,8 @@ window.PBRenderer = (function () {
   const TEAM_DARK = { A: '#1e3a8a', B: '#7f1d1d' };
   const TEAM_RGB = { A: '96,165,250', B: '248,113,113' };
   const TEAM_BODY = { A: '#60a5fa', B: '#f87171' };
+  const TEAM_LIGHT = { A: '#dbeafe', B: '#fee2e2' };   // piscando na proteção ao renascer
+  const TEAM_STRONG = { A: '#1d4ed8', B: '#b91c1c' };  // anel de carregamento do tiro
 
   function seeded(seed) {
     let s = seed >>> 0;
@@ -136,6 +138,7 @@ window.PBRenderer = (function () {
       if (ev.type === 'bounce') this.effects.push({ k: 'spark', x: ev.x, y: ev.y, t0: now, d: 250 });
       else if (ev.type === 'hit') this.effects.push({ k: 'hit', x: ev.x, y: ev.y, t0: now, d: 700 });
       else if (ev.type === 'kill') this.effects.push({ k: 'kill', x: ev.x, y: ev.y, t0: now, d: 900 });
+      else if (ev.type === 'explode') this.effects.push({ k: 'boom', x: ev.x, y: ev.y, t0: now, d: 550 });
     }
 
     // posição do mouse (tela) -> coordenadas do mapa
@@ -176,6 +179,15 @@ window.PBRenderer = (function () {
       const g = this.ctx, s = this.scale, c = this.cfg;
       if (!c) return;
       const now = performance.now();
+      if (view.ffa) {
+        // cada um por si: você é azul, todo mundo é vermelho
+        const me = view.meId;
+        view = Object.assign({}, view, {
+          players: view.players.map((p) => Object.assign({}, p, { tm: p.id === me ? 'A' : 'B' })),
+          bullets: view.bullets.map((b) => [b[0], b[1], b[2], b[3], b[4] === me ? 'A' : 'B']),
+          bombs: (view.bombs || []).map((b) => [b[0], b[1], b[2], b[3], b[4] === me ? 'A' : 'B', b[5]])
+        });
+      }
       this.updateTrails(view.bullets);
       const light = view.light || 0;
       const dark = light === 2 || (light === 1 && Math.floor(now / 70) % 2 === 0);
@@ -212,12 +224,52 @@ window.PBRenderer = (function () {
       if (view.hz && view.hz.t === 'tornado') this.drawTornado(view.hz, now);
       this.drawTrails(0.28);
       for (const b of view.bullets) this.drawBullet(b);
+      for (const b of view.bombs || []) this.drawBomb(b, now);
+      if (view.bombAim) this.drawBombAim(view.bombAim);
       this.drawEffects(now);
       if (view.hz && view.hz.t === 'sand') this.drawSand(view.hz, now); // por cima de tudo
       g.setTransform(1, 0, 0, 1, 0, 0);
     }
 
     // furacão visto de cima: braços de vento em espiral, meio transparentes, girando
+    // bomba: [id, x, y, progresso do voo 0..1, time, tempo até explodir]
+    drawBomb(b, now) {
+      const g = this.ctx, c = this.cfg;
+      const [, x, y, k, team, left] = b;
+      const flying = k < 1, h = flying ? Math.sin(Math.PI * k) * 70 : 0;
+      if (!flying) { // área da explosão
+        const warn = Math.floor(now / (left < 0.3 ? 60 : 120)) % 2 === 0;
+        g.fillStyle = `rgba(${TEAM_RGB[team]},${warn ? 0.18 : 0.08})`;
+        g.strokeStyle = `rgba(${TEAM_RGB[team]},.7)`; g.lineWidth = 2;
+        g.beginPath(); g.arc(x, y, c.bombRadius, 0, Math.PI * 2); g.fill(); g.stroke();
+      }
+      g.fillStyle = 'rgba(0,0,0,.3)';
+      g.beginPath(); g.ellipse(x + 2, y + 4, 9, 5, 0, 0, Math.PI * 2); g.fill();
+      const bx = x, by = y - h, br = 9 * (1 + h / 140);
+      g.fillStyle = '#1f2937';
+      g.beginPath(); g.arc(bx, by, br, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = TEAM[team]; g.lineWidth = 2.5; g.stroke();
+      // pavio aceso
+      g.fillStyle = Math.floor(now / 80) % 2 ? '#ffd166' : '#ff6b35';
+      g.beginPath(); g.arc(bx + br * 0.6, by - br * 0.7, 3, 0, Math.PI * 2); g.fill();
+    }
+
+    // mira da bomba: círculo do alcance + ponto onde vai cair
+    drawBombAim(A) {
+      const g = this.ctx, c = this.cfg;
+      g.save();
+      g.setLineDash([10, 8]); g.lineWidth = 2;
+      g.strokeStyle = 'rgba(255,255,255,.55)';
+      g.beginPath(); g.arc(A.x, A.y, c.bombRange, 0, Math.PI * 2); g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,.35)';
+      g.beginPath(); g.moveTo(A.x, A.y); g.lineTo(A.tx, A.ty); g.stroke();
+      g.setLineDash([]);
+      g.fillStyle = 'rgba(255,200,80,.15)'; g.strokeStyle = 'rgba(255,200,80,.85)';
+      g.beginPath(); g.arc(A.tx, A.ty, c.bombRadius, 0, Math.PI * 2); g.fill(); g.stroke();
+      g.beginPath(); g.moveTo(A.tx - 8, A.ty); g.lineTo(A.tx + 8, A.ty); g.moveTo(A.tx, A.ty - 8); g.lineTo(A.tx, A.ty + 8); g.stroke();
+      g.restore();
+    }
+
     drawTornado(T, now) {
       if (!T.s) return;
       const g = this.ctx, R = this.cfg.tornadoRadius;
@@ -391,11 +443,25 @@ window.PBRenderer = (function () {
         g.beginPath(); g.arc(0, 0, reach, kd - half, kd + half); g.stroke();
       }
 
-      // corpo: anel do time + cor do jogador + foto
-      g.fillStyle = TEAM[p.tm];
-      g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.fill();
-      g.fillStyle = TEAM_BODY[p.tm]; // boneco da cor do time
-      g.beginPath(); g.arc(0, 0, r * 0.8, 0, Math.PI * 2); g.fill();
+      // corpo da cor do time (pisca mais claro na proteção ao renascer)
+      const prot = p.sp && Math.floor(now / 100) % 2 === 0;
+      g.fillStyle = prot ? TEAM_LIGHT[p.tm] : TEAM_BODY[p.tm];
+      g.beginPath(); g.arc(0, 0, r * 0.9, 0, Math.PI * 2); g.fill();
+      // borda = carregamento do próximo tiro (fecha o círculo quando está pronto)
+      let prog = 1;
+      if (p.w === 1) {
+        if (p.rl > 0) prog = 1 - p.rl / c.reloadTime;
+        else if (p.fc > 0) prog = 1 - p.fc / c.fireCooldown;
+      }
+      prog = Math.max(0, Math.min(1, prog));
+      const rw = Math.max(2, r * 0.2);
+      g.lineWidth = rw;
+      g.strokeStyle = 'rgba(0,0,0,.35)';
+      g.beginPath(); g.arc(0, 0, r - rw / 2, 0, Math.PI * 2); g.stroke();
+      if (prog > 0) {
+        g.strokeStyle = TEAM_STRONG[p.tm];
+        g.beginPath(); g.arc(0, 0, r - rw / 2, -Math.PI / 2, -Math.PI / 2 + prog * Math.PI * 2); g.stroke();
+      }
       const img = this.avatar(p.avatar);
       if (img) {
         g.save();
@@ -419,10 +485,6 @@ window.PBRenderer = (function () {
       } else if (p.sk === 1) { // espinho de cacto
         g.strokeStyle = 'rgba(90,160,60,.9)'; g.lineWidth = 2;
         g.beginPath(); g.arc(0, 0, r * 1.12, now / 80, now / 80 + Math.PI * 1.2); g.stroke();
-      }
-      if (isMe) {
-        g.strokeStyle = '#fff'; g.lineWidth = Math.max(2, r * 0.1);
-        g.beginPath(); g.arc(0, 0, r + 3, 0, Math.PI * 2); g.stroke();
       }
       g.restore();
 
@@ -466,7 +528,13 @@ window.PBRenderer = (function () {
       for (const e of this.effects) {
         const t = (now - e.t0) / e.d;
         g.globalAlpha = 1 - t;
-        if (e.k === 'spark') {
+        if (e.k === 'boom') {
+          const R = this.cfg.bombRadius;
+          const grd = this.ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, R * (0.6 + t * 0.6));
+          grd.addColorStop(0, 'rgba(255,240,180,.95)'); grd.addColorStop(0.5, 'rgba(255,140,40,.7)'); grd.addColorStop(1, 'rgba(120,40,10,0)');
+          g.fillStyle = grd;
+          g.beginPath(); g.arc(e.x, e.y, R * (0.6 + t * 0.6), 0, Math.PI * 2); g.fill();
+        } else if (e.k === 'spark') {
           g.strokeStyle = '#fff'; g.lineWidth = 2;
           g.beginPath(); g.arc(e.x, e.y, 4 + t * 14, 0, Math.PI * 2); g.stroke();
         } else {
