@@ -6,7 +6,7 @@
   else root.RC_CONFIG = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   const DEFAULT_CONFIG = {
-    cfgVersion: 7,         // muda quando os padrões mudam (o /teste descarta valores salvos antigos)
+    cfgVersion: 8,         // muda quando os padrões mudam (o /teste descarta valores salvos antigos)
 
     // ---- Mapa ----
     mapWidth: 1600,        // largura do mapa (unidades do mundo)
@@ -52,6 +52,11 @@
     // ---- Mata-mata ----
     respawnDelay: 2,       // tempo para renascer (s)
     spawnProtect: 1,       // proteção ao renascer, sem poder atirar (s)
+
+    // ---- Portais (mapa 'portal') ----
+    portalFirstClosed: 7,  // fechados no começo do round (s)
+    portalOpen: 10,        // tempo aberto (s)
+    portalClosed: 5,       // tempo fechado entre as aberturas (s)
 
     // ---- Sala escura (mapa 'escuro') ----
     lightsInterval: 25,    // tempo com a luz acesa (s)
@@ -112,7 +117,7 @@
     tornadoSpeed: [50, 1000, 10], tornadoThrow: [80, 1000, 10], tornadoAirTime: [0.3, 3, 0.05],
     stormInterval: [5, 120, 1], stormWarn: [0, 5, 0.1], stormDuration: [0.5, 15, 0.1],
     stormBand: [0.05, 1, 0.05], bombCount: [0, 5, 1], bombRange: [80, 900, 10], bombFlight: [0.1, 2, 0.05],
-    bombFuse: [0, 3, 0.05], bombRadius: [20, 300, 5], respawnDelay: [0, 10, 0.5], spawnProtect: [0, 5, 0.1], freezeSlow: [0.1, 1, 0.05], freezeTime: [0.1, 6, 0.1]
+    bombFuse: [0, 3, 0.05], bombRadius: [20, 300, 5], respawnDelay: [0, 10, 0.5], portalFirstClosed: [0, 60, 1], portalOpen: [1, 60, 1], portalClosed: [1, 60, 1], spawnProtect: [0, 5, 0.1], freezeSlow: [0.1, 1, 0.05], freezeTime: [0.1, 6, 0.1]
   };
 
   function mergeConfig(base, override) {

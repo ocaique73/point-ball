@@ -14,7 +14,7 @@
   let roundMsg = '';
   let gameMap = null;
   let pred = { init: false, x: 0, y: 0, fx: 1, fy: 0 };
-  let walls = [];
+  let walls = [], wallsAll = [], wallsOpen = [];
   let lastPreview = null;
 
   const renderer = new PBRenderer($('game-canvas'));
@@ -98,7 +98,9 @@
   function setupGame(mapId) {
     gameMap = mapId;
     renderer.setup(config, mapId);
-    walls = RC_GAME.buildWalls(mapId, config);
+    wallsAll = RC_GAME.buildWalls(mapId, config);
+    wallsOpen = wallsAll.filter((R) => !R.door);
+    walls = wallsAll;
     snaps = []; latest = null; pred.init = false; roundMsg = '';
   }
 
@@ -332,7 +334,7 @@
     const ba = new Map(a.s.b.map((x) => [x[0], x]));
     const bullets = b.s.b.map((x) => {
       const o = ba.get(x[0]);
-      if (!o) return x;
+      if (!o || Math.hypot(o[1] - x[1], o[2] - x[2]) > 150) return x; // portal: não desenha atravessando o mapa
       return [x[0], o[1] + (x[1] - o[1]) * al, o[2] + (x[2] - o[2]) * al, x[3], x[4]];
     });
     let hz = b.s.hz;
@@ -358,6 +360,7 @@
     if ($('scr-game').classList.contains('hidden') || !latest || !config) return;
     const view = interpolated(now);
     if (!view) return;
+    walls = latest.pt && latest.pt.o ? wallsOpen : wallsAll;
     const mine = latest.p.find((p) => p.id === you);
     if (mine) {
       // predição local do próprio personagem (resposta imediata ao teclado)
@@ -373,6 +376,7 @@
           const sp = config.playerSpeed * (mine.sl || 1);
           const m = RC_GAME.moveCircle(pred.x, pred.y, mx * sp * dt, my * sp * dt, mine.r, walls);
           pred.x = m.x; pred.y = m.y;
+          if (latest.pt && latest.pt.o) { const w = RC_GAME.portalWrap(gameMap, config, pred.x, pred.y, mine.r); if (w) { pred.x = w.x; pred.y = w.y; } }
         }
         const err = Math.hypot(mine.x - pred.x, mine.y - pred.y);
         if (err > 90) { pred.x = mine.x; pred.y = mine.y; }
@@ -415,7 +419,7 @@
     let bombAim = null;
     if (bombAiming && mine && mine.al && mine.bo > 0) { const t = bombTarget(); if (t) bombAim = { x: pred.x, y: pred.y, tx: t.x, ty: t.y }; }
     renderer.draw({ players: view.players, bullets: view.bullets, hz: view.hz, bombs: view.bombs, bombAim, meId: you,
-      ffa: latest.md === 'ffa', light: latest.lg ? latest.lg.s : 0 });
+      ffa: latest.md === 'ffa', light: latest.lg ? latest.lg.s : 0, pt: latest.pt });
     hud.update(mine || null, latest, config, { roundMsg, nameOf });
   }
   requestAnimationFrame(frame);

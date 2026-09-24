@@ -82,6 +82,23 @@
     }
   };
 
+  // Portais: nas laterais esquerda/direita; quem entra de um lado sai do outro (mesma altura)
+  MAPS.portal = {
+    id: 'portal',
+    name: 'Portais',
+    hazard: 'portal',
+    portals: [[0.18, 0.34], [0.66, 0.82]], // faixas de altura (fração do mapa) de cada par de portais
+    theme: { ground: '#1d1a36', ground2: '#241f45', wall: '#4b3f8f', wallEdge: '#8b7cf6', deco: 'tiles', border: '#2c245e' },
+    walls: mirror([
+      [0.18, 0.1, 0.18, 0.28],
+      [0.18, 0.72, 0.18, 0.9],
+      [0.3, 0.4, 0.3, 0.6],
+      [0.24, 0.5, 0.3, 0.5],
+      [0.4, 0.2, 0.4, 0.36],
+      [0.4, 0.64, 0.4, 0.8]
+    ], [[0.46, 0.5, 0.54, 0.5], [0.5, 0.1, 0.5, 0.26], [0.5, 0.74, 0.5, 0.9]])
+  };
+
   // posições de nascimento (normalizadas) - time A à esquerda, time B à direita
   const SPAWNS_Y = [0.5, 0.3, 0.7, 0.12, 0.88];
   const SPAWN_X = 0.055;

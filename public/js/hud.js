@@ -90,6 +90,7 @@ window.PBHud = (function () {
       if (lg) lt = lg.s === 2 ? '🌑 LUZ APAGADA' : lg.s === 1 ? '<span class="warn">⚠️ APAGANDO...</span>' : `💡 Luz apaga em <b>${Math.ceil(lg.n)}s</b>`;
       const hz = s.hz;
       if (hz && hz.t === 'tornado') lt = hz.s === 2 ? '🌪️ FURACÃO!' : hz.s === 1 ? '<span class="warn">🌪️ Furacão nascendo...</span>' : `🌪️ Furacão em <b>${Math.ceil(hz.n)}s</b>`;
+      if (s.pt) lt = s.pt.o ? (s.pt.n < 1.5 ? `<span class="warn">🌀 Portais fechando...</span>` : `🌀 Portais <b>ABERTOS</b> · fecham em <b>${Math.ceil(s.pt.n)}s</b>`) : `🌀 Portais abrem em <b>${Math.ceil(s.pt.n)}s</b>`;
       if (hz && hz.t === 'sand') lt = hz.s === 2 ? '🏜️ TEMPESTADE DE AREIA!' : hz.s === 1 ? '<span class="warn">🏜️ Areia juntando no meio...</span>' : `🏜️ Tempestade de areia em <b>${Math.ceil(hz.n)}s</b>`;
       if (hz && hz.t === 'storm') lt = hz.s === 2 ? '❄️ TEMPESTADE FRIA!' : hz.s === 1 ? '<span class="warn">❄️ Tempestade chegando no centro...</span>' : `❄️ Tempestade em <b>${Math.ceil(hz.n)}s</b>`;
       this.set('h-light', lt);

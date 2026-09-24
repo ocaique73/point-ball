@@ -11,16 +11,46 @@
     const W = cfg.mapWidth, H = cfg.mapHeight, t = cfg.wallThickness;
     const rects = [
       { x: 0, y: 0, w: W, h: t, border: true },
-      { x: 0, y: H - t, w: W, h: t, border: true },
-      { x: 0, y: 0, w: t, h: H, border: true },
-      { x: W - t, y: 0, w: t, h: H, border: true }
+      { x: 0, y: H - t, w: W, h: t, border: true }
     ];
+    if (map.portals) {
+      // laterais com aberturas; cada abertura tem uma "porta" que fecha o portal
+      let y = 0;
+      for (const [a, b] of map.portals) {
+        rects.push({ x: 0, y, w: t, h: a * H - y, border: true }, { x: W - t, y, w: t, h: a * H - y, border: true });
+        rects.push({ x: 0, y: a * H, w: t, h: (b - a) * H, border: true, door: true }, { x: W - t, y: a * H, w: t, h: (b - a) * H, border: true, door: true });
+        y = b * H;
+      }
+      rects.push({ x: 0, y, w: t, h: H - y, border: true }, { x: W - t, y, w: t, h: H - y, border: true });
+    } else {
+      rects.push({ x: 0, y: 0, w: t, h: H, border: true }, { x: W - t, y: 0, w: t, h: H, border: true });
+    }
     for (const s of map.walls) {
       const x1 = s[0] * W, y1 = s[1] * H, x2 = s[2] * W, y2 = s[3] * H;
       const minx = Math.min(x1, x2), miny = Math.min(y1, y2);
       rects.push({ x: minx - t / 2, y: miny - t / 2, w: Math.abs(x2 - x1) + t, h: Math.abs(y2 - y1) + t });
     }
     return rects;
+  }
+
+  // portal aberto: passou da borda esquerda sai na direita (e vice-versa), na mesma altura
+  function portalWrap(mapId, cfg, x, y, r) {
+    const map = MAPS[mapId];
+    if (!map || !map.portals) return null;
+    const W = cfg.mapWidth, H = cfg.mapHeight, t = cfg.wallThickness;
+    const inside = map.portals.some(([a, b]) => y > a * H && y < b * H);
+    if (!inside) return null;
+    if (x < t) return { x: W - t - r - 2, y };
+    if (x > W - t) return { x: t + r + 2, y };
+    return null;
+  }
+
+  // estado dos portais: fechado 7 s no começo, depois abre 10 s / fecha 5 s repetindo
+  function portalCycle(el, cfg) {
+    if (el < cfg.portalFirstClosed) return { o: 0, n: cfg.portalFirstClosed - el };
+    const p = cfg.portalOpen + cfg.portalClosed, t = (el - cfg.portalFirstClosed) % p;
+    if (t < cfg.portalOpen) return { o: 1, n: cfg.portalOpen - t };
+    return { o: 0, n: p - t };
   }
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -280,7 +310,17 @@
       return null;
     }
 
-    buildMap() { this.walls = buildWalls(this.mapId, this.cfg); }
+    buildMap() {
+      this.wallsAll = buildWalls(this.mapId, this.cfg);             // portais fechados
+      this.wallsOpen = this.wallsAll.filter((R) => !R.door);          // portais abertos
+      this.walls = this.wallsAll;
+    }
+    hasPortals() { return !!(MAPS[this.mapId] && MAPS[this.mapId].portals); }
+    portalState() {
+      if (!this.hasPortals()) return null;
+      if (!this.hazardsOn()) return { o: 0, n: this.cfg.portalFirstClosed };
+      return portalCycle(this.time - this.lightStart, this.cfg);
+    }
 
     radiusOf(p) { return this.cfg.playerRadius * (p.lives >= this.cfg.lives ? 1 : this.cfg.hitShrink); }
 
@@ -483,6 +523,7 @@
         this.events.push({ type: 'go' });
       }
       const act = this.canAct();
+      if (this.hasPortals()) { const ps = this.portalState(); this.walls = ps.o ? this.wallsOpen : this.wallsAll; }
       for (const p of this.players.values()) this.updatePlayer(p, dt, act);
       this.updateHazards(dt);
       this.updateBullets(dt);
@@ -550,6 +591,10 @@
         const sp = c.playerSpeed * this.speedMul(p);
         const m = moveCircle(p.x, p.y, mx * sp * dt, my * sp * dt, this.radiusOf(p), this.walls);
         p.x = m.x; p.y = m.y;
+        if (this.walls === this.wallsOpen && this.hasPortals()) {
+          const w = portalWrap(this.mapId, c, p.x, p.y, this.radiusOf(p));
+          if (w) { p.x = w.x; p.y = w.y; this.events.push({ type: 'portal', id: p.id, x: w.x, y: w.y }); }
+        }
       }
       if (inp.fire && !this.protectedNow(p)) {
         if (p.weapon === 'gun') this.tryShoot(p);
@@ -652,6 +697,11 @@
         const sub = dt / n;
         for (let i = 0; i < n && !dead; i++) {
           b.x += b.vx * sub; b.y += b.vy * sub;
+          // portal: atravessa para o outro lado sem contar como batida
+          if (this.walls === this.wallsOpen && this.hasPortals()) {
+            const w = portalWrap(this.mapId, c, b.x, b.y, br);
+            if (w) { b.x = w.x; b.y = w.y; b.warped = true; }
+          }
           for (const R of this.walls) {
             const col = circleRect(b.x, b.y, br, R);
             if (!col) continue;
@@ -745,7 +795,7 @@
       }
       return {
         t: Math.round(t * 1000) / 1000, ph: this.phase, pu: r1(Math.max(0, this.phaseUntil - t)), rd: this.round,
-        tr: this.totalRounds, sc: this.score, map: this.mapId, lg: this.lightState(), hz: this.hazardSnapshot(),
+        tr: this.totalRounds, sc: this.score, map: this.mapId, lg: this.lightState(), hz: this.hazardSnapshot(), pt: this.portalState(),
         rt: this.mode === 'match' && this.phase === 'playing' ? r1(Math.max(0, (this.isDM() ? this.matchTime : this.cfg.roundTime) - (t - this.lightStart))) : null,
         md: this.gameMode, kl: this.killLimit,
         p: ps, b: this.bullets.map((b) => [b.id, r1(b.x), r1(b.y), b.hits, b.team]),
@@ -758,5 +808,5 @@
     }
   }
 
-  return { Game, buildWalls, moveCircle, circleFree, circleRect, lineBlocked, spawnPos, knifeTarget };
+  return { Game, buildWalls, moveCircle, circleFree, circleRect, lineBlocked, spawnPos, knifeTarget, portalWrap, portalCycle };
 });

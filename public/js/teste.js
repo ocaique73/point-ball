@@ -18,6 +18,7 @@
       stormBand: 'Altura da nevasca', freezeSlow: 'Velocidade congelado', freezeTime: 'Tempo congelado (s)' }],
     ['Bomba', { bombCount: 'Bombas por vida/round', bombRange: 'Alcance do lançamento', bombFlight: 'Tempo voando (s)', bombFuse: 'Tempo até explodir no chão (s)', bombRadius: 'Raio da explosão' }],
     ['Mata-mata', { respawnDelay: 'Tempo para renascer (s)', spawnProtect: 'Proteção ao renascer (s)' }],
+    ['Portais', { portalFirstClosed: 'Fechados no começo (s)', portalOpen: 'Tempo aberto (s)', portalClosed: 'Tempo fechado (s)' }],
     ['Sala escura', { lightsInterval: 'Luz acesa por (s)', lightsFlicker: 'Pisca antes de apagar (s)', lightsOffDuration: 'Luz apagada por (s)', bulletGlow: 'Brilho do tiro no escuro' }],
     ['HUD', { hudScale: 'Tamanho do HUD' }],
     ['Partida', { roundTime: 'Tempo do round (s)', roundStartDelay: 'Contagem antes do round (s)', roundEndDelay: 'Pausa após o round (s)' }]
@@ -230,7 +231,7 @@
     let bombAim = null;
     const meNow = game.players.get('me');
     if (bombAiming && meNow && meNow.alive && meNow.bombs > 0) { const t = bombTarget(); if (t) bombAim = { x: meNow.x, y: meNow.y, tx: t.x, ty: t.y }; }
-    renderer.draw({ players: s.p, bullets: s.b, hz: s.hz, bombs: s.bm, bombAim, meId: 'me', light: s.lg ? s.lg.s : 0 });
+    renderer.draw({ players: s.p, bullets: s.b, hz: s.hz, bombs: s.bm, bombAim, meId: 'me', light: s.lg ? s.lg.s : 0, pt: s.pt });
     hud.update(s.p.find((p) => p.id === 'me'), s, cfg, { sandbox: true });
     requestAnimationFrame(frame);
   }
