@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sala · Point Ball</title>
+<link rel="stylesheet" href="/css/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Ccircle cx=%228%22 cy=%228%22 r=%227%22 fill=%22%23ffcc33%22/%3E%3C/svg%3E">
+</head>
+<body>
+
+<!-- carregando / erro -->
+<div class="wrap" id="scr-msg">
+  <div class="card" style="max-width:460px;margin:60px auto;text-align:center">
+    <h2 id="msg-title">Conectando...</h2>
+    <p class="muted" id="msg-text"></p>
+    <div class="row" style="justify-content:center"><a class="btn" href="/">Voltar ao início</a><button class="btn primary hidden" id="msg-retry">Tentar de novo</button></div>
+  </div>
+</div>
+
+<!-- senha -->
+<div class="wrap hidden" id="scr-password">
+  <div class="card" style="max-width:420px;margin:60px auto">
+    <h2>🔒 Sala <span class="room-code"></span></h2>
+    <p class="muted">Essa sala tem senha.</p>
+    <input type="password" id="pw-input" maxlength="6" placeholder="Senha">
+    <div class="error" id="pw-err"></div>
+    <div class="row" style="justify-content:space-between"><a class="btn" href="/">Voltar</a><button class="btn primary" id="pw-btn">Entrar</button></div>
+  </div>
+</div>
+
+<!-- escolher time -->
+<div class="wrap hidden" id="scr-team">
+  <div class="topbar"><div class="logo">SALA <span class="room-code"></span></div>
+    <div class="row"><button class="btn" data-act="profile">👤 Perfil</button><button class="btn danger" data-act="leave">Sair</button></div></div>
+  <div class="card">
+    <h2>Escolha seu time</h2>
+    <p class="muted" id="team-note">Máximo de 5 jogadores por time.</p>
+    <div class="choose-team">
+      <button class="btn teamA" id="pick-A">Time Azul<small id="pick-A-n"></small></button>
+      <button class="btn teamB" id="pick-B">Time Vermelho<small id="pick-B-n"></small></button>
+    </div>
+  </div>
+</div>
+
+<!-- sala de espera -->
+<div class="wrap hidden" id="scr-lobby">
+  <div class="topbar">
+    <div class="logo">SALA <span class="room-code"></span> <span id="lock-ico"></span></div>
+    <div class="row">
+      <button class="btn" id="btn-copy">🔗 Copiar link</button>
+      <button class="btn" data-act="profile">👤 Perfil</button>
+      <button class="btn danger" data-act="leave">Sair</button>
+    </div>
+  </div>
+  <div class="card hidden" id="live-banner" style="margin-bottom:16px;border-color:var(--accent)">
+    <div class="row"><b class="grow" style="flex:1">⚔️ Partida em andamento — você entra na próxima.</b><button class="btn primary" id="btn-watch">Assistir</button></div>
+  </div>
+  <div class="card" id="queue-banner" style="margin-bottom:16px" hidden></div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="row">
+      <div class="grow" style="flex:1;min-width:140px"><label>Mapa</label>
+        <select id="set-map"><option value="deserto">Deserto</option><option value="neve">Neve</option><option value="floresta">Floresta</option></select></div>
+      <div class="grow" style="flex:1;min-width:140px"><label>Rounds</label>
+        <select id="set-rounds"><option>1</option><option>2</option><option>3</option><option>5</option><option>7</option></select></div>
+      <div style="align-self:flex-end"><button class="btn primary big" id="btn-start">▶ Iniciar partida</button></div>
+    </div>
+    <div class="muted small" id="host-note" style="margin-top:8px"></div>
+  </div>
+  <div class="teams">
+    <div class="card team-col A"><h3><span>Time Azul</span><span class="muted" id="cnt-A"></span></h3><div id="list-A"></div><button class="btn teamA" id="join-A" style="width:100%">Entrar no Time Azul</button></div>
+    <div class="card team-col B"><h3><span>Time Vermelho</span><span class="muted" id="cnt-B"></span></h3><div id="list-B"></div><button class="btn teamB" id="join-B" style="width:100%">Entrar no Time Vermelho</button></div>
+  </div>
+  <div class="grid2" style="margin-top:16px">
+    <div class="card"><h3>Fila <span class="muted small" id="cnt-Q"></span></h3><div id="list-Q"></div></div>
+    <div class="card"><h3>Escolhendo time</h3><div id="list-C"></div></div>
+  </div>
+</div>
+
+<!-- jogo -->
+<div id="scr-game" class="hidden">
+  <canvas id="game-canvas"></canvas>
+  <div id="hud-root"></div>
+  <div class="spectate-bar hidden" id="spec-bar"><span class="box" style="background:rgba(10,14,24,.8);padding:8px 12px;border-radius:8px">👁️ Assistindo</span><button class="btn" id="btn-unwatch">Voltar à sala</button></div>
+</div>
+
+<!-- vitória -->
+<div id="victory" class="hidden">
+  <div class="card">
+    <div class="v-title" id="v-title"></div>
+    <div class="v-score" id="v-score"></div>
+    <div class="muted" id="v-winners" style="margin-bottom:14px"></div>
+    <table class="v-table"><thead><tr><th>Jogador</th><th>Time</th><th style="text-align:center">Abates</th><th style="text-align:center">Mortes</th><th style="text-align:center">Assist.</th></tr></thead><tbody id="v-body"></tbody></table>
+    <button class="btn primary big" id="v-close">Voltar para a sala de espera</button>
+  </div>
+</div>
+
+<script src="/js/common.js"></script>
+<script src="/shared/config.js"></script>
+<script src="/shared/maps.js"></script>
+<script src="/shared/game.js"></script>
+<script src="/js/render.js"></script>
+<script src="/js/hud.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/room.js"></script>
+</body>
+</html>
