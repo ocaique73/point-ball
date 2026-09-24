@@ -27,7 +27,7 @@ window.PB = (function () {
   function getProfile() {
     let pr = store.get(profileKey(), null);
     if (!pr) {
-      pr = { name: 'Jogador' + Math.floor(100 + Math.random() * 900), avatar: '', color: COLORS[Math.floor(Math.random() * COLORS.length)] };
+      pr = { name: 'Jogador' + Math.floor(100 + Math.random() * 900), avatar: '' };
       store.set(profileKey(), pr);
     }
     return pr;
@@ -49,7 +49,8 @@ window.PB = (function () {
   // avatar arredondado (foto) ou círculo com a cor e a inicial do nick
   function avatarHTML(p, size) {
     size = size || 36;
-    const style = `width:${size}px;height:${size}px;background:${esc(p.color || '#888')};font-size:${Math.round(size * 0.45)}px`;
+    const tc = p.team === 'A' ? '#3b82f6' : p.team === 'B' ? '#ef4444' : '#8a94ad'; // cor do time
+    const style = `width:${size}px;height:${size}px;background:${tc};font-size:${Math.round(size * 0.45)}px`;
     const initial = esc((p.name || '?').trim().charAt(0).toUpperCase());
     if (p.avatar) {
       return `<span class="avatar" style="${style}"><img src="${esc(p.avatar)}" alt="" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover" onerror="this.remove()"></span>`;
@@ -70,8 +71,6 @@ window.PB = (function () {
         <input type="text" id="pf-name" maxlength="20">
         <label>URL da foto (opcional)</label>
         <input type="url" id="pf-avatar" placeholder="https://...">
-        <label>Cor do personagem</label>
-        <input type="color" id="pf-color">
         <div class="error" id="pf-err"></div>
         <div class="row" style="justify-content:flex-end;margin-top:8px">
           <button class="btn" id="pf-cancel">Cancelar</button>
@@ -80,13 +79,13 @@ window.PB = (function () {
       </div>`;
     document.body.appendChild(bg);
     const $ = (id) => bg.querySelector('#' + id);
-    $('pf-name').value = pr.name; $('pf-avatar').value = pr.avatar || ''; $('pf-color').value = pr.color;
+    $('pf-name').value = pr.name; $('pf-avatar').value = pr.avatar || '';
     const prev = () => {
-      const p = { name: $('pf-name').value || '?', avatar: $('pf-avatar').value.trim(), color: $('pf-color').value };
+      const p = { name: $('pf-name').value || '?', avatar: $('pf-avatar').value.trim(), color: '#ffcc33' };
       $('pf-prev').innerHTML = avatarHTML(p, 64);
       $('pf-prev-name').textContent = p.name;
     };
-    ['pf-name', 'pf-avatar', 'pf-color'].forEach((id) => $(id).addEventListener('input', prev));
+    ['pf-name', 'pf-avatar'].forEach((id) => $(id).addEventListener('input', prev));
     prev();
     const close = () => bg.remove();
     $('pf-cancel').onclick = close;
@@ -97,7 +96,7 @@ window.PB = (function () {
       if (!name) return ($('pf-err').textContent = 'Digite um nick.');
       if (name.length > 20) return ($('pf-err').textContent = 'Nick com no máximo 20 caracteres.');
       if (avatar && !/^https?:\/\//i.test(avatar)) return ($('pf-err').textContent = 'A URL da foto precisa começar com http:// ou https://');
-      const np = { name, avatar, color: $('pf-color').value };
+      const np = { name, avatar };
       saveProfile(np);
       close();
       if (onSave) onSave(np);
@@ -109,10 +108,10 @@ window.PB = (function () {
   const MAP_NAME = { deserto: 'Deserto', neve: 'Neve', floresta: 'Floresta', escuro: 'Sala escura' };
 
   const MAP_NOTE = {
-    deserto: '🏜️ A cada 30s uma tempestade de areia sai do meio para as laterais e tampa a visão.',
-    neve: '❄️ A cada 30s uma tempestade fria desce pelo mapa e congela quem pegar.',
-    floresta: '🌪️ De tempos em tempos nasce um furacão que anda pelo mapa e joga longe quem ele tocar.',
-    escuro: '🌑 A luz apaga a cada 30s — no escuro só o tiro aparece.'
+    deserto: '🏜️ A cada 25s uma tempestade de areia sai do meio para as laterais e tampa a visão.',
+    neve: '❄️ A cada 25s uma tempestade fria desce pelo mapa e congela quem pegar.',
+    floresta: '🌪️ A cada 25s nasce um furacão que anda pelo mapa e joga longe quem ele tocar.',
+    escuro: '🌑 A luz apaga a cada 25s — no escuro só o tiro aparece.'
   };
 
   return { MAP_NOTE, store, clientId, getProfile, saveProfile, esc, toast, avatarHTML, openProfile, TEAM_NAME, MAP_NAME };

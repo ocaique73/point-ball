@@ -60,10 +60,9 @@ const pidOf = (clientId) => crypto.createHash('sha256').update(String(clientId))
 function cleanProfile(p) {
   p = p || {};
   let name = String(p.name || '').trim().slice(0, 20) || 'Jogador';
-  let color = /^#[0-9a-fA-F]{6}$/.test(p.color || '') ? p.color : '#ffcc00';
   let avatar = String(p.avatar || '').trim();
   if (!/^https?:\/\//i.test(avatar) || avatar.length > 600) avatar = '';
-  return { name, color, avatar };
+  return { name, avatar };
 }
 
 // conta jogadores na sala de espera (inclui bots)

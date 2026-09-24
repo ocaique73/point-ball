@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 24/09/2026 — v0.2.0 no ar em https://point-ball.onrender.com
+Última atualização: 24/09/2026 — v0.2.1 no ar em https://point-ball.onrender.com
 
 ---
 
@@ -149,6 +149,15 @@
   - conta o corpo inteiro do inimigo (se o risco encosta no corpo, acerta)
   - o acerto é calculado no seu navegador com o que você vê (sem atraso da rede) e o servidor só confere se é possível
 - [x] Subir v0.2.0 para GitHub/Render
+
+## 8.8 v0.2.1 — cores de time (24/09)
+- [x] Tirei a escolha de cor do Perfil: boneco azul no time Azul e vermelho no time Vermelho
+- [x] Corações em cima do personagem removidos (vida só no HUD)
+- [x] Seu próprio nome aparece em amarelo
+- [x] Efeitos de mapa a cada 25 s (antes 30 s)
+- [x] Rastro do tiro na cor do time (no claro e no escuro)
+- [x] Avatares sem foto na sala/vitória usam a cor do time
+- [x] Subido para GitHub/Render
 
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
 - [ ] Sons (tiro, batida na parede, acerto, faca, pulo)

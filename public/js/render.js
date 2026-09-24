@@ -2,6 +2,8 @@
 window.PBRenderer = (function () {
   const TEAM = { A: '#3b82f6', B: '#ef4444' };
   const TEAM_DARK = { A: '#1e3a8a', B: '#7f1d1d' };
+  const TEAM_RGB = { A: '96,165,250', B: '248,113,113' };
+  const TEAM_BODY = { A: '#60a5fa', B: '#f87171' };
 
   function seeded(seed) {
     let s = seed >>> 0;
@@ -149,6 +151,7 @@ window.PBRenderer = (function () {
         let t = this.trails.get(b[0]);
         if (!t) { t = []; this.trails.set(b[0], t); }
         const last = t[t.length - 1];
+        t.team = b[4];
         if (!last || last.x !== b[1] || last.y !== b[2]) t.push({ x: b[1], y: b[2] });
         if (t.length > 9) t.shift();
       }
@@ -161,7 +164,7 @@ window.PBRenderer = (function () {
       for (const t of this.trails.values()) {
         for (let i = 1; i < t.length; i++) {
           const k = i / t.length;
-          g.strokeStyle = `rgba(255,170,70,${(alpha * k).toFixed(3)})`;
+          g.strokeStyle = `rgba(${TEAM_RGB[t.team] || '255,255,255'},${(alpha * k).toFixed(3)})`; // rastro da cor do tiro
           g.lineWidth = r * 1.3 * k;
           g.beginPath(); g.moveTo(t[i - 1].x, t[i - 1].y); g.lineTo(t[i].x, t[i].y); g.stroke();
         }
@@ -187,8 +190,8 @@ window.PBRenderer = (function () {
         this.drawTrails(a * 0.7);
         for (const b of view.bullets) {
           const grd = g.createRadialGradient(b[1], b[2], 0, b[1], b[2], c.bulletRadius * 3);
-          grd.addColorStop(0, `rgba(255,190,90,${(a * 0.6).toFixed(3)})`);
-          grd.addColorStop(1, 'rgba(255,120,40,0)');
+          grd.addColorStop(0, `rgba(${TEAM_RGB[b[4]]},${(a * 0.6).toFixed(3)})`);
+          grd.addColorStop(1, `rgba(${TEAM_RGB[b[4]]},0)`);
           g.fillStyle = grd;
           g.beginPath(); g.arc(b[1], b[2], c.bulletRadius * 3, 0, Math.PI * 2); g.fill();
           g.globalAlpha = a;
@@ -391,7 +394,7 @@ window.PBRenderer = (function () {
       // corpo: anel do time + cor do jogador + foto
       g.fillStyle = TEAM[p.tm];
       g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.fill();
-      g.fillStyle = p.color || '#ffcc00';
+      g.fillStyle = TEAM_BODY[p.tm]; // boneco da cor do time
       g.beginPath(); g.arc(0, 0, r * 0.8, 0, Math.PI * 2); g.fill();
       const img = this.avatar(p.avatar);
       if (img) {
@@ -423,20 +426,15 @@ window.PBRenderer = (function () {
       }
       g.restore();
 
-      // nome e vidas
+      // nome (o seu fica amarelo); a vida aparece só no HUD
       const fs = Math.max(11, c.playerRadius * 0.62);
       g.font = `700 ${fs}px Segoe UI, sans-serif`;
       g.textAlign = 'center';
       g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,.75)';
       const ty = p.y - lift - r * sc - 8;
       g.strokeText(p.name || '', p.x, ty);
-      g.fillStyle = p.tm === 'A' ? '#bcd4ff' : '#ffc4c4';
+      g.fillStyle = isMe ? '#ffcc33' : p.tm === 'A' ? '#bcd4ff' : '#ffc4c4';
       g.fillText(p.name || '', p.x, ty);
-      const total = c.lives;
-      for (let i = 0; i < total; i++) {
-        g.fillStyle = i < p.l ? '#ff4d6d' : 'rgba(255,255,255,.25)';
-        g.beginPath(); g.arc(p.x + (i - (total - 1) / 2) * 10, ty + 8, 3.5, 0, Math.PI * 2); g.fill();
-      }
     }
 
     // bala com N partições: as que já bateram ficam claras

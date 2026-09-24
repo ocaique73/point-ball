@@ -6,7 +6,7 @@
   else root.RC_CONFIG = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   const DEFAULT_CONFIG = {
-    cfgVersion: 5,         // muda quando os padrões mudam (o /teste descarta valores salvos antigos)
+    cfgVersion: 6,         // muda quando os padrões mudam (o /teste descarta valores salvos antigos)
 
     // ---- Mapa ----
     mapWidth: 1600,        // largura do mapa (unidades do mundo)
@@ -43,19 +43,19 @@
     jumpStartReady: false, // começa o round já com pulo?
 
     // ---- Sala escura (mapa 'escuro') ----
-    lightsInterval: 30,    // tempo com a luz acesa (s)
+    lightsInterval: 25,    // tempo com a luz acesa (s)
     lightsFlicker: 1,      // tempo piscando antes de apagar (s)
     lightsOffDuration: 1,  // tempo com a luz apagada (s)
     bulletGlow: 0.55,      // brilho do tiro no escuro (0 a 1)
 
     // ---- Deserto: tempestade de areia ----
-    sandInterval: 30,      // a cada quantos segundos (s)
+    sandInterval: 25,      // a cada quantos segundos (s)
     sandWarn: 2,           // aviso antes (areia juntando no meio) (s)
     sandDuration: 4,       // tempo indo do meio até as laterais (s)
     sandBand: 0.58,        // largura de cada parede de areia (fração do mapa)
 
     // ---- Floresta: furacão ----
-    tornadoInterval: 30,   // a cada quantos segundos (s)
+    tornadoInterval: 25,   // a cada quantos segundos (s)
     tornadoGrow: 2,        // tempo nascendo, ainda sem efeito (s)
     tornadoActive: 4.5,    // tempo girando e andando pelo mapa (s)
     tornadoRadius: 132,    // tamanho do furacão
@@ -65,7 +65,7 @@
     tornadoAirTime: 0.9,   // tempo no ar quando é jogado (s)
 
     // ---- Neve: tempestade fria ----
-    stormInterval: 30,     // a cada quantos segundos (s)
+    stormInterval: 25,     // a cada quantos segundos (s)
     stormWarn: 1,          // aviso antes de começar (s)
     stormDuration: 3.5,    // tempo descendo de cima pra baixo (s)
     stormBand: 0.3,        // altura da nevasca (fração do mapa)
