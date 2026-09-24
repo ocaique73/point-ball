@@ -6,7 +6,7 @@
   else root.RC_CONFIG = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   const DEFAULT_CONFIG = {
-    cfgVersion: 6,         // muda quando os padrões mudam (o /teste descarta valores salvos antigos)
+    cfgVersion: 7,         // muda quando os padrões mudam (o /teste descarta valores salvos antigos)
 
     // ---- Mapa ----
     mapWidth: 1600,        // largura do mapa (unidades do mundo)
@@ -37,10 +37,21 @@
     knifeArc: 100,         // abertura do golpe (graus)
 
     // ---- Super pulo ----
-    jumpCooldown: 25,      // tempo para ganhar 1 pulo (s)
+    jumpCooldown: 15,      // tempo para ganhar 1 pulo (s)
     jumpDistance: 170,     // distância do pulo
     jumpDuration: 0.55,    // duração no ar (s)
     jumpStartReady: false, // começa o round já com pulo?
+
+    // ---- Bomba (botão direito) ----
+    bombCount: 1,          // bombas por round / por vida
+    bombRange: 380,        // distância máxima do lançamento
+    bombFlight: 0.6,       // tempo voando no alcance máximo (s)
+    bombFuse: 0.6,         // tempo no chão até explodir (s)
+    bombRadius: 95,        // raio da explosão
+
+    // ---- Mata-mata ----
+    respawnDelay: 2,       // tempo para renascer (s)
+    spawnProtect: 1,       // proteção ao renascer, sem poder atirar (s)
 
     // ---- Sala escura (mapa 'escuro') ----
     lightsInterval: 25,    // tempo com a luz acesa (s)
@@ -100,7 +111,8 @@
     tornadoInterval: [5, 120, 1], tornadoGrow: [0.2, 5, 0.1], tornadoActive: [0.5, 10, 0.1], tornadoRadius: [15, 200, 1],
     tornadoSpeed: [50, 1000, 10], tornadoThrow: [80, 1000, 10], tornadoAirTime: [0.3, 3, 0.05],
     stormInterval: [5, 120, 1], stormWarn: [0, 5, 0.1], stormDuration: [0.5, 15, 0.1],
-    stormBand: [0.05, 1, 0.05], freezeSlow: [0.1, 1, 0.05], freezeTime: [0.1, 6, 0.1]
+    stormBand: [0.05, 1, 0.05], bombCount: [0, 5, 1], bombRange: [80, 900, 10], bombFlight: [0.1, 2, 0.05],
+    bombFuse: [0, 3, 0.05], bombRadius: [20, 300, 5], respawnDelay: [0, 10, 0.5], spawnProtect: [0, 5, 0.1], freezeSlow: [0.1, 1, 0.05], freezeTime: [0.1, 6, 0.1]
   };
 
   function mergeConfig(base, override) {

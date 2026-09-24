@@ -116,6 +116,12 @@
       opts = opts || {};
       this.cfg = cfg;
       this.mode = opts.mode || 'match'; // 'match' | 'sandbox'
+      // modo de jogo da partida: 'rounds' (eliminação), 'tdm' (mata-mata em equipe), 'ffa' (mata-mata cada um por si)
+      this.gameMode = ['tdm', 'ffa'].includes(opts.gameMode) ? opts.gameMode : 'rounds';
+      this.matchTime = opts.matchTime || 180;   // tdm/ffa: duração (s)
+      this.killLimit = opts.killLimit || 30;    // tdm/ffa: abates para vencer
+      this.bombs = [];
+      this.nextBombId = 1;
       this.mapId = MAPS[opts.mapId] ? opts.mapId : 'deserto';
       this.totalRounds = opts.rounds || 3;
       this.players = new Map();
@@ -131,6 +137,12 @@
       this.lightStart = 0;
       this.buildMap();
     }
+
+    isDM() { return this.gameMode === 'tdm' || this.gameMode === 'ffa'; }
+    // "time" usado para amigo/inimigo: no cada-um-por-si cada jogador é o seu próprio time
+    teamKey(p) { return this.gameMode === 'ffa' ? p.id : p.team; }
+    isEnemy(p, q) { return p !== q && this.teamKey(p) !== this.teamKey(q); }
+    protectedNow(p) { return this.time < (p.protectUntil || 0); }
 
     isDark() { return !!(MAPS[this.mapId] && MAPS[this.mapId].dark); }
 
@@ -305,6 +317,78 @@
       p.jumpReadyAt = this.time + (this.mode === 'match' ? c.roundStartDelay : 0) + c.jumpCooldown;
       p.jump = null; p.respawnAt = 0;
       p.slowUntil = 0; p.slowF = 1; p.slowKind = 0;
+      p.bombs = c.bombCount; p.protectUntil = 0;
+    }
+
+    // renascer (mata-mata / teste): posição longe dos inimigos e 1 s de proteção
+    respawn(p) {
+      const c = this.cfg, st = p.stats;
+      this.resetPlayer(p, this.teamSlot(p));
+      p.stats = st;
+      if (this.mode !== 'sandbox') {
+        const pos = this.farSpawn(p);
+        p.x = pos.x; p.y = pos.y;
+        p.jumpReadyAt = this.time + c.jumpCooldown;
+        p.protectUntil = this.time + c.spawnProtect;
+        this.events.push({ type: 'respawn', id: p.id });
+      }
+    }
+
+    // ponto livre o mais longe possível dos inimigos vivos
+    farSpawn(p) {
+      const c = this.cfg, r = c.playerRadius, m = c.wallThickness + r + 4;
+      const enemies = [...this.players.values()].filter((q) => q.alive && this.isEnemy(p, q));
+      let best = null, bestScore = -1;
+      for (let i = 0; i < 60; i++) {
+        let x, y;
+        if (this.gameMode === 'tdm') { // no seu lado do mapa
+          const half = c.mapWidth / 2;
+          x = (p.team === 'A' ? m : half) + Math.random() * (half - m);
+          y = m + Math.random() * (c.mapHeight - 2 * m);
+        } else {
+          x = m + Math.random() * (c.mapWidth - 2 * m);
+          y = m + Math.random() * (c.mapHeight - 2 * m);
+        }
+        if (!circleFree(x, y, r, this.walls, c)) continue;
+        let score = 1e9;
+        for (const q of enemies) score = Math.min(score, Math.hypot(q.x - x, q.y - y));
+        if (score > bestScore) { bestScore = score; best = { x, y }; }
+      }
+      return best || spawnPos(p.team, 0, c);
+    }
+
+    // bomba: lança até o ponto (limitado pelo alcance); voa por cima dos muros e explode
+    throwBomb(id, tx, ty) {
+      const p = this.players.get(id), c = this.cfg;
+      if (!p || !p.alive || p.jump || p.bombs < 1 || !this.canAct() || this.protectedNow(p)) return false;
+      if (!isFinite(tx) || !isFinite(ty)) return false;
+      let dx = tx - p.x, dy = ty - p.y;
+      const d = Math.hypot(dx, dy);
+      if (d > c.bombRange) { dx *= c.bombRange / d; dy *= c.bombRange / d; }
+      const m = c.wallThickness + 4;
+      const ex = Math.min(c.mapWidth - m, Math.max(m, p.x + dx)), ey = Math.min(c.mapHeight - m, Math.max(m, p.y + dy));
+      p.bombs--;
+      this.bombs.push({ id: this.nextBombId++, owner: p.id, team: this.teamKey(p), sx: p.x, sy: p.y, tx: ex, ty: ey,
+        t0: this.time, flight: c.bombFlight * (0.5 + 0.5 * Math.hypot(ex - p.x, ey - p.y) / c.bombRange), fuse: c.bombFuse });
+      this.events.push({ type: 'bomb_throw', id: p.id });
+      return true;
+    }
+
+    updateBombs() {
+      const c = this.cfg, keep = [];
+      for (const b of this.bombs) {
+        if (this.time < b.t0 + b.flight + b.fuse) { keep.push(b); continue; }
+        // explode: tira 1 vida de cada inimigo no raio (muro protege)
+        for (const q of this.players.values()) {
+          if (!q.alive || q.jump || this.teamKey(q) === b.team || this.protectedNow(q)) continue;
+          const d = Math.hypot(q.x - b.tx, q.y - b.ty);
+          if (d > c.bombRadius + this.radiusOf(q)) continue;
+          if (lineBlocked(b.tx, b.ty, q.x, q.y, this.walls)) continue;
+          this.damage(q, b.owner, 'bomb');
+        }
+        this.events.push({ type: 'explode', x: b.tx, y: b.ty });
+      }
+      this.bombs = keep;
     }
 
     setInput(id, inp) {
@@ -376,9 +460,14 @@
 
     startRound() {
       this.round++;
-      this.bullets = [];
+      this.bullets = []; this.bombs = [];
       const slots = { A: 0, B: 0 };
       for (const p of this.players.values()) this.resetPlayer(p, slots[p.team]++);
+      if (this.gameMode === 'ffa') { // cada um nasce longe dos outros
+        const placed = [];
+        for (const p of this.players.values()) { p.alive = false; }
+        for (const p of this.players.values()) { const pos = this.farSpawn(p); p.x = pos.x; p.y = pos.y; p.alive = true; placed.push(p); }
+      }
       this.phase = 'countdown';
       this.phaseUntil = this.time + this.cfg.roundStartDelay;
       this.lightStart = this.phaseUntil;
@@ -397,13 +486,15 @@
       for (const p of this.players.values()) this.updatePlayer(p, dt, act);
       this.updateHazards(dt);
       this.updateBullets(dt);
+      this.updateBombs();
 
-      if (this.mode === 'sandbox') {
+      if (this.mode === 'sandbox' || (this.isDM() && this.phase === 'playing')) {
         for (const p of this.players.values()) {
-          if (!p.alive && p.respawnAt && this.time >= p.respawnAt) {
-            const st = p.stats; this.resetPlayer(p, this.teamSlot(p)); p.stats = st;
-          }
+          if (!p.alive && p.respawnAt && this.time >= p.respawnAt) this.respawn(p);
         }
+        if (this.mode !== 'sandbox') this.checkDMEnd();
+      } else if (this.isDM()) {
+        // (fim de partida do mata-mata é tratado em checkDMEnd)
       } else {
         if (this.phase === 'playing') this.checkRoundEnd();
         else if (this.phase === 'roundEnd' && this.time >= this.phaseUntil) {
@@ -460,7 +551,7 @@
         const m = moveCircle(p.x, p.y, mx * sp * dt, my * sp * dt, this.radiusOf(p), this.walls);
         p.x = m.x; p.y = m.y;
       }
-      if (inp.fire) {
+      if (inp.fire && !this.protectedNow(p)) {
         if (p.weapon === 'gun') this.tryShoot(p);
         else if (!p.clientKnife) this.tryKnife(p);
       }
@@ -479,7 +570,7 @@
       let bx = p.x + p.fx * (r + c.bulletRadius + 2), by = p.y + p.fy * (r + c.bulletRadius + 2);
       if (lineBlocked(p.x, p.y, bx, by, this.walls)) { bx = p.x; by = p.y; }
       this.bullets.push({ id: this.nextBulletId++, x: bx, y: by, vx: p.fx * c.bulletSpeed, vy: p.fy * c.bulletSpeed,
-        team: p.team, owner: p.id, hits: 0, t0: this.time });
+        team: this.teamKey(p), owner: p.id, hits: 0, t0: this.time });
       p.ammo--;
       p.fireReady = this.time + c.fireCooldown;
       this.events.push({ type: 'shot', id: p.id });
@@ -499,7 +590,7 @@
       this.events.push({ type: 'knife', id: p.id });
       const targets = [];
       for (const q of this.players.values()) {
-        if (q.team === p.team || !q.alive || q.jump) continue;
+        if (!this.isEnemy(p, q) || !q.alive || q.jump || this.protectedNow(q)) continue;
         targets.push({ id: q.id, x: q.x, y: q.y, r: this.radiusOf(q) });
       }
       const hit = knifeTarget(p.x, p.y, this.radiusOf(p), p.fx, p.fy, targets, c, this.walls);
@@ -510,7 +601,7 @@
     // (o que ele viu na tela) e o servidor só confere se é possível
     knifeSwing(id, targetId, ax, ay) {
       const p = this.players.get(id), c = this.cfg;
-      if (!p || !p.alive || p.jump || p.weapon !== 'knife' || !this.canAct()) return;
+      if (!p || !p.alive || p.jump || p.weapon !== 'knife' || !this.canAct() || this.protectedNow(p)) return;
       if (this.time < p.knifeReady - 0.12) return; // tolerância de rede
       p.knifeReady = this.time + c.knifeCooldown;
       p.knifeAnimUntil = this.time + 0.18;
@@ -518,7 +609,7 @@
       p.knifeAng = Math.atan2(p.fy, p.fx);
       this.events.push({ type: 'knife', id: p.id });
       const q = targetId && this.players.get(targetId);
-      if (!q || q.team === p.team || !q.alive || q.jump) return;
+      if (!q || !this.isEnemy(p, q) || !q.alive || q.jump || this.protectedNow(q)) return;
       const reach = this.radiusOf(p) + c.knifeRange + this.radiusOf(q);
       const d = Math.hypot(q.x - p.x, q.y - p.y);
       if (d > reach * 1.5 + 60) return; // longe demais até considerando o atraso da rede
@@ -528,7 +619,7 @@
 
     damage(v, attackerId, weapon) {
       const c = this.cfg;
-      if (this.time < v.invulnUntil) return false;
+      if (this.time < v.invulnUntil || this.protectedNow(v)) return false;
       const a = this.players.get(attackerId);
       v.lives--;
       v.blinkUntil = this.time + c.blinkDuration;
@@ -538,6 +629,10 @@
         v.stats.d++;
         if (a) a.stats.k++;
         if (this.mode === 'sandbox') v.respawnAt = this.time + 2;
+        else if (this.isDM()) {
+          v.respawnAt = this.time + c.respawnDelay;
+          if (a && this.gameMode === 'tdm' && a.team !== v.team) this.score[a.team]++;
+        }
         this.events.push({ type: 'kill', killer: attackerId, victim: v.id, weapon, x: v.x, y: v.y });
       } else {
         if (a) a.stats.a++; // assistência: acertou mas não matou
@@ -570,7 +665,7 @@
           }
           if (dead) break;
           for (const p of this.players.values()) {
-            if (!p.alive || p.jump || p.team === b.team) continue; // sem fogo amigo
+            if (!p.alive || p.jump || this.teamKey(p) === b.team || this.protectedNow(p)) continue; // sem fogo amigo
             const r = this.radiusOf(p);
             if ((p.x - b.x) ** 2 + (p.y - b.y) ** 2 < (r + br) ** 2) {
               this.damage(p, b.owner, 'gun');
@@ -597,6 +692,25 @@
       this.events.push({ type: 'round_end', winner, timeUp: timeUp && !!(aA && aB), score: Object.assign({}, this.score), round: this.round });
     }
 
+    // mata-mata: acaba no tempo ou quando alguém chega no limite de abates
+    checkDMEnd() {
+      const timeUp = this.time - this.lightStart >= this.matchTime;
+      let reached = false;
+      if (this.gameMode === 'tdm') reached = this.score.A >= this.killLimit || this.score.B >= this.killLimit;
+      else for (const p of this.players.values()) if (p.stats.k >= this.killLimit) reached = true;
+      if (!timeUp && !reached) return;
+      this.phase = 'matchEnd';
+      this.bullets = []; this.bombs = [];
+      let winner = null;
+      if (this.gameMode === 'tdm') winner = this.score.A > this.score.B ? 'A' : this.score.B > this.score.A ? 'B' : null;
+      else {
+        const ranked = [...this.players.values()].sort((a, b) => b.stats.k - a.stats.k || a.stats.d - b.stats.d);
+        if (ranked.length && (ranked.length < 2 || ranked[0].stats.k > ranked[1].stats.k)) winner = ranked[0].id;
+      }
+      this.matchWinner = winner;
+      this.events.push({ type: 'match_end', winner, mode: this.gameMode, timeUp, score: Object.assign({}, this.score) });
+    }
+
     isMatchOver() {
       const need = Math.floor(this.totalRounds / 2) + 1; // mais de 50% dos rounds
       return this.score.A >= need || this.score.B >= need || this.round >= this.totalRounds;
@@ -606,7 +720,7 @@
       this.phase = 'matchEnd';
       const s = this.score;
       this.matchWinner = s.A > s.B ? 'A' : s.B > s.A ? 'B' : null; // null = empate
-      this.events.push({ type: 'match_end', winner: this.matchWinner, score: Object.assign({}, s) });
+      this.events.push({ type: 'match_end', winner: this.matchWinner, mode: 'rounds', score: Object.assign({}, s) });
     }
 
     snapshot() {
@@ -621,7 +735,9 @@
           j: p.jumps, jc: p.jumps ? 0 : r1(Math.max(0, p.jumpReadyAt - t)),
           jz: p.jump ? (p.jump.spin ? 0.12 : Math.min(1, (t - p.jump.t0) / p.jump.dur)) : -1,
           ka: t < p.knifeAnimUntil ? 1 : 0, kd: t < p.knifeAnimUntil ? Math.round(p.knifeAng * 100) / 100 : 0,
-          fc: r1(Math.max(0, p.fireReady - t)),
+          fc: Math.round(Math.max(0, p.fireReady - t) * 100) / 100,
+          bo: p.bombs, sp: this.protectedNow(p) ? 1 : 0,
+          rs: !p.alive && p.respawnAt ? r1(Math.max(0, p.respawnAt - t)) : 0,
           sl: t < p.slowUntil ? p.slowF : 1, sk: t < p.slowUntil ? p.slowKind : 0,
           ts: p.jump && p.jump.toss ? 1 : 0,
           st: [p.stats.k, p.stats.d, p.stats.a]
@@ -630,8 +746,14 @@
       return {
         t: Math.round(t * 1000) / 1000, ph: this.phase, pu: r1(Math.max(0, this.phaseUntil - t)), rd: this.round,
         tr: this.totalRounds, sc: this.score, map: this.mapId, lg: this.lightState(), hz: this.hazardSnapshot(),
-        rt: this.mode === 'match' && this.phase === 'playing' ? r1(Math.max(0, this.cfg.roundTime - (t - this.lightStart))) : null,
-        p: ps, b: this.bullets.map((b) => [b.id, r1(b.x), r1(b.y), b.hits, b.team])
+        rt: this.mode === 'match' && this.phase === 'playing' ? r1(Math.max(0, (this.isDM() ? this.matchTime : this.cfg.roundTime) - (t - this.lightStart))) : null,
+        md: this.gameMode, kl: this.killLimit,
+        p: ps, b: this.bullets.map((b) => [b.id, r1(b.x), r1(b.y), b.hits, b.team]),
+        bm: this.bombs.map((b) => {
+          const k = Math.min(1, (t - b.t0) / b.flight);
+          return [b.id, r1(b.sx + (b.tx - b.sx) * k), r1(b.sy + (b.ty - b.sy) * k), Math.round(k * 100) / 100, b.team,
+            r1(Math.max(0, b.t0 + b.flight + b.fuse - t))];
+        })
       };
     }
   }

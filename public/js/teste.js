@@ -16,6 +16,8 @@
       tornadoSpeed: 'Velocidade do furacão', tornadoThrow: 'Distância que joga', tornadoAirTime: 'Tempo no ar ao ser jogado (s)' }],
     ['Neve: tempestade fria', { stormInterval: 'A cada (s)', stormWarn: 'Aviso antes (s)', stormDuration: 'Tempo descendo (s)', 
       stormBand: 'Altura da nevasca', freezeSlow: 'Velocidade congelado', freezeTime: 'Tempo congelado (s)' }],
+    ['Bomba', { bombCount: 'Bombas por vida/round', bombRange: 'Alcance do lançamento', bombFlight: 'Tempo voando (s)', bombFuse: 'Tempo até explodir no chão (s)', bombRadius: 'Raio da explosão' }],
+    ['Mata-mata', { respawnDelay: 'Tempo para renascer (s)', spawnProtect: 'Proteção ao renascer (s)' }],
     ['Sala escura', { lightsInterval: 'Luz acesa por (s)', lightsFlicker: 'Pisca antes de apagar (s)', lightsOffDuration: 'Luz apagada por (s)', bulletGlow: 'Brilho do tiro no escuro' }],
     ['HUD', { hudScale: 'Tamanho do HUD' }],
     ['Partida', { roundTime: 'Tempo do round (s)', roundStartDelay: 'Contagem antes do round (s)', roundEndDelay: 'Pausa após o round (s)' }]
@@ -46,6 +48,7 @@
     const names = RC_BOTS.randomNames(n);
     for (let i = 0; i < n; i++) {
       const b = game.addPlayer({ id: 'bot' + i, name: names[i], team: 'B', bot: true });
+      b.botLevel = $('t-level').value;
       b.ai = { t: 0, mx: 0, my: 0 };
     }
     renderer.setup(cfg, mapId);
@@ -104,6 +107,7 @@
 
   $('t-map').onchange = () => { mapId = $('t-map').value; PB.store.set('pb_teste_map', mapId); newGame(); };
   $('t-bots').onchange = newGame;
+  $('t-level').onchange = () => { for (const p of game.players.values()) if (p.bot) p.botLevel = $('t-level').value; };
   $('btn-respawn').onclick = respawnAll;
   $('btn-reset').onclick = () => {
     if (!confirm('Restaurar todos os valores padrão?')) return;
@@ -137,7 +141,15 @@
   };
 
   // ---- teclado ----
-  let mouse = null;
+  let mouse = null, bombAiming = false;
+  function bombTarget() {
+    const me = game.players.get('me');
+    if (!mouse || !me) return null;
+    const w = renderer.screenToWorld(mouse.x, mouse.y);
+    let dx = w.x - me.x, dy = w.y - me.y; const d = Math.hypot(dx, dy);
+    if (d > cfg.bombRange) { dx *= cfg.bombRange / d; dy *= cfg.bombRange / d; }
+    return { x: me.x + dx, y: me.y + dy };
+  }
   window.addEventListener('mousemove', (e) => { mouse = { x: e.clientX, y: e.clientY }; });
   PBHud.bindKeys({
     mouseEl: $('game-canvas'),
@@ -145,7 +157,13 @@
     onChange: (k) => game.setInput('me', k),
     onWeapon: (w) => game.setWeapon('me', w === 2 ? 'knife' : 'gun'),
     onReload: () => game.requestReload('me'),
-    onJump: () => game.requestJump('me')
+    onJump: () => game.requestJump('me'),
+    onBomb: (down) => {
+      if (down) { bombAiming = true; return; }
+      if (!bombAiming) return;
+      bombAiming = false;
+      const t = bombTarget(); if (t) game.throwBomb('me', t.x, t.y);
+    }
   });
 
   // ---- bots ----
@@ -209,7 +227,10 @@
       if (p.id === 'me') { p.name = profile.name; p.color = profile.color; p.avatar = profile.avatar; }
       else { p.name = game.players.get(p.id).name; p.color = botColors[i % 5]; p.avatar = ''; }
     });
-    renderer.draw({ players: s.p, bullets: s.b, hz: s.hz, meId: 'me', light: s.lg ? s.lg.s : 0 });
+    let bombAim = null;
+    const meNow = game.players.get('me');
+    if (bombAiming && meNow && meNow.alive && meNow.bombs > 0) { const t = bombTarget(); if (t) bombAim = { x: meNow.x, y: meNow.y, tx: t.x, ty: t.y }; }
+    renderer.draw({ players: s.p, bullets: s.b, hz: s.hz, bombs: s.bm, bombAim, meId: 'me', light: s.lg ? s.lg.s : 0 });
     hud.update(s.p.find((p) => p.id === 'me'), s, cfg, { sandbox: true });
     requestAnimationFrame(frame);
   }

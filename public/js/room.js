@@ -144,7 +144,14 @@
       $('lobby-note').textContent = PB.MAP_NOTE[state.map] || '';
     }
     $('set-rounds').value = String(state.rounds);
-    $('set-map').disabled = $('set-rounds').disabled = $('set-bots').disabled = $('set-botteam').disabled = !isHost || live;
+    $('set-mode').value = state.gameMode || 'rounds';
+    $('set-dmtime').value = String(state.dmTime || 180);
+    $('set-kills').value = String(state.killLimit || 30);
+    $('set-botlevel').value = state.botLevel || 'semipro';
+    const dmMode = state.gameMode === 'tdm' || state.gameMode === 'ffa';
+    document.querySelectorAll('.dm-only').forEach((e) => (e.style.display = dmMode ? '' : 'none'));
+    document.querySelectorAll('.rounds-only').forEach((e) => (e.style.display = dmMode ? 'none' : ''));
+    ['set-map', 'set-rounds', 'set-bots', 'set-botteam', 'set-mode', 'set-dmtime', 'set-kills', 'set-botlevel'].forEach((id) => ($(id).disabled = !isHost || live));
     if (state.bots) {
       $('set-bots').value = String(state.bots.list.length);
       $('set-botteam').value = state.bots.team;
@@ -154,7 +161,8 @@
     $('btn-start').classList.toggle('hidden', !isHost);
     $('btn-start').disabled = live;
     const host = memberById(state.hostId);
-    $('host-note').textContent = isHost ? 'Você é o dono da sala: escolha o mapa, os rounds e inicie.' : `Dono da sala: ${host ? host.name : '-'}. Aguarde ele iniciar.`;
+    $('host-note').textContent = (isHost ? 'Você é o dono da sala: escolha o mapa, o modo e inicie.' : `Dono da sala: ${host ? host.name : '-'}. Aguarde ele iniciar.`)
+      + (state.gameMode === 'ffa' ? ' · No "cada um por si" o time não importa: todo mundo é inimigo.' : '');
 
     for (const t of ['A', 'B']) {
       const list = state.members.filter((m) => m.status === 'team' && m.team === t);
@@ -196,8 +204,10 @@
   $('pick-B').onclick = () => socket.emit('choose_team', { team: 'B' });
   $('join-A').onclick = () => socket.emit('choose_team', { team: 'A' });
   $('join-B').onclick = () => socket.emit('choose_team', { team: 'B' });
-  $('set-map').onchange = $('set-rounds').onchange = () =>
-    socket.emit('update_settings', { map: $('set-map').value, rounds: Number($('set-rounds').value) });
+  $('set-map').onchange = $('set-rounds').onchange = $('set-mode').onchange = $('set-dmtime').onchange = $('set-kills').onchange = () =>
+    socket.emit('update_settings', { map: $('set-map').value, rounds: Number($('set-rounds').value),
+      gameMode: $('set-mode').value, dmTime: Number($('set-dmtime').value), killLimit: Number($('set-kills').value) });
+  $('set-botlevel').onchange = () => socket.emit('update_settings', { botLevel: $('set-botlevel').value });
   $('set-bots').onchange = $('set-botteam').onchange = () =>
     socket.emit('update_settings', { bots: Number($('set-bots').value), botTeam: $('set-botteam').value });
   $('btn-start').onclick = () => socket.emit('start_match');
@@ -217,10 +227,29 @@
   // ---------- vitória ----------
   function showVictory(d) {
     const tn = (t) => (t === 'A' ? 'AZUL' : 'VERMELHO');
+    if (d.mode === 'ffa') {
+      // cada um por si: ranking por abates
+      const ranked = d.players.slice().sort((a, b) => b.stats.k - a.stats.k || a.stats.d - b.stats.d);
+      const w = ranked.find((p) => p.id === d.winner);
+      $('v-title').innerHTML = w ? `🏆 <span style="color:#ffcc33">${esc(w.name)}</span> VENCEU!` : '🤝 EMPATE';
+      $('v-score').innerHTML = w ? `${w.stats.k} abates${d.timeUp ? ' · tempo esgotado' : ''}` : 'Empate em abates no fim do tempo';
+      $('v-winners').innerHTML = 'Mata-mata cada um por si · meta ' + d.killLimit + ' abates';
+      $('v-body').innerHTML = ranked.map((p, i) => `
+        <tr class="${p.id === d.winner ? 'v-win-row' : ''}">
+          <td><div class="who"><b class="muted">${i + 1}º</b>${PB.avatarHTML(p, 30)}${esc(p.name)}${p.id === you ? ' <span class="badge">você</span>' : ''}</div></td>
+          <td class="muted">—</td>
+          <td class="n">${p.stats.k}</td><td class="n">${p.stats.d}</td><td class="n">${p.stats.a}</td>
+        </tr>`).join('');
+      victoryOpen = true;
+      $('victory').classList.remove('hidden');
+      return;
+    }
     $('v-title').innerHTML = d.winner ? `🏆 VITÓRIA DO TIME <span class="t${d.winner}">${tn(d.winner)}</span>` : '🤝 EMPATE';
     $('v-score').innerHTML = `<span class="tA">Azul ${d.score.A}</span> x <span class="tB">${d.score.B} Vermelho</span>`;
     const winners = d.players.filter((p) => p.team === d.winner);
-    $('v-winners').innerHTML = d.winner ? 'Vencedores: ' + winners.map((p) => `<b>${esc(p.name)}</b>`).join(', ') : `Ninguém fez mais da metade dos ${d.rounds} rounds.`;
+    const tieMsg = d.mode === 'tdm' ? 'Os dois times fizeram a mesma quantidade de abates.' : `Ninguém fez mais da metade dos ${d.rounds} rounds.`;
+    $('v-winners').innerHTML = d.winner ? 'Vencedores: ' + winners.map((p) => `<b>${esc(p.name)}</b>`).join(', ') : tieMsg;
+    if (d.mode === 'tdm') $('v-score').innerHTML = `<span class="tA">Azul ${d.score.A}</span> x <span class="tB">${d.score.B} Vermelho</span> <small class="muted">abates</small>`;
     const sorted = d.players.slice().sort((a, b) => ((b.team === d.winner) - (a.team === d.winner)) || (b.stats.k - a.stats.k));
     $('v-body').innerHTML = sorted.map((p) => `
       <tr class="${p.team === d.winner ? 'v-win-row' : ''}">
@@ -236,11 +265,14 @@
 
   // ---------- eventos do jogo ----------
   const nameOf = (id) => { const m = memberById(id); return m ? m.name : '?'; };
-  const teamOf = (id) => { const p = latest && latest.p.find((x) => x.id === id); return p ? p.tm : 'A'; };
+  const teamOf = (id) => {
+    if (latest && latest.md === 'ffa') return id === you ? 'A' : 'B';
+    const p = latest && latest.p.find((x) => x.id === id); return p ? p.tm : 'A';
+  };
   function handleEvent(e) {
     renderer.effect(e);
     if (e.type === 'kill') {
-      hud.addFeed(`<span class="t${teamOf(e.killer)}">${esc(nameOf(e.killer))}</span> ${e.weapon === 'knife' ? '🔪' : '🔫'} <span class="t${teamOf(e.victim)}">${esc(nameOf(e.victim))}</span>`);
+      hud.addFeed(`<span class="t${teamOf(e.killer)}">${esc(nameOf(e.killer))}</span> ${e.weapon === 'knife' ? '🔪' : e.weapon === 'bomb' ? '💣' : '🔫'} <span class="t${teamOf(e.victim)}">${esc(nameOf(e.victim))}</span>`);
     } else if (e.type === 'round_end') {
       roundMsg = e.winner ? `<span class="t${e.winner}">Time ${e.winner === 'A' ? 'Azul' : 'Vermelho'}</span> venceu o round!<small>Azul ${e.score.A} x ${e.score.B} Vermelho</small>` : `${e.timeUp ? '⏱ Tempo esgotado — ' : ''}Round empatado!<small>Azul ${e.score.A} x ${e.score.B} Vermelho</small>`;
     } else if (e.type === 'round_start') {
@@ -255,7 +287,14 @@
     onChange: (k) => socket.emit('input', k),
     onWeapon: (w) => socket.emit('weapon', w),
     onReload: () => socket.emit('reload'),
-    onJump: () => socket.emit('jump')
+    onJump: () => socket.emit('jump'),
+    onBomb: (down) => {
+      if (down) { bombAiming = true; return; }
+      if (!bombAiming) return;
+      bombAiming = false;
+      const t = bombTarget();
+      if (t) socket.emit('bomb', { x: Math.round(t.x), y: Math.round(t.y) });
+    }
   });
   function sendKeys() { socket.emit('input', Object.assign({}, keys)); }
 
@@ -263,6 +302,16 @@
   const INTERP_MS = 100;
   let mouse = null;
   let knifeLocal = { t: -1e9, ang: 0 };
+  let bombAiming = false;
+  // ponto onde a bomba vai cair: onde o mouse está, ou no limite do alcance na direção dele
+  function bombTarget() {
+    if (!mouse || !pred.init || !config) return null;
+    const w = renderer.screenToWorld(mouse.x, mouse.y);
+    let dx = w.x - pred.x, dy = w.y - pred.y;
+    const d = Math.hypot(dx, dy);
+    if (d > config.bombRange) { dx *= config.bombRange / d; dy *= config.bombRange / d; }
+    return { x: pred.x + dx, y: pred.y + dy };
+  }
   const aimSent = { a: 99, t: 0 };
   window.addEventListener('mousemove', (e) => { mouse = { x: e.clientX, y: e.clientY }; });
   function interpolated(now) {
@@ -292,7 +341,13 @@
     }
     if (hz && a.s.hz && hz.d != null && a.s.hz.d != null && hz.s === a.s.hz.s) hz = Object.assign({}, hz, { d: a.s.hz.d + (hz.d - a.s.hz.d) * al });
     if (hz && a.s.hz && hz.y0 != null && a.s.hz.y0 != null) hz = Object.assign({}, hz, { y0: a.s.hz.y0 + (hz.y0 - a.s.hz.y0) * al });
-    return { players, bullets, hz };
+    const bma = new Map((a.s.bm || []).map((x) => [x[0], x]));
+    const bombs = (b.s.bm || []).map((x) => {
+      const o = bma.get(x[0]);
+      if (!o) return x;
+      return [x[0], o[1] + (x[1] - o[1]) * al, o[2] + (x[2] - o[2]) * al, o[3] + (x[3] - o[3]) * al, x[4], x[5]];
+    });
+    return { players, bullets, hz, bombs };
   }
 
   let last = performance.now();
@@ -340,8 +395,8 @@
         }
       }
       // faca: o acerto é calculado com o que você vê na tela e enviado ao servidor
-      if (mine.al && mine.w === 2 && keys.fire && latest.ph === 'playing' && mine.jz < 0 && now - knifeLocal.t >= config.knifeCooldown * 1000) {
-        const targets = view.players.filter((p) => p.id !== you && p.tm !== mine.tm && p.al && p.jz < 0).map((p) => ({ id: p.id, x: p.x, y: p.y, r: p.r }));
+      if (mine.al && !mine.sp && mine.w === 2 && keys.fire && latest.ph === 'playing' && mine.jz < 0 && now - knifeLocal.t >= config.knifeCooldown * 1000) {
+        const targets = view.players.filter((p) => p.id !== you && (latest.md === 'ffa' || p.tm !== mine.tm) && p.al && p.jz < 0 && !p.sp).map((p) => ({ id: p.id, x: p.x, y: p.y, r: p.r }));
         const hit = RC_GAME.knifeTarget(pred.x, pred.y, mine.r, pred.fx, pred.fy, targets, config, walls);
         socket.emit('knife', { t: hit, ax: pred.fx, ay: pred.fy });
         knifeLocal = { t: now, ang: Math.atan2(pred.fy, pred.fx) };
@@ -357,8 +412,11 @@
       const m = memberById(p.id);
       p.name = m ? m.name : '?'; p.color = m ? m.color : '#ccc'; p.avatar = m ? m.avatar : '';
     }
-    renderer.draw({ players: view.players, bullets: view.bullets, hz: view.hz, meId: you, light: latest.lg ? latest.lg.s : 0 });
-    hud.update(mine || null, latest, config, { roundMsg });
+    let bombAim = null;
+    if (bombAiming && mine && mine.al && mine.bo > 0) { const t = bombTarget(); if (t) bombAim = { x: pred.x, y: pred.y, tx: t.x, ty: t.y }; }
+    renderer.draw({ players: view.players, bullets: view.bullets, hz: view.hz, bombs: view.bombs, bombAim, meId: you,
+      ffa: latest.md === 'ffa', light: latest.lg ? latest.lg.s : 0 });
+    hud.update(mine || null, latest, config, { roundMsg, nameOf });
   }
   requestAnimationFrame(frame);
 
