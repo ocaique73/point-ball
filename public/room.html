@@ -58,12 +58,19 @@
   </div>
   <div class="card" id="queue-banner" style="margin-bottom:16px" hidden></div>
   <div class="card" style="margin-bottom:16px">
-    <div class="row">
+    <div class="lobby-settings">
+    <div class="lobby-preview"><canvas class="map-preview" id="lobby-preview"></canvas><div class="map-note" id="lobby-note"></div></div>
+    <div class="row" style="flex:1">
       <div class="grow" style="flex:1;min-width:140px"><label>Mapa</label>
-        <select id="set-map"><option value="deserto">Deserto</option><option value="neve">Neve</option><option value="floresta">Floresta</option></select></div>
+        <select id="set-map"><option value="deserto">Deserto</option><option value="neve">Neve</option><option value="floresta">Floresta</option><option value="escuro">Sala escura</option></select></div>
       <div class="grow" style="flex:1;min-width:140px"><label>Rounds</label>
         <select id="set-rounds"><option>1</option><option>2</option><option>3</option><option>5</option><option>7</option></select></div>
+      <div class="grow" style="flex:1;min-width:120px"><label>Bots 🤖</label>
+        <select id="set-bots"><option value="0">Sem bots</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></div>
+      <div class="grow" style="flex:1;min-width:140px"><label>Time dos bots</label>
+        <select id="set-botteam"><option value="B">Vermelho</option><option value="A">Azul</option></select></div>
       <div style="align-self:flex-end"><button class="btn primary big" id="btn-start">▶ Iniciar partida</button></div>
+    </div>
     </div>
     <div class="muted small" id="host-note" style="margin-top:8px"></div>
   </div>

@@ -8,6 +8,7 @@ const { Server } = require('socket.io');
 const { DEFAULT_CONFIG, mergeConfig } = require('./shared/config');
 const { Game } = require('./shared/game');
 const { MAPS } = require('./shared/maps');
+const Bots = require('./shared/bots');
 
 // ---- Configuração (game-config.json na raiz sobrescreve os padrões) ----
 let CONFIG = DEFAULT_CONFIG;
@@ -65,16 +66,36 @@ function cleanProfile(p) {
   return { name, color, avatar };
 }
 
+// conta jogadores na sala de espera (inclui bots)
 function teamCount(room, team) {
   let n = 0;
   for (const m of room.members.values()) if (m.status === 'team' && (!team || m.team === team)) n++;
+  if (!team || team === room.bots.team) n += room.bots.list.length;
   return n;
+}
+function humansIn(room, team) {
+  let n = 0;
+  for (const m of room.members.values()) if (m.status === 'team' && m.team === team) n++;
+  return n;
+}
+function setBots(room, count, team) {
+  team = team === 'A' ? 'A' : 'B';
+  const max = MAX_PER_TEAM - humansIn(room, team);
+  count = Math.max(0, Math.min(max, Math.floor(Number(count) || 0)));
+  const list = team === room.bots.team ? room.bots.list.slice(0, count) : [];
+  const names = Bots.randomNames(count - list.length, list.map((b) => b.name));
+  for (const name of names) {
+    let i = 1; while (list.some((b) => b.id === 'bot-' + i)) i++;
+    list.push({ id: 'bot-' + i, name, color: Bots.COLORS[Math.floor(Math.random() * Bots.COLORS.length)] });
+  }
+  room.bots = { team, list };
 }
 
 function publicState(room) {
   return {
     code: room.code, hasPassword: !!room.password, map: room.map, rounds: room.rounds,
     hostId: room.hostId, phase: room.phase,
+    bots: { team: room.bots.team, list: room.bots.list.map((b) => ({ id: b.id, name: b.name, color: b.color, avatar: '', team: room.bots.team, bot: true })) },
     members: [...room.members.values()].map((m) => ({
       id: m.pid, name: m.name, color: m.color, avatar: m.avatar, status: m.status, team: m.team,
       connected: m.connected, inMatch: m.inMatch
@@ -134,7 +155,7 @@ function removeMember(room, cid) {
   room.queue = room.queue.filter((q) => q !== cid);
   if (room.game) {
     room.game.removePlayer(m.pid);
-    if (room.game.players.size === 0) endMatch(room, null);
+    if (![...room.game.players.values()].some((p) => !p.bot)) endMatch(room, null); // só sobraram bots
   }
   pickHost(room);
   promoteQueue(room);
@@ -146,10 +167,11 @@ function startMatch(room) {
   const game = new Game(CONFIG, { mode: 'match', mapId: room.map, rounds: room.rounds });
   for (const m of room.members.values()) {
     if (m.status === 'team' && m.connected) {
-      game.addPlayer({ id: m.pid, name: m.name, team: m.team });
+      game.addPlayer({ id: m.pid, name: m.name, team: m.team, clientKnife: true });
       m.inMatch = true;
     }
   }
+  for (const b of room.bots.list) game.addPlayer({ id: b.id, name: b.name, team: room.bots.team, bot: true });
   room.game = game;
   room.phase = 'match';
   game.startMatch();
@@ -157,6 +179,7 @@ function startMatch(room) {
   const every = Math.max(1, Math.round(CONFIG.tickRate / CONFIG.sendRate));
   let tick = 0, pending = [];
   room.loop = setInterval(() => {
+    for (const p of game.players.values()) if (p.bot) Bots.think(game, p, dt);
     const evs = game.step(dt);
     if (evs.length) pending.push(...evs);
     if (++tick % every === 0 || evs.some((e) => e.type === 'match_end')) {
@@ -178,6 +201,7 @@ function endMatch(room, end) {
   room.phase = 'lobby';
   if (game && end) {
     const byPid = new Map([...room.members.values()].map((m) => [m.pid, m]));
+    for (const b of room.bots.list) byPid.set(b.id, Object.assign({ avatar: '' }, b));
     const players = [...game.players.values()].map((p) => {
       const m = byPid.get(p.id) || {};
       return { id: p.id, name: m.name || p.name, avatar: m.avatar || '', color: m.color || '#fff', team: p.team, stats: p.stats };
@@ -214,7 +238,7 @@ io.on('connection', (socket) => {
       code, password: pass, map: MAPS[d.map] ? d.map : 'deserto',
       rounds: VALID_ROUNDS.includes(Number(d.rounds)) ? Number(d.rounds) : 3,
       hostId: null, creatorPid: pidOf(d.clientId), phase: 'lobby', members: new Map(), queue: [],
-      game: null, loop: null, closeTimer: null
+      game: null, loop: null, closeTimer: null, bots: { team: 'B', list: [] }
     };
     rooms.set(code, room);
     scheduleCloseIfEmpty(room); // se ninguém entrar em 2 min, fecha
@@ -302,6 +326,7 @@ io.on('connection', (socket) => {
     if (!m || room.hostId !== m.pid || room.phase !== 'lobby') return;
     if (d && MAPS[d.map]) room.map = d.map;
     if (d && VALID_ROUNDS.includes(Number(d.rounds))) room.rounds = Number(d.rounds);
+    if (d && (d.bots != null || d.botTeam)) setBots(room, d.bots != null ? d.bots : room.bots.list.length, d.botTeam || room.bots.team);
     broadcastState(room);
   });
 
@@ -310,7 +335,8 @@ io.on('connection', (socket) => {
     if (!m) return;
     if (room.hostId !== m.pid) return socket.emit('toast', 'Só o dono da sala pode iniciar.');
     if (room.phase !== 'lobby') return;
-    const ready = (t) => [...room.members.values()].filter((x) => x.status === 'team' && x.team === t && x.connected).length;
+    const ready = (t) => [...room.members.values()].filter((x) => x.status === 'team' && x.team === t && x.connected).length
+      + (room.bots.team === t ? room.bots.list.length : 0);
     if (ready('A') < 1 || ready('B') < 1) return socket.emit('toast', 'Precisa de pelo menos 1 jogador em cada time.');
     startMatch(room);
   });
@@ -318,6 +344,14 @@ io.on('connection', (socket) => {
   socket.on('input', (d) => {
     const { room, m } = ctx();
     if (m && room.game && m.inMatch) room.game.setInput(m.pid, d);
+  });
+  socket.on('aim', (d) => {
+    const { room, m } = ctx();
+    if (m && room.game && m.inMatch && Array.isArray(d)) room.game.setAim(m.pid, Number(d[0]), Number(d[1]));
+  });
+  socket.on('knife', (d) => {
+    const { room, m } = ctx();
+    if (m && room.game && m.inMatch && d) room.game.knifeSwing(m.pid, typeof d.t === 'string' ? d.t : null, Number(d.ax), Number(d.ay));
   });
   socket.on('weapon', (w) => {
     const { room, m } = ctx();

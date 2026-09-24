@@ -11,17 +11,28 @@
       fireCooldown: 'Intervalo entre tiros (s)', magSize: 'Balas por pente', magazines: 'Pentes extras (recargas)', reloadTime: 'Tempo de recarga (s)' }],
     ['Faca', { knifeCooldown: 'Intervalo da facada (s)', knifeRange: 'Alcance da faca', knifeArc: 'Abertura do golpe (graus)' }],
     ['Super pulo', { jumpCooldown: 'Tempo para ganhar pulo (s)', jumpDistance: 'Distância do pulo', jumpDuration: 'Tempo no ar (s)', jumpStartReady: 'Começa o round com pulo' }],
+    ['Deserto: tempestade de areia', { sandInterval: 'A cada (s)', sandWarn: 'Aviso antes (s)', sandDuration: 'Tempo do meio até as laterais (s)', sandBand: 'Largura da parede de areia' }],
+    ['Floresta: furacão', { tornadoInterval: 'A cada (s)', tornadoGrow: 'Tempo nascendo (s)', tornadoActive: 'Tempo andando (s)', tornadoRadius: 'Tamanho do furacão',
+      tornadoSpeed: 'Velocidade do furacão', tornadoThrow: 'Distância que joga', tornadoAirTime: 'Tempo no ar ao ser jogado (s)' }],
+    ['Neve: tempestade fria', { stormInterval: 'A cada (s)', stormWarn: 'Aviso antes (s)', stormDuration: 'Tempo descendo (s)', 
+      stormBand: 'Altura da nevasca', freezeSlow: 'Velocidade congelado', freezeTime: 'Tempo congelado (s)' }],
+    ['Sala escura', { lightsInterval: 'Luz acesa por (s)', lightsFlicker: 'Pisca antes de apagar (s)', lightsOffDuration: 'Luz apagada por (s)', bulletGlow: 'Brilho do tiro no escuro' }],
     ['HUD', { hudScale: 'Tamanho do HUD' }],
-    ['Partida', { roundStartDelay: 'Contagem antes do round (s)', roundEndDelay: 'Pausa após o round (s)' }]
+    ['Partida', { roundTime: 'Tempo do round (s)', roundStartDelay: 'Contagem antes do round (s)', roundEndDelay: 'Pausa após o round (s)' }]
   ];
   const REBUILD = ['mapWidth', 'mapHeight', 'wallThickness'];
 
   // base: config atual do servidor (inclui game-config.json se existir)
   let serverCfg = DEFAULT_CONFIG;
   try { serverCfg = mergeConfig(DEFAULT_CONFIG, await (await fetch('/api/config')).json()); } catch (e) {}
-  const cfg = mergeConfig(serverCfg, PB.store.get('pb_teste_cfg', null));
+  // valores salvos de uma versão antiga dos padrões são descartados
+  let saved = PB.store.get('pb_teste_cfg', null);
+  if (saved && saved.cfgVersion !== DEFAULT_CONFIG.cfgVersion) { saved = null; PB.store.set('pb_teste_cfg', null); }
+  const cfg = mergeConfig(serverCfg, saved);
+  cfg.cfgVersion = DEFAULT_CONFIG.cfgVersion;
 
   const renderer = new PBRenderer($('game-canvas'));
+  renderer.reserveTop = 84; // altura do HUD de cima (px)
   const hud = new PBHud.Hud($('hud-root'));
   let mapId = PB.store.get('pb_teste_map', 'deserto');
   $('t-map').value = mapId;
@@ -32,8 +43,9 @@
     const pr = PB.getProfile();
     game.addPlayer({ id: 'me', name: pr.name, team: 'A' });
     const n = Math.max(0, Math.min(5, Number($('t-bots').value) || 0));
+    const names = RC_BOTS.randomNames(n);
     for (let i = 0; i < n; i++) {
-      const b = game.addPlayer({ id: 'bot' + i, name: 'Bot ' + (i + 1), team: 'B', bot: true });
+      const b = game.addPlayer({ id: 'bot' + i, name: names[i], team: 'B', bot: true });
       b.ai = { t: 0, mx: 0, my: 0 };
     }
     renderer.setup(cfg, mapId);
@@ -116,6 +128,7 @@
     if (!f) return;
     try {
       Object.assign(cfg, mergeConfig(DEFAULT_CONFIG, JSON.parse(await f.text())));
+      cfg.cfgVersion = DEFAULT_CONFIG.cfgVersion;
       PB.store.set('pb_teste_cfg', cfg);
       buildPanel(); newGame();
       PB.toast('Configuração importada!');
@@ -124,18 +137,21 @@
   };
 
   // ---- teclado ----
+  let mouse = null;
+  window.addEventListener('mousemove', (e) => { mouse = { x: e.clientX, y: e.clientY }; });
   PBHud.bindKeys({
+    mouseEl: $('game-canvas'),
     enabled: () => true,
     onChange: (k) => game.setInput('me', k),
     onWeapon: (w) => game.setWeapon('me', w === 2 ? 'knife' : 'gun'),
     onReload: () => game.requestReload('me'),
     onJump: () => game.requestJump('me')
   });
-  $('game-canvas').addEventListener('mousedown', () => document.activeElement && document.activeElement.blur());
 
   // ---- bots ----
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [0.7, 0.7], [-0.7, 0.7], [0.7, -0.7], [-0.7, -0.7], [0, 0]];
   function botThink(dt) {
+    if ($('t-smart').checked) { for (const b of game.players.values()) if (b.bot) RC_BOTS.think(game, b, dt); return; }
     const me = game.players.get('me');
     for (const b of game.players.values()) {
       if (!b.bot || !b.alive) continue;
@@ -169,6 +185,11 @@
   function frame(now) {
     acc += Math.min(0.1, (now - last) / 1000);
     last = now;
+    const meP = game.players.get('me');
+    if (mouse && meP) {
+      const w = renderer.screenToWorld(mouse.x, mouse.y);
+      game.setAim('me', w.x - meP.x, w.y - meP.y);
+    }
     while (acc >= STEP) {
       botThink(STEP);
       const evs = game.step(STEP);
@@ -188,7 +209,7 @@
       if (p.id === 'me') { p.name = profile.name; p.color = profile.color; p.avatar = profile.avatar; }
       else { p.name = game.players.get(p.id).name; p.color = botColors[i % 5]; p.avatar = ''; }
     });
-    renderer.draw({ players: s.p, bullets: s.b, meId: 'me' });
+    renderer.draw({ players: s.p, bullets: s.b, hz: s.hz, meId: 'me', light: s.lg ? s.lg.s : 0 });
     hud.update(s.p.find((p) => p.id === 'me'), s, cfg, { sandbox: true });
     requestAnimationFrame(frame);
   }

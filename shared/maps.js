@@ -14,11 +14,18 @@
     return out.concat(center || []);
   }
 
+  function mirrorPts(half) {
+    const out = [];
+    for (const p of half) { out.push(p); out.push([1 - p[0], p[1]]); }
+    return out;
+  }
+
   const MAPS = {
     deserto: {
       id: 'deserto',
       name: 'Deserto',
-      theme: { ground: '#e8c98f', ground2: '#dfbc7c', wall: '#a8733f', wallEdge: '#7a5028', deco: 'cactus', border: '#6b4524' },
+      hazard: 'sand', // tempestade de areia do meio para as laterais (tampa a visão)
+      theme: { ground: '#e8c98f', ground2: '#dfbc7c', wall: '#a8733f', wallEdge: '#7a5028', deco: 'rocks', border: '#6b4524' },
       walls: mirror([
         [0.15, 0.36, 0.15, 0.64],
         [0.28, 0.1, 0.28, 0.3],
@@ -31,6 +38,7 @@
     neve: {
       id: 'neve',
       name: 'Neve',
+      hazard: 'storm', // tempestade fria descendo de cima para baixo
       theme: { ground: '#eef4fa', ground2: '#dde8f3', wall: '#8fb3d6', wallEdge: '#5f86ad', deco: 'snow', border: '#4b6f94' },
       walls: mirror([
         [0.1, 0.2, 0.26, 0.2],
@@ -45,6 +53,7 @@
     floresta: {
       id: 'floresta',
       name: 'Floresta',
+      hazard: 'tornado', // furacão que joga os jogadores longe
       theme: { ground: '#7fb069', ground2: '#72a35d', wall: '#5a3e2b', wallEdge: '#3b271a', deco: 'tree', border: '#2f1f14' },
       walls: mirror([
         [0.13, 0.16, 0.28, 0.16],
@@ -55,6 +64,21 @@
         [0.39, 0.36, 0.39, 0.64],
         [0.39, 0.5, 0.44, 0.5]
       ], [[0.46, 0.18, 0.54, 0.18], [0.46, 0.82, 0.54, 0.82]])
+    },
+    escuro: {
+      id: 'escuro',
+      name: 'Sala escura',
+      dark: true, // a luz apaga de tempos em tempos
+      hazard: 'dark',
+      theme: { ground: '#2b2d33', ground2: '#26282d', wall: '#15161a', wallEdge: '#454955', deco: 'tiles', border: '#0b0b0d' },
+      walls: mirror([
+        [0.12, 0.3, 0.22, 0.3],
+        [0.12, 0.7, 0.22, 0.7],
+        [0.3, 0.14, 0.3, 0.38],
+        [0.3, 0.62, 0.3, 0.86],
+        [0.4, 0.32, 0.4, 0.68],
+        [0.34, 0.5, 0.4, 0.5]
+      ], [[0.5, 0.1, 0.5, 0.28], [0.5, 0.72, 0.5, 0.9], [0.45, 0.5, 0.55, 0.5]])
     }
   };
 

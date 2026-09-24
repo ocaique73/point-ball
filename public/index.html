@@ -27,10 +27,12 @@
       <input type="password" id="c-pass" maxlength="6" placeholder="Deixe vazio para sala aberta" autocomplete="new-password">
       <div class="row">
         <div class="grow"><label>Mapa</label>
-          <select id="c-map"><option value="deserto">Deserto</option><option value="neve">Neve</option><option value="floresta">Floresta</option></select></div>
+          <select id="c-map"><option value="deserto">Deserto</option><option value="neve">Neve</option><option value="floresta">Floresta</option><option value="escuro">Sala escura</option></select></div>
         <div class="grow"><label>Rounds</label>
           <select id="c-rounds"><option>1</option><option>2</option><option selected>3</option><option>5</option><option>7</option></select></div>
       </div>
+      <canvas class="map-preview" id="c-preview"></canvas>
+      <div class="map-note" id="c-note"></div>
       <div class="error" id="c-err"></div>
       <button class="btn primary big" id="btn-create" style="width:100%;margin-top:6px">Criar sala</button>
     </div>
@@ -48,6 +50,10 @@
 </div>
 
 <script src="/js/common.js"></script>
+<script src="/shared/config.js"></script>
+<script src="/shared/maps.js"></script>
+<script src="/shared/game.js"></script>
+<script src="/js/render.js"></script>
 <script src="/socket.io/socket.io.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
@@ -59,6 +65,15 @@
   }
   renderMe();
   $('btn-profile').onclick = () => PB.openProfile(renderMe);
+
+  // preview do mapa escolhido
+  let cfg = RC_CONFIG.DEFAULT_CONFIG;
+  const showPreview = () => {
+    PBRenderer.preview($('c-preview'), cfg, $('c-map').value);
+    $('c-note').textContent = PB.MAP_NOTE[$('c-map').value] || '';
+  };
+  $('c-map').addEventListener('change', showPreview);
+  fetch('/api/config').then((r) => r.json()).then((c) => { cfg = RC_CONFIG.mergeConfig(RC_CONFIG.DEFAULT_CONFIG, c); showPreview(); }).catch(showPreview);
 
   $('c-name').addEventListener('input', (e) => { e.target.value = e.target.value.replace(/[^a-z0-9]/gi, '').toUpperCase(); });
   $('j-code').addEventListener('input', (e) => { e.target.value = e.target.value.replace(/[^a-z0-9]/gi, '').toUpperCase(); });

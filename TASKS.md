@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 24/09/2026 — v0.1.0 (primeira versão jogável)
+Última atualização: 24/09/2026 — v0.2.0 no ar em https://point-ball.onrender.com
 
 ---
 
@@ -12,8 +12,8 @@
 - [x] `package.json` com `npm start` e porta via `process.env.PORT` (Render)
 - [x] `render.yaml` (web service free, health check em `/healthz`)
 - [x] `.gitignore`
-- [ ] Criar repositório no GitHub e dar push (Caique)
-- [ ] Criar serviço no Render apontando para o repositório (Caique)
+- [x] Repositório no GitHub: https://github.com/ocaique73/point-ball (branch main)
+- [x] Serviço no Render (free, Virginia, auto-deploy da main): https://point-ball.onrender.com
 - [ ] Testar o jogo online no Render com 2+ pessoas
 
 ## 2. Perfil (sem cadastro)
@@ -83,20 +83,87 @@
 - [~] **Caique:** ajustar os valores e me mandar o `game-config.json`
 - [ ] Aplicar o `game-config.json` do Caique (basta colocar o arquivo na raiz do projeto — o servidor carrega sozinho)
 
+## 8.1 v0.2.0 — pedidos de 24/09 (testar no localhost antes de subir)
+- [x] Preview do mapa escolhido na criação de sala
+- [x] Preview do mapa também na sala de espera (muda quando o dono troca)
+- [x] Novo mapa **Sala escura** (lugar fechado, chão escuro)
+- [x] Luz apaga a cada 30 s: contador no topo ("Luz apaga em Xs"), pisca rápido por 1 s, fica apagada 1 s e acende de novo
+- [x] No escuro só o tiro aparece, fraquinho, com rastro de fogo (brilho ajustável)
+- [x] Tempos da luz ajustáveis no `/teste` (grupo "Sala escura")
+- [x] Rastro leve nas balas em todos os mapas
+- [x] Mira pelo **mouse** (arma aponta para o mouse em volta do personagem)
+- [x] WASD/setas só movimentam
+- [x] Tiro/facada no **clique esquerdo** (segurar = atira a cada 1 s)
+- [x] Super pulo no **Espaço** (E também funciona)
+- [~] **Caique:** testar no localhost (`npm start`) e no `/teste`
+- [x] Subir v0.2.0 para o GitHub/Render
+
+## 8.2 v0.2.0 — efeitos de mapa + tempo de round (pedido de 24/09)
+- [x] Cada mapa tem **um** efeito só
+- [x] ~~Deserto: cactos~~ (removido a pedido do Caique — ficou ruim)
+- [x] **Floresta:** furacão a cada 30 s — 1 s antes aparece nascendo (sem efeito, só crescendo), depois gira e anda pelo mapa por 3 s; quem ele toca é jogado para o alto (como super pulo) para outro ponto do mapa
+- [x] **Neve:** tempestade fria a cada 30 s descendo de cima para baixo (agora no mapa inteiro); quem pega fica congelado (45% da velocidade por 1,5 s)
+- [x] **Sala escura:** luz apagando (já existia)
+- [x] HUD mostra o contador de cada efeito
+- [x] Tudo ajustável no `/teste` (grupos Deserto, Floresta, Neve, Sala escura)
+- [x] Tempo máximo do round: **2 min** (relógio no topo); acabou o tempo com os dois times vivos = empate
+- [~] **Caique:** testar no localhost
+- [x] Subir v0.2.0 para o GitHub/Render
+
+## 8.3 v0.2.0 — HUD novo (pedido de 24/09)
+- [x] Corações ao lado direito da munição (uma caixa só, mais baixa)
+- [x] Topo: Abates/Mortes/Assist. à esquerda do placar, Super pulo à direita
+- [x] Contador do efeito do mapa (luz/furacão/tempestade) menor, embaixo do placar
+- [x] Mapa desce um pouco: espaço reservado em cima para o HUD não cobrir o mapa
+- [~] **Caique:** testar no localhost
+
+## 8.4 v0.2.0 — ajustes após teste do Caique (24/09)
+- [x] Furacão com os valores do Caique: a cada 7 s, nasce em 2 s, anda 4,5 s, tamanho 115, velocidade 330, joga a 450, 0,9 s no ar
+- [x] Desenho novo do furacão: visto de cima, braços de vento em espiral, meio transparentes
+- [x] Tempestade fria no mapa inteiro (largura padrão = 1)
+- [x] **Deserto:** tempestade de areia a cada 30 s — junta no meio (aviso 1 s) e duas paredes de areia vão do meio até as laterais em 4 s; bordas tampam um pouco a visão, o miolo tampa tudo, depois clareia
+- [~] **Caique:** testar no localhost
+
+## 8.5 v0.2.0 — ajustes 2 (24/09)
+- [x] Todos os efeitos de mapa a cada **30 s** (furacão voltou de 7 s para 30 s)
+- [x] Areia: aviso 2 s, 4 s até as laterais, largura 0,58 (print +15%); bordas mais escuras mantendo o degradê
+- [x] Furacão 15% maior (132) e sem a linha amarela tracejada
+- [x] Furacão pega o jogador, ele **gira dentro** do furacão (0,7 s, ajustável) e depois é lançado
+- [x] Tempestade fria já pega a largura inteira do mapa
+- [x] **Bots na sala:** o dono escolhe 0 a 5 bots e o time deles; nomes aleatórios; ocupam vagas do time
+- [x] Bots miram, atiram, usam faca quando acaba a bala, desviam e usam super pulo
+- [x] /teste usa os mesmos bots (opção "Bots inteligentes")
+- [~] **Caique:** testar no localhost
+
+## 8.6 v0.2.0 — HUD 3 (24/09)
+- [x] Arma, munição e vida no canto superior esquerdo, uma em cada linha
+- [x] Embaixo do mapa fica livre (só a linha de ajuda dos controles)
+- [x] Nevasca agora é **sempre** o mapa inteiro (tirei a opção de largura)
+- [x] /teste descarta valores salvos de versões antigas (`cfgVersion`) — era isso que deixava a nevasca só no meio
+- [~] **Caique:** testar no localhost
+
+## 8.7 v0.2.0 — valores do Caique + faca (24/09)
+- [x] Valores do print: bala tamanho 5 e velocidade 700; faca a cada 0,4 s, alcance 50, abertura 100° (mesmas unidades da tela)
+- [x] **Faca corrigida:** o risco balançava junto com a lâmina (até ~50° para os lados) e o acerto usava só o centro do inimigo
+  - agora o risco é a área real do golpe, parada na direção do golpe
+  - conta o corpo inteiro do inimigo (se o risco encosta no corpo, acerta)
+  - o acerto é calculado no seu navegador com o que você vê (sem atraso da rede) e o servidor só confere se é possível
+- [x] Subir v0.2.0 para GitHub/Render
+
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
 - [ ] Sons (tiro, batida na parede, acerto, faca, pulo)
 - [ ] Controles para celular (joystick na tela)
 - [ ] Tempo limite por round
 - [ ] Chat na sala de espera
-- [ ] Mira com o mouse (hoje a arma aponta para onde o personagem anda)
 - [ ] Botão do dono para expulsar jogador
 
 ---
 
 ## Decisões tomadas (pode mudar se o Caique quiser)
-- Tecla do super pulo: **Shift** ou **E** (não foi especificada).
+- Super pulo: **Espaço** (ou E). Pula para onde está andando; parado, pula para onde o mouse aponta.
 - Recarregar manual: **R**.
-- A arma aponta na direção do último movimento (não usa mouse).
+- A arma aponta para o mouse. Tiro/facada no clique esquerdo.
+- Sala escura: no escuro nada aparece (nem você), só as balas com brilho fraco e rastro. O HUD continua visível.
 - Cada round começa **sem** pulo (conta 25 s). Dá para mudar em `/teste` → "Começa o round com pulo".
 - Invulnerável por 0,4 s depois de levar um acerto (evita perder 2 vidas com 1 rajada). Ajustável.
 - Jogador desconectado no meio da partida fica parado no mapa até voltar (ou até 2 min).

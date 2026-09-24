@@ -106,7 +106,14 @@ window.PB = (function () {
   }
 
   const TEAM_NAME = { A: 'Azul', B: 'Vermelho' };
-  const MAP_NAME = { deserto: 'Deserto', neve: 'Neve', floresta: 'Floresta' };
+  const MAP_NAME = { deserto: 'Deserto', neve: 'Neve', floresta: 'Floresta', escuro: 'Sala escura' };
 
-  return { store, clientId, getProfile, saveProfile, esc, toast, avatarHTML, openProfile, TEAM_NAME, MAP_NAME };
+  const MAP_NOTE = {
+    deserto: '🏜️ A cada 30s uma tempestade de areia sai do meio para as laterais e tampa a visão.',
+    neve: '❄️ A cada 30s uma tempestade fria desce pelo mapa e congela quem pegar.',
+    floresta: '🌪️ De tempos em tempos nasce um furacão que anda pelo mapa e joga longe quem ele tocar.',
+    escuro: '🌑 A luz apaga a cada 30s — no escuro só o tiro aparece.'
+  };
+
+  return { MAP_NOTE, store, clientId, getProfile, saveProfile, esc, toast, avatarHTML, openProfile, TEAM_NAME, MAP_NAME };
 })();

@@ -15,8 +15,10 @@
   let gameMap = null;
   let pred = { init: false, x: 0, y: 0, fx: 1, fy: 0 };
   let walls = [];
+  let lastPreview = null;
 
   const renderer = new PBRenderer($('game-canvas'));
+  renderer.reserveTop = 84; // altura do HUD de cima (px)
   const hud = new PBHud.Hud($('hud-root'));
 
   // ---------- telas ----------
@@ -102,7 +104,9 @@
 
   // ---------- UI da sala ----------
   const meMember = () => state && state.members.find((m) => m.id === you);
-  const memberById = (id) => state && state.members.find((m) => m.id === id);
+  const botsList = () => (state && state.bots ? state.bots.list : []);
+  const memberById = (id) => state && (state.members.find((m) => m.id === id) || botsList().find((b) => b.id === id));
+  const teamSize = (t) => state.members.filter((m) => m.status === 'team' && m.team === t).length + (state.bots && state.bots.team === t ? botsList().length : 0);
 
   function renderUI() {
     if (!state || !joined || fatal) return;
@@ -118,11 +122,11 @@
     } else if (me.status === 'choosing') {
       show('scr-team');
       for (const t of ['A', 'B']) {
-        const n = state.members.filter((m) => m.status === 'team' && m.team === t).length;
+        const n = teamSize(t);
         $('pick-' + t + '-n').textContent = `${n}/5`;
         $('pick-' + t).disabled = n >= 5;
       }
-      const total = state.members.filter((m) => m.status === 'team').length;
+      const total = teamSize('A') + teamSize('B');
       $('team-note').textContent = total >= 10 ? 'Sala cheia — escolha um time para entrar na fila.' : 'Máximo de 5 jogadores por time.';
       if (total >= 10) { $('pick-A').disabled = false; $('pick-B').disabled = false; }
     } else {
@@ -134,8 +138,19 @@
     $('lock-ico').textContent = state.hasPassword ? '🔒' : '';
     $('live-banner').classList.toggle('hidden', !live || me.inMatch);
     $('set-map').value = state.map;
+    if (lastPreview !== state.map && config && !$('scr-lobby').classList.contains('hidden')) {
+      lastPreview = state.map;
+      PBRenderer.preview($('lobby-preview'), config, state.map);
+      $('lobby-note').textContent = PB.MAP_NOTE[state.map] || '';
+    }
     $('set-rounds').value = String(state.rounds);
-    $('set-map').disabled = $('set-rounds').disabled = !isHost || live;
+    $('set-map').disabled = $('set-rounds').disabled = $('set-bots').disabled = $('set-botteam').disabled = !isHost || live;
+    if (state.bots) {
+      $('set-bots').value = String(state.bots.list.length);
+      $('set-botteam').value = state.bots.team;
+      const room = 5 - state.members.filter((m) => m.status === 'team' && m.team === state.bots.team).length;
+      [...$('set-bots').options].forEach((o) => (o.disabled = Number(o.value) > room));
+    }
     $('btn-start').classList.toggle('hidden', !isHost);
     $('btn-start').disabled = live;
     const host = memberById(state.hostId);
@@ -143,11 +158,13 @@
 
     for (const t of ['A', 'B']) {
       const list = state.members.filter((m) => m.status === 'team' && m.team === t);
-      $('cnt-' + t).textContent = `${list.length}/5`;
-      let html = list.map((m) => memberRow(m)).join('');
-      for (let i = list.length; i < 5; i++) html += '<div class="slot-empty">vaga livre</div>';
+      const bots = state.bots && state.bots.team === t ? botsList() : [];
+      const n = list.length + bots.length;
+      $('cnt-' + t).textContent = `${n}/5`;
+      let html = list.map((m) => memberRow(m)).join('') + bots.map((b) => botRow(b)).join('');
+      for (let i = n; i < 5; i++) html += '<div class="slot-empty">vaga livre</div>';
       $('list-' + t).innerHTML = html;
-      const canJoin = me.status !== 'queue' && !me.inMatch && !(me.status === 'team' && me.team === t) && list.length < 5;
+      const canJoin = me.status !== 'queue' && !me.inMatch && !(me.status === 'team' && me.team === t) && n < 5;
       $('join-' + t).classList.toggle('hidden', !canJoin);
     }
     const q = state.queue.map((id) => memberById(id)).filter(Boolean);
@@ -160,6 +177,10 @@
       qb.hidden = false;
       qb.innerHTML = `⏳ Você está na <b>fila</b> (posição ${state.queue.indexOf(you) + 1}). Quando abrir uma vaga você entra automaticamente.`;
     } else qb.hidden = true;
+  }
+
+  function botRow(b) {
+    return `<div class="member">${PB.avatarHTML(b, 34)}<span class="nm">${esc(b.name)}</span><span class="badge">🤖 bot</span></div>`;
   }
 
   function memberRow(m, prefix) {
@@ -177,6 +198,8 @@
   $('join-B').onclick = () => socket.emit('choose_team', { team: 'B' });
   $('set-map').onchange = $('set-rounds').onchange = () =>
     socket.emit('update_settings', { map: $('set-map').value, rounds: Number($('set-rounds').value) });
+  $('set-bots').onchange = $('set-botteam').onchange = () =>
+    socket.emit('update_settings', { bots: Number($('set-bots').value), botTeam: $('set-botteam').value });
   $('btn-start').onclick = () => socket.emit('start_match');
   $('btn-watch').onclick = () => { spectating = true; renderUI(); };
   $('btn-unwatch').onclick = () => { spectating = false; renderUI(); };
@@ -219,7 +242,7 @@
     if (e.type === 'kill') {
       hud.addFeed(`<span class="t${teamOf(e.killer)}">${esc(nameOf(e.killer))}</span> ${e.weapon === 'knife' ? '🔪' : '🔫'} <span class="t${teamOf(e.victim)}">${esc(nameOf(e.victim))}</span>`);
     } else if (e.type === 'round_end') {
-      roundMsg = e.winner ? `<span class="t${e.winner}">Time ${e.winner === 'A' ? 'Azul' : 'Vermelho'}</span> venceu o round!<small>Azul ${e.score.A} x ${e.score.B} Vermelho</small>` : 'Round empatado!';
+      roundMsg = e.winner ? `<span class="t${e.winner}">Time ${e.winner === 'A' ? 'Azul' : 'Vermelho'}</span> venceu o round!<small>Azul ${e.score.A} x ${e.score.B} Vermelho</small>` : `${e.timeUp ? '⏱ Tempo esgotado — ' : ''}Round empatado!<small>Azul ${e.score.A} x ${e.score.B} Vermelho</small>`;
     } else if (e.type === 'round_start') {
       pred.init = false;
     }
@@ -227,6 +250,7 @@
 
   // ---------- teclado ----------
   const keys = PBHud.bindKeys({
+    mouseEl: $('game-canvas'),
     enabled: () => !$('scr-game').classList.contains('hidden') && !victoryOpen,
     onChange: (k) => socket.emit('input', k),
     onWeapon: (w) => socket.emit('weapon', w),
@@ -237,6 +261,10 @@
 
   // ---------- loop de desenho ----------
   const INTERP_MS = 100;
+  let mouse = null;
+  let knifeLocal = { t: -1e9, ang: 0 };
+  const aimSent = { a: 99, t: 0 };
+  window.addEventListener('mousemove', (e) => { mouse = { x: e.clientX, y: e.clientY }; });
   function interpolated(now) {
     if (!snaps.length) return null;
     const rt = now - INTERP_MS;
@@ -258,7 +286,13 @@
       if (!o) return x;
       return [x[0], o[1] + (x[1] - o[1]) * al, o[2] + (x[2] - o[2]) * al, x[3], x[4]];
     });
-    return { players, bullets };
+    let hz = b.s.hz;
+    if (hz && a.s.hz && hz.x != null && a.s.hz.x != null && hz.s === a.s.hz.s) {
+      hz = Object.assign({}, hz, { x: a.s.hz.x + (hz.x - a.s.hz.x) * al, y: a.s.hz.y + (hz.y - a.s.hz.y) * al });
+    }
+    if (hz && a.s.hz && hz.d != null && a.s.hz.d != null && hz.s === a.s.hz.s) hz = Object.assign({}, hz, { d: a.s.hz.d + (hz.d - a.s.hz.d) * al });
+    if (hz && a.s.hz && hz.y0 != null && a.s.hz.y0 != null) hz = Object.assign({}, hz, { y0: a.s.hz.y0 + (hz.y0 - a.s.hz.y0) * al });
+    return { players, bullets, hz };
   }
 
   let last = performance.now();
@@ -281,8 +315,8 @@
       if (canPredict) {
         if (moving) {
           const l = Math.hypot(mx, my); mx /= l; my /= l;
-          pred.fx = mx; pred.fy = my;
-          const m = RC_GAME.moveCircle(pred.x, pred.y, mx * config.playerSpeed * dt, my * config.playerSpeed * dt, mine.r, walls);
+          const sp = config.playerSpeed * (mine.sl || 1);
+          const m = RC_GAME.moveCircle(pred.x, pred.y, mx * sp * dt, my * sp * dt, mine.r, walls);
           pred.x = m.x; pred.y = m.y;
         }
         const err = Math.hypot(mine.x - pred.x, mine.y - pred.y);
@@ -292,14 +326,38 @@
           pred.x += (mine.x - pred.x) * k; pred.y += (mine.y - pred.y) * k;
         }
       }
+      // mira: direção do personagem até o mouse
+      if (mouse && mine.al) {
+        const w = renderer.screenToWorld(mouse.x, mouse.y);
+        const ax = w.x - pred.x, ay = w.y - pred.y, l = Math.hypot(ax, ay);
+        if (l > 2) {
+          pred.fx = ax / l; pred.fy = ay / l;
+          const ang = Math.atan2(pred.fy, pred.fx);
+          if ((Math.abs(ang - aimSent.a) > 0.02 && now - aimSent.t > 33) || now - aimSent.t > 500) {
+            socket.emit('aim', [Math.round(pred.fx * 1000) / 1000, Math.round(pred.fy * 1000) / 1000]);
+            aimSent.a = ang; aimSent.t = now;
+          }
+        }
+      }
+      // faca: o acerto é calculado com o que você vê na tela e enviado ao servidor
+      if (mine.al && mine.w === 2 && keys.fire && latest.ph === 'playing' && mine.jz < 0 && now - knifeLocal.t >= config.knifeCooldown * 1000) {
+        const targets = view.players.filter((p) => p.id !== you && p.tm !== mine.tm && p.al && p.jz < 0).map((p) => ({ id: p.id, x: p.x, y: p.y, r: p.r }));
+        const hit = RC_GAME.knifeTarget(pred.x, pred.y, mine.r, pred.fx, pred.fy, targets, config, walls);
+        socket.emit('knife', { t: hit, ax: pred.fx, ay: pred.fy });
+        knifeLocal = { t: now, ang: Math.atan2(pred.fy, pred.fx) };
+      }
       const vp = view.players.find((p) => p.id === you);
-      if (vp) Object.assign(vp, mine, { x: pred.x, y: pred.y, fx: pred.fx, fy: pred.fy });
+      if (vp) {
+        Object.assign(vp, mine, { x: pred.x, y: pred.y, fx: pred.fx, fy: pred.fy });
+        const k = now - knifeLocal.t < 180;
+        vp.ka = k ? 1 : 0; vp.kd = knifeLocal.ang;
+      }
     }
     for (const p of view.players) {
       const m = memberById(p.id);
       p.name = m ? m.name : '?'; p.color = m ? m.color : '#ccc'; p.avatar = m ? m.avatar : '';
     }
-    renderer.draw({ players: view.players, bullets: view.bullets, meId: you });
+    renderer.draw({ players: view.players, bullets: view.bullets, hz: view.hz, meId: you, light: latest.lg ? latest.lg.s : 0 });
     hud.update(mine || null, latest, config, { roundMsg });
   }
   requestAnimationFrame(frame);
