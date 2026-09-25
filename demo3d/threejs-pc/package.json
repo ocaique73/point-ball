@@ -1,0 +1,14 @@
+{
+  "name": "point-ball-3d-threejs-pc",
+  "version": "0.1.0",
+  "description": "Demo 3D do Point Ball (Three.js) rodando como programa no PC com Electron",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "start:sem-limite": "electron . --sem-limite"
+  },
+  "devDependencies": {
+    "electron": "^44.4.5"
+  }
+}
