@@ -19,32 +19,10 @@
   </div>
 
   <div class="grid2">
-    <div class="card">
+    <div class="card create-card">
       <h2>Criar sala</h2>
-      <label>Nome da sala (1 a 5 letras ou números)</label>
-      <input type="text" id="c-name" maxlength="5" placeholder="Ex: ABC12" autocomplete="off">
-      <label>Senha (opcional, 3 a 6 caracteres)</label>
-      <input type="password" id="c-pass" maxlength="6" placeholder="Deixe vazio para sala aberta" autocomplete="new-password">
-      <div class="row">
-        <div class="grow"><label>Mapa</label>
-          <select id="c-map"><option value="deserto">Deserto</option><option value="neve">Neve</option><option value="floresta">Floresta</option><option value="escuro">Sala escura</option><option value="portal">Portais</option></select></div>
-        <div class="grow"><label>Modo</label>
-          <select id="c-mode"><option value="rounds">Rounds (eliminação)</option><option value="tdm">Mata-mata em equipe</option><option value="ffa">Mata-mata cada um por si</option><option value="koth">Rei da colina</option></select></div>
-      </div>
-      <div class="row">
-        <div class="grow c-dm" style="display:none"><label>Tempo</label>
-          <select id="c-dmtime"><option value="60">1 min</option><option value="120">2 min</option><option value="180" selected>3 min</option><option value="300">5 min</option></select></div>
-        <div class="grow c-koth" style="display:none"><label>Pontos para vencer</label>
-          <select id="c-hill"><option>50</option><option>75</option><option selected>100</option><option>150</option></select></div>
-        <div class="grow c-dm c-kills" style="display:none"><label>Limite de abates</label>
-          <select id="c-kills"><option>20</option><option>25</option><option selected>30</option><option>50</option></select></div>
-        <div class="grow c-rounds"><label>Rounds</label>
-          <select id="c-rounds"><option>1</option><option>2</option><option selected>3</option><option>5</option><option>7</option></select></div>
-      </div>
-      <canvas class="map-preview" id="c-preview"></canvas>
-      <div class="map-note" id="c-note"></div>
-      <div class="error" id="c-err"></div>
-      <button class="btn primary big" id="btn-create" style="width:100%;margin-top:6px">Criar sala</button>
+      <p class="muted">Crie uma sala, escolha mapa e modo, e chame a galera pelo link.</p>
+      <button class="btn primary big" id="btn-open-create" style="width:100%">➕ Criar sala</button>
     </div>
 
     <div class="card">
@@ -55,6 +33,43 @@
       </div>
       <h3 style="margin-top:18px">Salas abertas</h3>
       <div class="room-list" id="room-list"><div class="muted small">Carregando...</div></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- modal: configuração da nova sala -->
+<div class="modal-bg hidden" id="create-modal">
+  <div class="card modal modal-wide">
+    <div class="row" style="justify-content:space-between;margin-bottom:4px"><h2 style="margin:0">Nova sala</h2><button class="btn" id="btn-close-create" aria-label="Fechar">✕</button></div>
+    <div class="row">
+      <div class="grow" style="flex:1;min-width:150px"><label>Nome da sala (1 a 5 letras ou números)</label>
+        <input type="text" id="c-name" maxlength="5" placeholder="Ex: ABC12" autocomplete="off"></div>
+      <div class="grow" style="flex:1;min-width:150px"><label>Senha (opcional, 3 a 6)</label>
+        <input type="password" id="c-pass" maxlength="6" placeholder="Sala aberta" autocomplete="new-password"></div>
+    </div>
+    <div class="row">
+      <div class="grow" style="flex:1"><label>Mapa</label>
+        <select id="c-map"><option value="deserto">Deserto</option><option value="neve">Neve</option><option value="floresta">Floresta</option><option value="escuro">Sala escura</option><option value="portal">Portais</option></select></div>
+      <div class="grow" style="flex:1"><label>Modo</label>
+        <select id="c-mode"><option value="rounds">Rounds (eliminação)</option><option value="tdm">Mata-mata em equipe</option><option value="ffa">Mata-mata cada um por si</option><option value="koth">Rei da colina</option></select></div>
+    </div>
+    <div class="row">
+      <div class="grow c-dm" style="display:none;flex:1"><label>Tempo</label>
+        <select id="c-dmtime"><option value="60">1 min</option><option value="120">2 min</option><option value="180" selected>3 min</option><option value="300">5 min</option></select></div>
+      <div class="grow c-koth" style="display:none;flex:1"><label>Pontos para vencer</label>
+        <select id="c-hill"><option>50</option><option>75</option><option selected>100</option><option>150</option></select></div>
+      <div class="grow c-dm c-kills" style="display:none;flex:1"><label>Limite de abates</label>
+        <select id="c-kills"><option>20</option><option>25</option><option selected>30</option><option>50</option></select></div>
+      <div class="grow c-rounds" style="flex:1"><label>Rounds</label>
+        <select id="c-rounds"><option>1</option><option>2</option><option selected>3</option><option>5</option><option>7</option></select></div>
+    </div>
+    <canvas class="map-preview" id="c-preview"></canvas>
+    <div class="map-note" id="c-note"></div>
+    <div class="error" id="c-err"></div>
+    <div class="row" style="justify-content:flex-end;margin-top:6px">
+      <button class="btn" id="btn-cancel-create">Cancelar</button>
+      <button class="btn primary big" id="btn-create">Criar sala</button>
     </div>
   </div>
 </div>
@@ -91,7 +106,25 @@
     document.querySelectorAll('.c-rounds').forEach((e) => (e.style.display = dm ? 'none' : ''));
   };
   $('c-mode').addEventListener('change', modeUI);
-  fetch('/api/config').then((r) => r.json()).then((c) => { cfg = RC_CONFIG.mergeConfig(RC_CONFIG.DEFAULT_CONFIG, c); showPreview(); }).catch(showPreview);
+
+  // abrir / fechar o modal de criar sala
+  const openCreate = () => {
+    $('create-modal').classList.remove('hidden');
+    $('c-err').textContent = '';
+    modeUI();
+    requestAnimationFrame(showPreview); // o preview precisa do modal visível para ter tamanho
+    $('c-name').focus();
+  };
+  const closeCreate = () => $('create-modal').classList.add('hidden');
+  $('btn-open-create').onclick = openCreate;
+  $('btn-close-create').onclick = $('btn-cancel-create').onclick = closeCreate;
+  $('create-modal').addEventListener('mousedown', (e) => { if (e.target === $('create-modal')) closeCreate(); });
+  window.addEventListener('keydown', (e) => {
+    if ($('create-modal').classList.contains('hidden')) return;
+    if (e.key === 'Escape') closeCreate();
+    if (e.key === 'Enter' && e.target.tagName !== 'SELECT') $('btn-create').click();
+  });
+  fetch('/api/config').then((r) => r.json()).then((c) => { cfg = RC_CONFIG.mergeConfig(RC_CONFIG.DEFAULT_CONFIG, c); }).catch(() => {});
 
   $('c-name').addEventListener('input', (e) => { e.target.value = e.target.value.replace(/[^a-z0-9]/gi, '').toUpperCase(); });
   $('j-code').addEventListener('input', (e) => { e.target.value = e.target.value.replace(/[^a-z0-9]/gi, '').toUpperCase(); });

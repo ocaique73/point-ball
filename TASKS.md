@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 24/09/2026 — v0.5.0 na branch `dev` (aguardando teste) · no ar: v0.3.0 em https://point-ball.onrender.com
+Última atualização: 24/09/2026 — v0.5.1 na branch `dev` (aguardando teste) · no ar: v0.5.0 em https://point-ball.onrender.com
 
 ---
 
@@ -183,8 +183,7 @@
 - [x] Portal pisca antes de fechar; contador no topo ("Portais abrem em Xs" / "fecham em Xs")
 - [x] Anel de recarga do tiro: parte que falta agora é quase preta (#111827) — dá pra ver bem quanto falta para fechar
 - [x] Enviado para a branch `dev` (site não mudou)
-- [~] **Caique:** testar (`git fetch` + `git checkout dev` + `git pull`)
-- [ ] Juntar `dev` na `main` para publicar
+- [x] Publicada junto com a v0.5.0
 
 ## 8.11 v0.5.0 — modo Rei da colina
 - [x] Novo modo **Rei da colina** (times Azul x Vermelho)
@@ -196,6 +195,12 @@
   - HUD mostra quem domina a colina e quando ela muda; vitória mostra os pontos
   - bots vão para a colina e ficam rondando nela
   - ajustes no /teste (grupo "Rei da colina")
+- [x] v0.4.0 + v0.5.0 publicadas (PR #2 → `main` → Render)
+
+## 8.12 v0.5.1 — criar sala em modal
+- [x] Página inicial mais limpa: botão "➕ Criar sala" abre um modal com nome, senha, mapa, modo, tempo/pontos/abates/rounds e o preview do mapa
+- [x] Fecha com ✕, Cancelar, Esc ou clicando fora; Enter cria a sala
+- [x] Funciona no celular
 - [~] **Caique:** testar
 
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
