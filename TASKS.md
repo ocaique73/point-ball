@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 24/09/2026 — v0.8.1 no ar (inclui os 3 mapas novos em teste) em https://point-ball.onrender.com
+Última atualização: 24/09/2026 — v0.8.2 no ar — 2D finalizado por enquanto (próximo passo: pesquisar o 3D) em https://point-ball.onrender.com
 
 ---
 
@@ -232,7 +232,7 @@
 - [x] **Vulcão:** a cada 25 s o chão racha (2 s de aviso) e sobem 3 pares de poças de lava espelhadas em lugares sorteados, por 7 s; encostar tira 1 vida
 - [x] Paredes do meio trocam entre 2 desenhos a cada erupção (o aviso mostra onde vão aparecer); quem fica dentro é empurrado para fora
 - [x] **Nave espacial:** espaço estrelado em volta e cantos do casco cortados; a cada 25 s caem 2 meteoros, um de cada lado em pontos espelhados e sorteados (2 s de aviso com o meteoro chegando)
-- [x] O meteoro abre um buraco para o espaço (dá para ver as estrelas) que dura 18 s e depois é consertado
+- [x] O meteoro abre um buraco para o espaço (dá para ver as estrelas)
 - [x] Cair no buraco: a beira segura por ~1,1 s e puxa devagar (dá tempo de sair); no meio cai em ~0,4 s. Tiro que passa por cima é sugado, com qualquer número de batidas
 - [x] Bots desviam de lava e buracos; nascimento evita lava/buraco
 - [x] Tudo ajustável no /teste (grupos Cidade à noite, Vulcão, Nave espacial); cfgVersion 11
@@ -242,6 +242,16 @@
 - [x] Raio da fumaça 200 (era 150); dentro da fumaça nem você se vê
 - [x] Portais: nunca os 2 pares na mesma parede — pelo menos um par liga paredes diferentes
 - [x] Início do round no mapa Portais: abrem 3 s ligando cima ↔ baixo, fecham 6 s, depois ciclo normal sorteado (abre 10 s / fecha 5 s)
+- [~] **Caique:** testar
+
+## 8.17 v0.8.2 — ajustes finais do 2D
+- [x] Cidade: o personagem passa por baixo dos postes (não bate); só o tiro bate e apaga a luz
+- [x] Nave: buracos ficam até o fim do round; meteoros caem só 2 vezes por round (4 meteoros), aos 25 s e 50 s, longe do meio
+- [x] Nave: beira do buraco segura de leve (indo para dentro anda a 45%, para fora anda normal); passou da beira, cai sem volta
+- [x] Nave: bomba e fumaça que caem no buraco somem sem estourar
+- [x] Vulcão: 2 pares de poças (era 3), cada uma com formato irregular diferente (a do outro lado é espelhada); lava nova com correntes quentes, crosta boiando, veios escorrendo e bolhas
+- [x] Portais: abertura inicial nas paredes verticais (esquerda ↔ direita na mesma altura)
+- [x] Fumaça dura 6 s (era 5)
 - [~] **Caique:** testar
 
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
