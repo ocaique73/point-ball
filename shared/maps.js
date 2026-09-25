@@ -82,12 +82,13 @@
     }
   };
 
-  // Portais: nas laterais esquerda/direita; quem entra de um lado sai do outro (mesma altura)
+  // Portais: 2 em cada muro de borda; abrem 2 pares sorteados; quem entra num sai no par dele
   MAPS.portal = {
     id: 'portal',
     name: 'Portais',
     hazard: 'portal',
-    portals: [[0.18, 0.34], [0.66, 0.82]], // faixas de altura (fração do mapa) de cada par de portais
+    // 8 aberturas: 2 em cada lado. A cada abertura, 4 delas (2 pares) abrem sorteadas
+    portals: { L: [[0.18, 0.34], [0.66, 0.82]], R: [[0.18, 0.34], [0.66, 0.82]], T: [[0.28, 0.38], [0.62, 0.72]], B: [[0.28, 0.38], [0.62, 0.72]] },
     theme: { ground: '#1d1a36', ground2: '#241f45', wall: '#4b3f8f', wallEdge: '#8b7cf6', deco: 'tiles', border: '#2c245e' },
     walls: mirror([
       [0.18, 0.1, 0.18, 0.28],

@@ -237,40 +237,45 @@ window.PBRenderer = (function () {
     }
 
     // furacão visto de cima: braços de vento em espiral, meio transparentes, girando
-    // portais nas laterais: fechados = barreira apagada; abertos = redemoinho de energia
+    // portais nos muros de borda: fechados = barreira apagada; abertos = redemoinho de energia (cor do par)
     drawPortals(pt, now) {
       const g = this.ctx, c = this.cfg, W = c.mapWidth, H = c.mapHeight, t = c.wallThickness;
-      const open = pt && pt.o;
+      const open = pt && pt.o && pt.pr;
       const closingSoon = open && pt.n < 1.5 && Math.floor(now / 110) % 2 === 0;
       const COLORS = ['0,229,255', '255,64,200']; // cada par tem sua cor
-      this.map.portals.forEach(([a, b], i) => {
-        const y0 = a * H, h = (b - a) * H, col = COLORS[i % COLORS.length];
-        for (const x0 of [0, W - t]) {
-          if (!open) {
-            g.fillStyle = '#2a2350';
-            g.fillRect(x0, y0, t, h);
-            g.strokeStyle = `rgba(${col},.35)`; g.lineWidth = 2;
-            g.strokeRect(x0 + 1, y0 + 1, t - 2, h - 2);
-            g.beginPath(); // grade
-            for (let yy = y0 + 8; yy < y0 + h; yy += 12) { g.moveTo(x0 + 3, yy); g.lineTo(x0 + t - 3, yy); }
-            g.stroke();
-          } else {
-            const cx = x0 === 0 ? t * 0.5 : W - t * 0.5, cy = y0 + h / 2;
-            const grd = g.createRadialGradient(cx, cy, 2, cx, cy, h * 0.6);
-            grd.addColorStop(0, `rgba(${col},${closingSoon ? 0.35 : 0.8})`);
-            grd.addColorStop(1, `rgba(${col},0)`);
-            g.fillStyle = grd;
-            g.fillRect(x0 === 0 ? 0 : W - t * 3, y0 - 10, t * 3, h + 20);
-            g.strokeStyle = `rgba(${col},${closingSoon ? 0.4 : 0.95})`; g.lineWidth = 3;
-            for (let k = 0; k < 3; k++) {
-              const ph = now / 250 + k * 2.1;
-              g.beginPath();
-              g.ellipse(cx, cy, t * 0.55 + k * 3, h / 2 - k * 6, 0, ph, ph + Math.PI * 1.2);
-              g.stroke();
-            }
-          }
+      const colOf = {};
+      if (open) pt.pr.forEach((pair, k) => pair.forEach((i) => (colOf[i] = COLORS[k % COLORS.length])));
+      for (const q of RC_GAME.portalList(this.map)) {
+        const G = RC_GAME.portalGeom(q, c), vert = q.s === 'L' || q.s === 'R';
+        // retângulo da porta
+        const rx = vert ? (q.s === 'L' ? 0 : W - t) : G.cx - G.half, ry = vert ? G.cy - G.half : (q.s === 'T' ? 0 : H - t);
+        const rw = vert ? t : G.half * 2, rh = vert ? G.half * 2 : t;
+        const col = colOf[q.i];
+        if (!col) {
+          g.fillStyle = '#2a2350';
+          g.fillRect(rx, ry, rw, rh);
+          g.strokeStyle = 'rgba(139,124,246,.35)'; g.lineWidth = 2;
+          g.strokeRect(rx + 1, ry + 1, rw - 2, rh - 2);
+          g.beginPath(); // grade
+          if (vert) for (let yy = ry + 8; yy < ry + rh; yy += 12) { g.moveTo(rx + 3, yy); g.lineTo(rx + t - 3, yy); }
+          else for (let xx = rx + 8; xx < rx + rw; xx += 12) { g.moveTo(xx, ry + 3); g.lineTo(xx, ry + t - 3); }
+          g.stroke();
+          continue;
         }
-      });
+        const cx = G.cx + G.nx * t * 0.5, cy = G.cy + G.ny * t * 0.5;
+        const grd = g.createRadialGradient(cx, cy, 2, cx, cy, G.half * 1.2);
+        grd.addColorStop(0, `rgba(${col},${closingSoon ? 0.35 : 0.8})`);
+        grd.addColorStop(1, `rgba(${col},0)`);
+        g.fillStyle = grd;
+        g.fillRect(vert ? (q.s === 'L' ? 0 : W - t * 3) : rx, vert ? ry - 10 : (q.s === 'T' ? 0 : H - t * 3), vert ? t * 3 : rw, vert ? rh + 20 : t * 3);
+        g.strokeStyle = `rgba(${col},${closingSoon ? 0.4 : 0.95})`; g.lineWidth = 3;
+        for (let k = 0; k < 3; k++) {
+          const ph = now / 250 + k * 2.1, a1 = t * 0.55 + k * 3, a2 = G.half - k * 6;
+          g.beginPath();
+          g.ellipse(cx, cy, vert ? a1 : a2, vert ? a2 : a1, 0, ph, ph + Math.PI * 1.2);
+          g.stroke();
+        }
+      }
     }
 
     // Rei da colina: área no chão; cor de quem domina, amarela piscando se disputada
@@ -287,10 +292,6 @@ window.PBRenderer = (function () {
       g.setLineDash([]);
       g.font = `900 ${Math.round(H.r * 0.34)}px Segoe UI, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.globalAlpha = 0.55; g.fillText('👑', H.x, H.y); g.globalAlpha = 1;
-      if (H.n <= 5) { // próximo lugar da colina
-        g.setLineDash([6, 8]); g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 2;
-        g.beginPath(); g.arc(H.nx, H.ny, H.r, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
-      }
       g.restore();
       g.textBaseline = 'alphabetic';
     }
@@ -518,8 +519,12 @@ window.PBRenderer = (function () {
       }
       prog = Math.max(0, Math.min(1, prog));
       const rw = Math.max(2, r * 0.2);
+      // trilho branco com contorno preto fino: aparece bem tanto em mapa claro (deserto) quanto escuro
+      g.lineWidth = rw + 2;
+      g.strokeStyle = 'rgba(0,0,0,.85)';
+      g.beginPath(); g.arc(0, 0, r - rw / 2, 0, Math.PI * 2); g.stroke();
       g.lineWidth = rw;
-      g.strokeStyle = '#111827'; // trilho escuro: dá pra ver bem quanto falta para fechar
+      g.strokeStyle = '#f8fafc';
       g.beginPath(); g.arc(0, 0, r - rw / 2, 0, Math.PI * 2); g.stroke();
       if (prog > 0) {
         g.strokeStyle = TEAM_STRONG[p.tm];

@@ -30,7 +30,7 @@ const VALID_MODES = ['rounds', 'tdm', 'ffa', 'koth'];
 const VALID_HILL = [50, 75, 100, 150];
 const VALID_DM_TIME = [60, 120, 180, 300];
 const VALID_KILLS = [20, 25, 30, 50];
-const VALID_LEVELS = ['facil', 'media', 'semipro', 'pro'];
+const VALID_LEVELS = ['iniciante', 'amador', 'pro'];
 const ROOM_NAME_RE = /^[A-Za-z0-9]{1,5}$/;
 
 const app = express();
@@ -249,7 +249,7 @@ io.on('connection', (socket) => {
       gameMode: VALID_MODES.includes(d.gameMode) ? d.gameMode : 'rounds',
       dmTime: VALID_DM_TIME.includes(Number(d.dmTime)) ? Number(d.dmTime) : 180,
       killLimit: VALID_KILLS.includes(Number(d.killLimit)) ? Number(d.killLimit) : 30,
-      botLevel: 'semipro',
+      botLevel: 'amador',
       hillTarget: VALID_HILL.includes(Number(d.hillTarget)) ? Number(d.hillTarget) : 100
     };
     rooms.set(code, room);

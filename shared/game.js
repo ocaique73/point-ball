@@ -13,15 +13,19 @@
       { x: 0, y: 0, w: W, h: t, border: true },
       { x: 0, y: H - t, w: W, h: t, border: true }
     ];
-    if (map.portals) {
-      // laterais com aberturas; cada abertura tem uma "porta" que fecha o portal
-      let y = 0;
-      for (const [a, b] of map.portals) {
-        rects.push({ x: 0, y, w: t, h: a * H - y, border: true }, { x: W - t, y, w: t, h: a * H - y, border: true });
-        rects.push({ x: 0, y: a * H, w: t, h: (b - a) * H, border: true, door: true }, { x: W - t, y: a * H, w: t, h: (b - a) * H, border: true, door: true });
-        y = b * H;
-      }
-      rects.push({ x: 0, y, w: t, h: H - y, border: true }, { x: W - t, y, w: t, h: H - y, border: true });
+    const P = portalList(map);
+    if (P.length) {
+      // muros de borda com aberturas; cada abertura tem uma "porta" (door) que fecha o portal
+      const side = (sd, horiz, fixed, len) => {
+        const bands = P.filter((q) => q.s === sd).sort((a, b) => a.a - b.a);
+        let u = 0;
+        const seg = (u0, u1, extra) => { if (u1 - u0 <= 0) return; rects.push(Object.assign(horiz ? { x: u0, y: fixed, w: u1 - u0, h: t } : { x: fixed, y: u0, w: t, h: u1 - u0 }, { border: true }, extra || {})); };
+        for (const q of bands) { seg(u, q.a * len); seg(q.a * len, q.b * len, { door: true, pi: q.i }); u = q.b * len; }
+        seg(u, len);
+      };
+      rects.length = 0;
+      side('T', true, 0, W); side('B', true, H - t, W);
+      side('L', false, 0, H); side('R', false, W - t, H);
     } else {
       rects.push({ x: 0, y: 0, w: t, h: H, border: true }, { x: W - t, y: 0, w: t, h: H, border: true });
     }
@@ -33,24 +37,81 @@
     return rects;
   }
 
-  // portal aberto: passou da borda esquerda sai na direita (e vice-versa), na mesma altura
-  function portalWrap(mapId, cfg, x, y, r) {
-    const map = MAPS[mapId];
-    if (!map || !map.portals) return null;
+  // lista de portais do mapa: L/R = laterais (faixa de altura), T/B = cima/baixo (faixa de largura)
+  function portalList(map) {
+    if (!map || !map.portals) return [];
+    if (map._pl) return map._pl;
+    const out = [];
+    for (const sd of ['L', 'R', 'T', 'B']) for (const [a, b] of (map.portals[sd] || [])) out.push({ i: out.length, s: sd, a, b });
+    return (map._pl = out);
+  }
+  // geometria de um portal: centro na borda, normal apontando para dentro do mapa e tangente
+  function portalGeom(q, cfg) {
     const W = cfg.mapWidth, H = cfg.mapHeight, t = cfg.wallThickness;
-    const inside = map.portals.some(([a, b]) => y > a * H && y < b * H);
-    if (!inside) return null;
-    if (x < t) return { x: W - t - r - 2, y };
-    if (x > W - t) return { x: t + r + 2, y };
+    if (q.s === 'L') return { cx: 0, cy: (q.a + q.b) / 2 * H, nx: 1, ny: 0, half: (q.b - q.a) / 2 * H, t };
+    if (q.s === 'R') return { cx: W, cy: (q.a + q.b) / 2 * H, nx: -1, ny: 0, half: (q.b - q.a) / 2 * H, t };
+    if (q.s === 'T') return { cx: (q.a + q.b) / 2 * W, cy: 0, nx: 0, ny: 1, half: (q.b - q.a) / 2 * W, t };
+    return { cx: (q.a + q.b) / 2 * W, cy: H, nx: 0, ny: -1, half: (q.b - q.a) / 2 * W, t };
+  }
+  // qual portal está em (x,y), se passou do muro de borda dentro de uma abertura
+  function portalAt(map, cfg, x, y) {
+    const W = cfg.mapWidth, H = cfg.mapHeight, t = cfg.wallThickness;
+    for (const q of portalList(map)) {
+      if (q.s === 'L' && x < t && y > q.a * H && y < q.b * H) return q;
+      if (q.s === 'R' && x > W - t && y > q.a * H && y < q.b * H) return q;
+      if (q.s === 'T' && y < t && x > q.a * W && x < q.b * W) return q;
+      if (q.s === 'B' && y > H - t && x > q.a * W && x < q.b * W) return q;
+    }
     return null;
   }
+  // portal aberto: entrou num portal, sai no par dele. pr = [[i,j],[k,l]] (pares abertos).
+  // Retorna a nova posição e a rotação (cos, sin) para girar a velocidade da bala.
+  function portalWrap(mapId, cfg, x, y, r, pr) {
+    const map = MAPS[mapId];
+    if (!map || !map.portals || !pr) return null;
+    const q = portalAt(map, cfg, x, y);
+    if (!q) return null;
+    let to = -1;
+    for (const [i, j] of pr) { if (i === q.i) to = j; else if (j === q.i) to = i; }
+    if (to < 0) return null;
+    const P = portalList(map), g1 = portalGeom(q, cfg), g2 = portalGeom(P[to], cfg);
+    // gira a direção "saindo" do portal de entrada (-n1) para "entrando" no mapa pelo de saída (n2)
+    const ang = Math.atan2(g2.ny, g2.nx) - Math.atan2(-g1.ny, -g1.nx);
+    const co = Math.round(Math.cos(ang)), si = Math.round(Math.sin(ang));
+    const rot = (vx, vy) => [vx * co - vy * si, vx * si + vy * co];
+    // posição ao longo da abertura (girada junto), limitada para caber
+    const [ox, oy] = rot(x - g1.cx, y - g1.cy);
+    let u = ox * -g2.ny + oy * g2.nx; // componente tangente na saída
+    const lim = Math.max(0, g2.half - r - 2); u = Math.max(-lim, Math.min(lim, u));
+    const d = g2.t + r + 2;
+    return { x: g2.cx + -g2.ny * u + g2.nx * d, y: g2.cy + g2.nx * u + g2.ny * d, co, si, from: q.i, to };
+  }
+  // paredes com os portais abertos (pr) sem a porta
+  function openWalls(wallsAll, pr) {
+    if (!pr) return wallsAll;
+    const s = new Set(); for (const [i, j] of pr) { s.add(i); s.add(j); }
+    return wallsAll.filter((R) => !(R.door && s.has(R.pi)));
+  }
+  // sorteia 2 pares entre todos os portais (nunca repete o mesmo sorteio seguido)
+  function pickPortalPairs(n, prev, rnd) {
+    rnd = rnd || Math.random;
+    const key = (pr) => pr.map((p) => p.slice().sort((a, b) => a - b).join('-')).sort().join('|');
+    for (let tries = 0; tries < 20; tries++) {
+      const ids = []; for (let i = 0; i < n; i++) ids.push(i);
+      for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
+      const pr = [[ids[0], ids[1]], [ids[2], ids[3]]];
+      if (!prev || key(pr) !== key(prev)) return pr;
+    }
+    return [[0, 1], [2, 3]];
+  }
 
-  // estado dos portais: fechado 7 s no começo, depois abre 10 s / fecha 5 s repetindo
+  // estado dos portais: fechado 7 s no começo, depois abre 10 s / fecha 5 s repetindo. k = número da abertura
   function portalCycle(el, cfg) {
-    if (el < cfg.portalFirstClosed) return { o: 0, n: cfg.portalFirstClosed - el };
+    if (el < cfg.portalFirstClosed) return { o: 0, n: cfg.portalFirstClosed - el, k: -1 };
     const p = cfg.portalOpen + cfg.portalClosed, t = (el - cfg.portalFirstClosed) % p;
-    if (t < cfg.portalOpen) return { o: 1, n: cfg.portalOpen - t };
-    return { o: 0, n: p - t };
+    const k = Math.floor((el - cfg.portalFirstClosed) / p);
+    if (t < cfg.portalOpen) return { o: 1, n: cfg.portalOpen - t, k };
+    return { o: 0, n: p - t, k };
   }
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -172,19 +233,49 @@
     isDM() { return this.gameMode === 'tdm' || this.gameMode === 'ffa' || this.gameMode === 'koth'; }
     teamMode() { return this.gameMode === 'tdm' || this.gameMode === 'koth'; }
 
-    // Rei da colina: a área muda de lugar a cada hillMoveEvery segundos (sempre no meio, justo para os dois times)
-    hillSpot(i) {
-      const c = this.cfg, S = [[0.5, 0.5], [0.5, 0.2], [0.5, 0.8]];
-      const p = S[((i % S.length) + S.length) % S.length];
-      return { x: p[0] * c.mapWidth, y: p[1] * c.mapHeight };
+    // Rei da colina: a cada hillMoveEvery segundos a área vai para um lugar sorteado, mas equilibrado:
+    // perto do ponto médio entre os dois times (1x1 = meio entre os 2; 2x2+ = meio entre os centros das duplas),
+    // puxado para o centro do mapa e escolhendo, entre vários sorteios, um que fique a distância parecida dos dois lados.
+    // Só é sorteado quando a área atual termina (ninguém sabe antes onde será a próxima).
+    pickHillSpot(prev) {
+      const c = this.cfg, W = c.mapWidth, H = c.mapHeight, R = c.hillRadius;
+      const cen = { A: [0, 0, 0], B: [0, 0, 0] };
+      for (const p of this.players.values()) {
+        const k = cen[p.team]; if (!k) continue;
+        // morto conta como se estivesse no lado do time (vai renascer lá)
+        const x = p.alive ? p.x : (p.team === 'A' ? 0.1 : 0.9) * W, y = p.alive ? p.y : H / 2;
+        k[0] += x; k[1] += y; k[2]++;
+      }
+      const ca = cen.A[2] ? [cen.A[0] / cen.A[2], cen.A[1] / cen.A[2]] : [0.1 * W, H / 2];
+      const cb = cen.B[2] ? [cen.B[0] / cen.B[2], cen.B[1] / cen.B[2]] : [0.9 * W, H / 2];
+      // alvo: 60% ponto médio dos times + 40% centro do mapa (nunca escorrega muito pra um lado)
+      const mx = ((ca[0] + cb[0]) / 2) * 0.6 + (W / 2) * 0.4, my = ((ca[1] + cb[1]) / 2) * 0.6 + (H / 2) * 0.4;
+      const minX = W * 0.32, maxX = W * 0.68, minY = R + c.wallThickness + 20, maxY = H - R - c.wallThickness - 20;
+      let best = null, bestScore = Infinity;
+      for (let i = 0; i < 40; i++) {
+        const ang = Math.random() * Math.PI * 2, d = Math.random() * Math.min(W, H) * 0.32;
+        const x = clamp(mx + Math.cos(ang) * d, minX, maxX), y = clamp(my + Math.sin(ang) * d, minY, maxY);
+        if (!circleFree(x, y, 30, this.wallsAll, c)) continue;
+        // equilíbrio: diferença de distância até cada time e até cada lado de nascimento
+        const da = Math.hypot(x - ca[0], y - ca[1]), db = Math.hypot(x - cb[0], y - cb[1]);
+        const sa = x, sb = W - x;
+        let score = Math.abs(da - db) + Math.abs(sa - sb) * 0.4;
+        if (prev && Math.hypot(x - prev.x, y - prev.y) < R * 1.6) score += 1e4; // não repetir o mesmo lugar
+        score += Math.random() * 60; // um pouco de sorte entre os bons candidatos
+        if (score < bestScore) { bestScore = score; best = { x, y }; }
+      }
+      return best || { x: W / 2, y: H / 2 };
     }
     hillState() {
       if (this.gameMode !== 'koth') return null;
       const c = this.cfg;
       const el = Math.max(0, this.time - this.lightStart);
       const idx = Math.floor(el / c.hillMoveEvery);
-      const pos = this.hillSpot(idx), next = this.hillSpot(idx + 1);
-      return { idx, x: pos.x, y: pos.y, r: c.hillRadius, n: c.hillMoveEvery - (el - idx * c.hillMoveEvery), nx: next.x, ny: next.y };
+      if (!this.hill || this.hill.idx !== idx) {
+        const pos = this.pickHillSpot(this.hill);
+        this.hill = { idx, x: pos.x, y: pos.y };
+      }
+      return { idx, x: this.hill.x, y: this.hill.y, r: c.hillRadius, n: c.hillMoveEvery - (el - idx * c.hillMoveEvery) };
     }
     updateHill(dt) {
       if (this.gameMode !== 'koth' || this.phase !== 'playing') { this.hillOwner = null; return; }
@@ -341,14 +432,23 @@
 
     buildMap() {
       this.wallsAll = buildWalls(this.mapId, this.cfg);             // portais fechados
-      this.wallsOpen = this.wallsAll.filter((R) => !R.door);          // portais abertos
       this.walls = this.wallsAll;
+      this.portalPick = null;                                          // { k, pr } sorteio da abertura atual
     }
     hasPortals() { return !!(MAPS[this.mapId] && MAPS[this.mapId].portals); }
     portalState() {
       if (!this.hasPortals()) return null;
       if (!this.hazardsOn()) return { o: 0, n: this.cfg.portalFirstClosed };
-      return portalCycle(this.time - this.lightStart, this.cfg);
+      const st = portalCycle(this.time - this.lightStart, this.cfg);
+      if (st.o) {
+        if (!this.portalPick || this.portalPick.k !== st.k) {
+          const prev = this.portalPick && this.portalPick.pr;
+          const pr = pickPortalPairs(portalList(MAPS[this.mapId]).length, prev);
+          this.portalPick = { k: st.k, pr, walls: openWalls(this.wallsAll, pr) };
+        }
+        st.pr = this.portalPick.pr;
+      }
+      return st;
     }
 
     radiusOf(p) { return this.cfg.playerRadius * (p.lives >= this.cfg.lives ? 1 : this.cfg.hitShrink); }
@@ -541,6 +641,7 @@
       this.phaseUntil = this.time + this.cfg.roundStartDelay;
       this.lightStart = this.phaseUntil;
       this.tornado = null; this.storm = null; this.sand = null;
+      this.hill = null; this.portalPick = null;
       this.events.push({ type: 'round_start', round: this.round });
     }
 
@@ -552,7 +653,8 @@
         this.events.push({ type: 'go' });
       }
       const act = this.canAct();
-      if (this.hasPortals()) { const ps = this.portalState(); this.walls = ps.o ? this.wallsOpen : this.wallsAll; }
+      this.portalNow = null;
+      if (this.hasPortals()) { const ps = this.portalState(); this.portalNow = ps; this.walls = ps.o ? this.portalPick.walls : this.wallsAll; }
       for (const p of this.players.values()) this.updatePlayer(p, dt, act);
       this.updateHazards(dt);
       this.updateBullets(dt);
@@ -621,8 +723,8 @@
         const sp = c.playerSpeed * this.speedMul(p);
         const m = moveCircle(p.x, p.y, mx * sp * dt, my * sp * dt, this.radiusOf(p), this.walls);
         p.x = m.x; p.y = m.y;
-        if (this.walls === this.wallsOpen && this.hasPortals()) {
-          const w = portalWrap(this.mapId, c, p.x, p.y, this.radiusOf(p));
+        if (this.portalNow && this.portalNow.o) {
+          const w = portalWrap(this.mapId, c, p.x, p.y, this.radiusOf(p), this.portalNow.pr);
           if (w) { p.x = w.x; p.y = w.y; this.events.push({ type: 'portal', id: p.id, x: w.x, y: w.y }); }
         }
       }
@@ -728,9 +830,9 @@
         for (let i = 0; i < n && !dead; i++) {
           b.x += b.vx * sub; b.y += b.vy * sub;
           // portal: atravessa para o outro lado sem contar como batida
-          if (this.walls === this.wallsOpen && this.hasPortals()) {
-            const w = portalWrap(this.mapId, c, b.x, b.y, br);
-            if (w) { b.x = w.x; b.y = w.y; b.warped = true; }
+          if (this.portalNow && this.portalNow.o) {
+            const w = portalWrap(this.mapId, c, b.x, b.y, br, this.portalNow.pr);
+            if (w) { b.x = w.x; b.y = w.y; const vx = b.vx; b.vx = vx * w.co - b.vy * w.si; b.vy = vx * w.si + b.vy * w.co; b.warped = true; }
           }
           for (const R of this.walls) {
             const col = circleRect(b.x, b.y, br, R);
@@ -833,7 +935,7 @@
         tr: this.totalRounds, sc: this.gameMode === 'koth' ? { A: Math.floor(this.score.A), B: Math.floor(this.score.B) } : this.score, map: this.mapId, lg: this.lightState(), hz: this.hazardSnapshot(), pt: this.portalState(),
         rt: this.mode === 'match' && this.phase === 'playing' ? r1(Math.max(0, (this.isDM() ? this.matchTime : this.cfg.roundTime) - (t - this.lightStart))) : null,
         md: this.gameMode, kl: this.gameMode === 'koth' ? this.hillTarget : this.killLimit,
-        hl: this.gameMode === 'koth' ? (() => { const H = this.hillState(); return { x: r1(H.x), y: r1(H.y), r: H.r, n: r1(H.n), nx: r1(H.nx), ny: r1(H.ny), o: this.hillOwner || null }; })() : null,
+        hl: this.gameMode === 'koth' ? (() => { const H = this.hillState(); return { x: r1(H.x), y: r1(H.y), r: H.r, n: r1(H.n), o: this.hillOwner || null }; })() : null,
         p: ps, b: this.bullets.map((b) => [b.id, r1(b.x), r1(b.y), b.hits, b.team]),
         bm: this.bombs.map((b) => {
           const k = Math.min(1, (t - b.t0) / b.flight);
@@ -844,5 +946,5 @@
     }
   }
 
-  return { Game, buildWalls, moveCircle, circleFree, circleRect, lineBlocked, spawnPos, knifeTarget, portalWrap, portalCycle };
+  return { Game, buildWalls, moveCircle, circleFree, circleRect, lineBlocked, spawnPos, knifeTarget, portalWrap, portalCycle, portalList, portalGeom, openWalls, pickPortalPairs };
 });

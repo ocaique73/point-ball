@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 24/09/2026 — v0.5.1 na branch `dev` (aguardando teste) · no ar: v0.5.0 em https://point-ball.onrender.com
+Última atualização: 24/09/2026 — v0.6.0 na branch `dev` (aguardando teste; inclui a v0.5.1) · no ar: v0.5.0 em https://point-ball.onrender.com
 
 ---
 
@@ -203,6 +203,18 @@
 - [x] Funciona no celular
 - [~] **Caique:** testar
 
+## 8.13 v0.6.0 — portais sorteados, colina equilibrada, 3 níveis de bot
+- [x] Mapa Portais: 8 aberturas (2 na esquerda, 2 na direita, 2 em cima, 2 em baixo)
+- [x] A cada abertura sorteia **4 portais = 2 pares** (cores ciano e rosa), nunca repete o sorteio anterior; entrar num sai no par da mesma cor, já andando para dentro do mapa (bala gira junto e não conta batida)
+- [x] Rei da colina: lugar sorteado **só quando a área atual acaba** (não mostra mais o próximo lugar)
+- [x] Sorteio equilibrado: perto do meio entre os times (1x1 = meio entre os dois; 2x2+ = meio entre o centro das duplas), puxado para o centro do mapa, sempre entre 32% e 68% da largura, escolhendo o candidato com distância parecida dos dois times e dos dois lados de nascimento; nunca repete o mesmo lugar
+- [x] Bots: só 3 níveis — **Iniciante** (bem mais fácil: mira tremida, demora ~1 s para reagir, fica parado às vezes, sem bomba), **Amador** (meio-termo, padrão) e **Profissional** (mais forte que o antigo)
+- [x] Simulação 1x1 (10 partidas de 2 min, abates): Pro 66 x 28 Amador · Amador 65 x 14 Iniciante · Pro 90 x 7 Iniciante
+- [x] Salas antigas com fácil/média/semi-pro viram iniciante/amador
+- [x] +40 nomes de bot (70 no total)
+- [x] Anel de carregamento: trilho **branco com contorno preto fino** (aparece no deserto, na neve e nos mapas escuros)
+- [~] **Caique:** testar; mandar a lista de nomes de bot que você criou para eu colocar
+
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
 - [ ] Sons (tiro, batida na parede, acerto, faca, pulo)
 - [ ] Controles para celular (joystick na tela)
@@ -229,6 +241,7 @@
 - Sala escura: no escuro nada aparece (nem você), só as balas com brilho fraco e rastro. O HUD continua visível.
 - Cada round começa **sem** pulo (conta 25 s). Dá para mudar em `/teste` → "Começa o round com pulo".
 - Invulnerável por 0,4 s depois de levar um acerto (evita perder 2 vidas com 1 rajada). Ajustável.
+- Rei da colina: quando um time empurra o outro, a colina tende a nascer mais perto do time que está recuado (que também renasce desse lado) — isso equilibra sozinho. O limite de 32%–68% da largura evita que caia perto de um nascimento.
 - Jogador desconectado no meio da partida fica parado no mapa até voltar (ou até 2 min).
 - Para testar vários jogadores no mesmo navegador: `/sala/CODIGO?p=2`, `?p=3`… (cada `p` vira um jogador diferente). Ou use janela anônima.
 

@@ -14,7 +14,7 @@
   let roundMsg = '';
   let gameMap = null;
   let pred = { init: false, x: 0, y: 0, fx: 1, fy: 0 };
-  let walls = [], wallsAll = [], wallsOpen = [];
+  let walls = [], wallsAll = [], openCache = { key: '', walls: [] };
   let lastPreview = null;
 
   const renderer = new PBRenderer($('game-canvas'));
@@ -99,7 +99,7 @@
     gameMap = mapId;
     renderer.setup(config, mapId);
     wallsAll = RC_GAME.buildWalls(mapId, config);
-    wallsOpen = wallsAll.filter((R) => !R.door);
+    openCache = { key: '', walls: wallsAll };
     walls = wallsAll;
     snaps = []; latest = null; pred.init = false; roundMsg = '';
   }
@@ -150,7 +150,7 @@
     $('set-dmtime').value = String(state.dmTime || 180);
     $('set-kills').value = String(state.killLimit || 30);
     $('set-hill').value = String(state.hillTarget || 100);
-    $('set-botlevel').value = state.botLevel || 'semipro';
+    $('set-botlevel').value = state.botLevel || 'amador';
     const dmMode = state.gameMode === 'tdm' || state.gameMode === 'ffa' || state.gameMode === 'koth';
     document.querySelectorAll('.dm-only').forEach((e) => (e.style.display = dmMode ? '' : 'none'));
     document.querySelectorAll('.kills-only').forEach((e) => (e.style.display = state.gameMode === 'tdm' || state.gameMode === 'ffa' ? '' : 'none'));
@@ -364,7 +364,11 @@
     if ($('scr-game').classList.contains('hidden') || !latest || !config) return;
     const view = interpolated(now);
     if (!view) return;
-    walls = latest.pt && latest.pt.o ? wallsOpen : wallsAll;
+    if (latest.pt && latest.pt.o && latest.pt.pr) {
+      const key = JSON.stringify(latest.pt.pr);
+      if (openCache.key !== key) openCache = { key, walls: RC_GAME.openWalls(wallsAll, latest.pt.pr) };
+      walls = openCache.walls;
+    } else walls = wallsAll;
     const mine = latest.p.find((p) => p.id === you);
     if (mine) {
       // predição local do próprio personagem (resposta imediata ao teclado)
@@ -380,7 +384,7 @@
           const sp = config.playerSpeed * (mine.sl || 1);
           const m = RC_GAME.moveCircle(pred.x, pred.y, mx * sp * dt, my * sp * dt, mine.r, walls);
           pred.x = m.x; pred.y = m.y;
-          if (latest.pt && latest.pt.o) { const w = RC_GAME.portalWrap(gameMap, config, pred.x, pred.y, mine.r); if (w) { pred.x = w.x; pred.y = w.y; } }
+          if (latest.pt && latest.pt.o) { const w = RC_GAME.portalWrap(gameMap, config, pred.x, pred.y, mine.r, latest.pt.pr); if (w) { pred.x = w.x; pred.y = w.y; } }
         }
         const err = Math.hypot(mine.x - pred.x, mine.y - pred.y);
         if (err > 90) { pred.x = mine.x; pred.y = mine.y; }
