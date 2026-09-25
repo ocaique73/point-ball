@@ -6,65 +6,129 @@
 <title>Demo 3D FPS · Three.js · Point Ball</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Ccircle cx=%228%22 cy=%228%22 r=%227%22 fill=%22%23ffcc33%22/%3E%3C/svg%3E">
 <style>
-  html, body { margin: 0; height: 100%; background: #0b0f17; color: #e5e7eb; font: 14px/1.35 "Segoe UI", system-ui, sans-serif; overflow: hidden; user-select: none; }
+  :root { --panel: rgba(10, 14, 22, .8); --line: #243044; --acc: #ffcc33; --text: #e5e7eb; --muted: #94a3b8; }
+  html, body { margin: 0; height: 100%; background: #0b0f17; color: var(--text); font: 14px/1.35 "Segoe UI", system-ui, sans-serif; overflow: hidden; user-select: none; }
   #view { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
-  .panel { position: fixed; background: rgba(10, 14, 22, .78); border: 1px solid #243044; border-radius: 10px; padding: 10px 12px; }
-  #hud { left: 12px; bottom: 12px; min-width: 220px; }
+  #cross { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+  .panel { position: fixed; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  #top { top: 12px; left: 12px; font-size: 12px; color: var(--muted); }
+  #top b { color: #86efac; font-variant-numeric: tabular-nums; }
+  #hud { left: 12px; bottom: 12px; min-width: 230px; }
   #hud .big { font-size: 26px; font-weight: 800; }
-  #hud .row { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
-  #top { top: 12px; left: 12px; }
-  #opts { top: 12px; right: 12px; display: grid; gap: 6px; }
-  #opts label { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
-  #opts select { background: #111827; color: #e5e7eb; border: 1px solid #334155; border-radius: 6px; padding: 3px 6px; }
-  #fps { font-variant-numeric: tabular-nums; color: #86efac; font-weight: 800; }
-  #feed { top: 12px; left: 50%; transform: translateX(-50%); text-align: center; font-weight: 700; }
+  #hud .row { display: flex; gap: 10px; align-items: center; margin-top: 3px; }
+  #slots { bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; padding: 6px; }
+  .slot { min-width: 74px; text-align: center; padding: 5px 8px; border-radius: 7px; border: 1px solid #2b3a55; color: var(--muted); font-size: 12px; }
+  .slot b { display: block; color: var(--text); font-size: 13px; }
+  .slot.on { border-color: var(--acc); color: var(--acc); background: rgba(255,204,51,.08); }
+  .slot.off { opacity: .35; }
+  #feed { top: 12px; right: 12px; text-align: right; display: grid; gap: 4px; background: none; border: none; padding: 0; }
+  #feed div { background: var(--panel); border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 13px; }
   .tA { color: #60a5fa; } .tB { color: #f87171; }
   .lost { opacity: .25; }
-  h1 { margin: 0 0 4px; font-size: 13px; color: #ffcc33; letter-spacing: .06em; }
-  /* mira sempre no meio */
-  #cross { position: fixed; left: 50%; top: 50%; width: 26px; height: 26px; transform: translate(-50%, -50%); pointer-events: none; }
-  #cross::before, #cross::after { content: ""; position: absolute; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.7); }
-  #cross::before { left: 12px; top: 0; width: 2px; height: 26px; }
-  #cross::after { top: 12px; left: 0; height: 2px; width: 26px; }
-  #cross .dot { position: absolute; left: 11px; top: 11px; width: 4px; height: 4px; border-radius: 50%; background: #ffcc33; }
-  #cross.hit::before, #cross.hit::after { background: #ff4d6d; }
-  #cross .ring { position: absolute; inset: -8px; border-radius: 50%; border: 3px solid rgba(255,255,255,.15); }
-  #start { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(5, 8, 14, .72); cursor: pointer; }
-  #start .card { background: #0f1522; border: 1px solid #2b3a55; border-radius: 14px; padding: 22px 26px; max-width: 520px; text-align: center; }
-  #start h2 { margin: 0 0 8px; color: #ffcc33; }
-  #start kbd { background: #1f2937; border: 1px solid #334155; border-radius: 5px; padding: 1px 6px; font-size: 12px; }
-  #dead { position: fixed; left: 50%; top: 38%; transform: translate(-50%, -50%); font-size: 28px; font-weight: 800; text-shadow: 0 2px 6px #000; display: none; }
+  #dead { position: fixed; left: 50%; top: 34%; transform: translate(-50%, -50%); font-size: 26px; font-weight: 800; text-shadow: 0 2px 6px #000; display: none; text-align: center; }
+  #dead small { display: block; font-size: 15px; color: var(--muted); }
+  /* tabela (Tab) */
+  #board { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(720px, 94vw); display: none; background: rgba(8, 11, 18, .92); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  #board h3 { margin: 4px 0 6px; }
+  #board table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  #board th, #board td { padding: 5px 8px; text-align: right; }
+  #board th:first-child, #board td:first-child { text-align: left; }
+  #board tr.me td { color: var(--acc); font-weight: 800; }
+  #board tr.dead td { opacity: .5; }
+  #board thead th { color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); }
+  /* menu (Esc) */
+  #menu { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(5, 8, 14, .7); }
+  #menu .card { background: #0f1522; border: 1px solid #2b3a55; border-radius: 14px; width: min(760px, 94vw); max-height: 92vh; overflow: auto; }
+  #menu header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px 0; }
+  #menu h2 { margin: 0; color: var(--acc); font-size: 20px; }
+  .tabs { display: flex; gap: 6px; padding: 12px 18px 0; }
+  .tab { padding: 7px 12px; border-radius: 8px 8px 0 0; border: 1px solid #2b3a55; border-bottom: none; cursor: pointer; color: var(--muted); }
+  .tab.on { color: var(--text); background: #16203a; }
+  .pane { display: none; padding: 14px 18px; border-top: 1px solid #2b3a55; }
+  .pane.on { display: grid; gap: 10px; }
+  .field { display: grid; grid-template-columns: 170px 1fr auto; gap: 10px; align-items: center; }
+  .field span.v { min-width: 40px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  select, input[type=range] { width: 100%; }
+  select { background: #111827; color: var(--text); border: 1px solid #334155; border-radius: 6px; padding: 5px 8px; }
+  input[type=color] { width: 44px; height: 28px; border: 1px solid #334155; background: none; border-radius: 6px; }
+  .btn { background: #1f2937; color: var(--text); border: 1px solid #334155; border-radius: 8px; padding: 9px 14px; cursor: pointer; font-weight: 700; }
+  .btn.primary { background: var(--acc); color: #111; border-color: var(--acc); }
+  .row2 { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .keys { color: var(--muted); font-size: 13px; line-height: 1.7; }
+  kbd { background: #1f2937; border: 1px solid #334155; border-radius: 5px; padding: 1px 6px; font-size: 12px; color: var(--text); }
+  #xprev { background: repeating-conic-gradient(#374151 0 25%, #1f2937 0 50%) 0 0/20px 20px; border-radius: 10px; display: block; margin: 0 auto; }
+  .wdesc { color: var(--muted); font-size: 13px; }
+  .foot { padding: 0 18px 16px; display: flex; gap: 10px; justify-content: space-between; align-items: center; }
 </style>
 </head>
 <body>
 <canvas id="view"></canvas>
-<div id="cross"><div class="ring" id="ring"></div><div class="dot"></div></div>
-<div id="dead">Você caiu! Renascendo...</div>
-<div class="panel" id="top">
-  <h1>POINT BALL · DEMO 3D FPS (THREE.JS)</h1>
-  <div>FPS: <span id="fps">--</span> <span style="color:#94a3b8">(segue o Hz do monitor)</span></div>
-  <div id="h-kda" style="color:#94a3b8"></div>
-</div>
+<canvas id="cross" width="240" height="240"></canvas>
+<div id="dead"></div>
+<div class="panel" id="top">POINT BALL 3D · THREE.JS · FPS <b id="fps">--</b> <span>(segue o Hz do monitor)</span></div>
 <div class="panel" id="hud">
-  <div class="row"><span id="h-lives"></span> <span id="h-bombs"></span></div>
+  <div class="row"><span id="h-lives"></span></div>
   <div class="row"><span class="big" id="h-ammo">20</span><span id="h-mags"></span></div>
+  <div class="row" id="h-weapon" style="color:var(--muted)"></div>
   <div class="row" id="h-jump"></div>
 </div>
-<div class="panel" id="feed" style="display:none"></div>
-<div class="panel" id="opts">
-  <label>Câmera <select id="o-cam"><option value="1">1ª pessoa</option><option value="3">3ª pessoa</option></select></label>
-  <label>Mapa <select id="o-map"><option value="deserto">Deserto</option><option value="neve">Neve</option><option value="floresta">Floresta</option><option value="nave">Nave espacial</option></select></label>
-  <label>Bots <select id="o-bots"><option>0</option><option>1</option><option selected>2</option><option>3</option><option>5</option></select></label>
-  <label>Nível <select id="o-level"><option value="iniciante">Iniciante</option><option value="amador" selected>Amador</option><option value="pro">Profissional</option></select></label>
-  <label>Sensibilidade <select id="o-sens"><option value="0.0012">Baixa</option><option value="0.0022" selected>Média</option><option value="0.0035">Alta</option></select></label>
-  <label>Sombras <select id="o-shadow"><option value="1">Ligadas</option><option value="0">Desligadas</option></select></label>
-</div>
-<div id="start"><div class="card">
-  <h2>Point Ball 3D — FPS</h2>
-  <p id="loading">Carregando os bonecos...</p>
-  <p><b>Clique para jogar</b> (o mouse fica preso na tela; <kbd>Esc</kbd> solta)</p>
-  <p style="color:#94a3b8;font-size:13px"><kbd>WASD</kbd> andar · <kbd>Mouse</kbd> olhar/mirar · <kbd>Clique</kbd> atirar · <kbd>Botão direito</kbd> bomba · <kbd>Rodinha</kbd> fumaça · <kbd>Espaço</kbd> pulo · <kbd>1</kbd>/<kbd>2</kbd> arma/faca · <kbd>R</kbd> recarregar · <kbd>V</kbd> 1ª/3ª pessoa</p>
-  <p style="color:#64748b;font-size:12px">Bonecos: KayKit Adventurers por Kay Lousberg (CC0)</p>
+<div class="panel" id="slots"></div>
+<div class="panel" id="feed"></div>
+
+<div id="board"><h3>Placar</h3><div id="board-body"></div></div>
+
+<div id="menu"><div class="card">
+  <header><h2>Point Ball 3D</h2><span id="loading" style="color:var(--muted)">Carregando os bonecos...</span></header>
+  <div class="tabs">
+    <div class="tab on" data-pane="p-game">Jogo</div>
+    <div class="tab" data-pane="p-weapon">Arma</div>
+    <div class="tab" data-pane="p-cross">Mira</div>
+    <div class="tab" data-pane="p-keys">Controles</div>
+  </div>
+  <div class="pane on" id="p-game">
+    <label class="field"><span>Câmera</span><select id="o-cam"><option value="1">1ª pessoa</option><option value="3">3ª pessoa (por trás)</option></select><span></span></label>
+    <label class="field"><span>Mapa</span><select id="o-map"><option value="deserto">Deserto</option><option value="neve">Neve</option><option value="floresta">Floresta</option><option value="nave">Nave espacial</option></select><span></span></label>
+    <label class="field"><span>Bots inimigos</span><select id="o-bots"><option>0</option><option>1</option><option selected>2</option><option>3</option><option>5</option></select><span></span></label>
+    <label class="field"><span>Nível dos bots</span><select id="o-level"><option value="iniciante">Iniciante</option><option value="amador" selected>Amador</option><option value="pro">Profissional</option></select><span></span></label>
+    <label class="field"><span>Sombras</span><select id="o-shadow"><option value="1">Ligadas</option><option value="0">Desligadas</option></select><span></span></label>
+    <label class="field"><span>Campo de visão (FOV)</span><input type="range" id="o-fov" min="60" max="110" step="1"><span class="v" id="v-fov"></span></label>
+  </div>
+  <div class="pane" id="p-weapon">
+    <label class="field"><span>Arma principal (1)</span><select id="o-weapon"></select><span></span></label>
+    <div class="wdesc" id="w-desc"></div>
+    <div class="wdesc">Todas as armas atiram coisas de borracha que ricocheteiam no muro e no chão. A arma nova vale a partir do próximo tiro.</div>
+  </div>
+  <div class="pane" id="p-cross">
+    <canvas id="xprev" width="220" height="140"></canvas>
+    <label class="field"><span>Cor</span><input type="color" id="x-color"><span></span></label>
+    <label class="field"><span>Contorno preto</span><select id="x-outline"><option value="1">Sim</option><option value="0">Não</option></select><span></span></label>
+    <label class="field"><span>Tamanho da cruz</span><input type="range" id="x-len" min="0" max="20" step="1"><span class="v" id="v-x-len"></span></label>
+    <label class="field"><span>Espessura</span><input type="range" id="x-thick" min="1" max="6" step="0.5"><span class="v" id="v-x-thick"></span></label>
+    <label class="field"><span>Espaço no meio</span><input type="range" id="x-gap" min="0" max="16" step="1"><span class="v" id="v-x-gap"></span></label>
+    <label class="field"><span>Ponto no meio</span><select id="x-dot"><option value="1">Sim</option><option value="0">Não</option></select><span></span></label>
+    <label class="field"><span>Tamanho do ponto</span><input type="range" id="x-dotsize" min="1" max="8" step="0.5"><span class="v" id="v-x-dotsize"></span></label>
+    <label class="field"><span>Círculo de recarga do tiro</span><select id="x-ring"><option value="1">Sim</option><option value="0">Não</option></select><span></span></label>
+    <label class="field"><span>Tamanho do círculo</span><input type="range" id="x-ringr" min="10" max="60" step="1"><span class="v" id="v-x-ringr"></span></label>
+    <label class="field"><span>Espessura do círculo</span><input type="range" id="x-ringw" min="1" max="6" step="0.5"><span class="v" id="v-x-ringw"></span></label>
+    <label class="field"><span>Marcador de acerto (X)</span><select id="x-hit"><option value="1">Sim</option><option value="0">Não</option></select><span></span></label>
+    <label class="field"><span>Tamanho do X</span><input type="range" id="x-hitlen" min="4" max="24" step="1"><span class="v" id="v-x-hitlen"></span></label>
+    <label class="field"><span>Espessura do X</span><input type="range" id="x-hitw" min="0.5" max="4" step="0.5"><span class="v" id="v-x-hitw"></span></label>
+    <div class="wdesc">O X pisca <b style="color:#facc15">amarelo</b> quando acerta e <b style="color:#ef4444">vermelho</b> quando elimina.</div>
+    <div class="row2"><button class="btn" id="x-reset">Voltar a mira padrão</button></div>
+  </div>
+  <div class="pane" id="p-keys">
+    <label class="field"><span>Sensibilidade do mouse</span><input type="range" id="o-sens" min="0.2" max="6" step="0.05"><span class="v" id="v-sens"></span></label>
+    <label class="field"><span>Inverter mouse (Y)</span><select id="o-invert"><option value="0">Não</option><option value="1">Sim</option></select><span></span></label>
+    <div class="keys">
+      <kbd>WASD</kbd> andar · <kbd>Mouse</kbd> olhar e mirar · <kbd>Clique</kbd> atirar / usar<br>
+      <kbd>Espaço</kbd> pular (sem limite) · <kbd>Espaço</kbd> de novo no ar = <b>pulo duplo</b> (carrega a cada 15 s, passa por cima dos muros)<br>
+      <kbd>1</kbd> arma principal · <kbd>3</kbd> faca · <kbd>4</kbd> granada · <kbd>5</kbd> fumaça · <kbd>Rodinha</kbd> troca de arma<br>
+      Granada e fumaça: aperte <kbd>4</kbd> ou <kbd>5</kbd> para pegar e <kbd>Clique</kbd> para jogar (vai para onde a mira aponta)<br>
+      Arco: segure o <kbd>Clique</kbd> para puxar e solte para atirar<br>
+      <kbd>R</kbd> recarregar · <kbd>V</kbd> 1ª/3ª pessoa · <kbd>Tab</kbd> (segurar) placar · <kbd>Esc</kbd> este menu
+    </div>
+  </div>
+  <div class="foot"><span class="wdesc">Bonecos: KayKit Adventurers por Kay Lousberg (CC0)</span><button class="btn primary" id="btn-play">Jogar</button></div>
 </div></div>
 
 <script src="/shared/config.js"></script>
