@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 24/09/2026 — v0.9.0 — 2D finalizado + demos 3D para comparar (próximo passo: demos 3D em Three.js e Godot) em https://point-ball.onrender.com
+Última atualização: 24/09/2026 — v0.10.0 — 2D finalizado + demos 3D FPS para comparar (próximo passo: demos 3D em Three.js e Godot) em https://point-ball.onrender.com
 
 ---
 
@@ -270,6 +270,10 @@
 - [x] Demo B: Godot 4.7 — `demo3d/godot` (abrir project.godot e F5). Refeito em GDScript: arena, tiro com 3 ricochetes, 2 vidas, pulo, 2 bots, 3 mapas, V-Sync liga/desliga, física interpolada
 - [x] Modelos low-poly feitos com formas simples (dá para trocar por modelos do Kenney depois)
 - [x] Como rodar: `demo3d/LEIA-ME.md`
+- [x] v0.10.0: as duas viraram **FPS** (1ª pessoa + 3ª pessoa por trás do ombro, tecla V), mira sempre no meio, mouse preso na tela
+- [x] Bonecos humanos KayKit Adventurers (CC0) com animações em 2 camadas (pernas: parado/correr/lado/costas/pulo/morte; braços: mirar/atirar/recarregar/facada/jogar bomba e fumaça/levar tiro)
+- [x] Godot ganhou bomba, fumaça e faca; câmera de 3ª pessoa não atravessa parede nas duas
+- [x] Tiro continua reto na altura do peito (igual ao 2D); olhar para cima/baixo só muda a visão e onde a bomba cai
 - [~] **Caique:** comparar as duas e escolher
 
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
