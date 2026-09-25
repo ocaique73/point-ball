@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 24/09/2026 — v0.4.0 na branch `dev` (aguardando teste) · no ar: v0.3.0 em https://point-ball.onrender.com
+Última atualização: 24/09/2026 — v0.5.0 na branch `dev` (aguardando teste) · no ar: v0.3.0 em https://point-ball.onrender.com
 
 ---
 
@@ -186,6 +186,18 @@
 - [~] **Caique:** testar (`git fetch` + `git checkout dev` + `git pull`)
 - [ ] Juntar `dev` na `main` para publicar
 
+## 8.11 v0.5.0 — modo Rei da colina
+- [x] Novo modo **Rei da colina** (times Azul x Vermelho)
+  - área redonda (👑) no meio do mapa; o time que estiver sozinho dentro ganha 1 ponto por segundo
+  - os dois times dentro = **disputada** (ninguém pontua, pisca amarelo)
+  - a colina muda de lugar a cada 40 s (meio → topo → baixo, sempre no centro, justo para os dois lados); 5 s antes aparece o próximo lugar tracejado
+  - renasce em 2 s no seu lado, com 1 s de proteção (igual ao mata-mata)
+  - tempo 1/2/3/5 min e **pontos para vencer** 50/75/100/150 (acaba no que vier primeiro)
+  - HUD mostra quem domina a colina e quando ela muda; vitória mostra os pontos
+  - bots vão para a colina e ficam rondando nela
+  - ajustes no /teste (grupo "Rei da colina")
+- [~] **Caique:** testar
+
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
 - [ ] Sons (tiro, batida na parede, acerto, faca, pulo)
 - [ ] Controles para celular (joystick na tela)
@@ -195,7 +207,7 @@
 - [ ] Sons (tiro, ricochete, acerto, bomba, portal, vitória) + botão de mudo
 - [ ] Minimapa/indicador de onde veio o tiro que te acertou
 - [ ] Itens que aparecem no mapa (escudo, munição extra, bomba extra, velocidade por 5 s)
-- [ ] Modo "Capture a bandeira" ou "Rei da colina" (ficar numa área para pontuar)
+- [ ] Modo "Capture a bandeira"
 - [ ] Ranking/histórico de partidas (salvo no servidor)
 - [ ] Chat rápido na partida (mensagens prontas: "cuidado!", "vem comigo")
 - [ ] Emotes / skins simples (chapéu, óculos) desbloqueados por abates

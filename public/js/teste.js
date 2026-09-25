@@ -18,6 +18,7 @@
       stormBand: 'Altura da nevasca', freezeSlow: 'Velocidade congelado', freezeTime: 'Tempo congelado (s)' }],
     ['Bomba', { bombCount: 'Bombas por vida/round', bombRange: 'Alcance do lançamento', bombFlight: 'Tempo voando (s)', bombFuse: 'Tempo até explodir no chão (s)', bombRadius: 'Raio da explosão' }],
     ['Mata-mata', { respawnDelay: 'Tempo para renascer (s)', spawnProtect: 'Proteção ao renascer (s)' }],
+    ['Rei da colina', { hillRadius: 'Tamanho da colina', hillPointsPerSec: 'Pontos por segundo', hillMoveEvery: 'Muda de lugar a cada (s)' }],
     ['Portais', { portalFirstClosed: 'Fechados no começo (s)', portalOpen: 'Tempo aberto (s)', portalClosed: 'Tempo fechado (s)' }],
     ['Sala escura', { lightsInterval: 'Luz acesa por (s)', lightsFlicker: 'Pisca antes de apagar (s)', lightsOffDuration: 'Luz apagada por (s)', bulletGlow: 'Brilho do tiro no escuro' }],
     ['HUD', { hudScale: 'Tamanho do HUD' }],

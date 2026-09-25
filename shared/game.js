@@ -147,7 +147,8 @@
       this.cfg = cfg;
       this.mode = opts.mode || 'match'; // 'match' | 'sandbox'
       // modo de jogo da partida: 'rounds' (eliminação), 'tdm' (mata-mata em equipe), 'ffa' (mata-mata cada um por si)
-      this.gameMode = ['tdm', 'ffa'].includes(opts.gameMode) ? opts.gameMode : 'rounds';
+      this.gameMode = ['tdm', 'ffa', 'koth'].includes(opts.gameMode) ? opts.gameMode : 'rounds';
+      this.hillTarget = opts.hillTarget || 100;  // koth: pontos para vencer
       this.matchTime = opts.matchTime || 180;   // tdm/ffa: duração (s)
       this.killLimit = opts.killLimit || 30;    // tdm/ffa: abates para vencer
       this.bombs = [];
@@ -168,7 +169,35 @@
       this.buildMap();
     }
 
-    isDM() { return this.gameMode === 'tdm' || this.gameMode === 'ffa'; }
+    isDM() { return this.gameMode === 'tdm' || this.gameMode === 'ffa' || this.gameMode === 'koth'; }
+    teamMode() { return this.gameMode === 'tdm' || this.gameMode === 'koth'; }
+
+    // Rei da colina: a área muda de lugar a cada hillMoveEvery segundos (sempre no meio, justo para os dois times)
+    hillSpot(i) {
+      const c = this.cfg, S = [[0.5, 0.5], [0.5, 0.2], [0.5, 0.8]];
+      const p = S[((i % S.length) + S.length) % S.length];
+      return { x: p[0] * c.mapWidth, y: p[1] * c.mapHeight };
+    }
+    hillState() {
+      if (this.gameMode !== 'koth') return null;
+      const c = this.cfg;
+      const el = Math.max(0, this.time - this.lightStart);
+      const idx = Math.floor(el / c.hillMoveEvery);
+      const pos = this.hillSpot(idx), next = this.hillSpot(idx + 1);
+      return { idx, x: pos.x, y: pos.y, r: c.hillRadius, n: c.hillMoveEvery - (el - idx * c.hillMoveEvery), nx: next.x, ny: next.y };
+    }
+    updateHill(dt) {
+      if (this.gameMode !== 'koth' || this.phase !== 'playing') { this.hillOwner = null; return; }
+      const H = this.hillState();
+      const inside = { A: 0, B: 0 };
+      for (const p of this.players.values()) {
+        if (!p.alive || p.jump) continue;
+        if (Math.hypot(p.x - H.x, p.y - H.y) <= H.r) inside[p.team]++;
+      }
+      const owner = inside.A && !inside.B ? 'A' : inside.B && !inside.A ? 'B' : inside.A && inside.B ? 'X' : null;
+      if (owner === 'A' || owner === 'B') this.score[owner] += dt * this.cfg.hillPointsPerSec;
+      this.hillOwner = owner;
+    }
     // "time" usado para amigo/inimigo: no cada-um-por-si cada jogador é o seu próprio time
     teamKey(p) { return this.gameMode === 'ffa' ? p.id : p.team; }
     isEnemy(p, q) { return p !== q && this.teamKey(p) !== this.teamKey(q); }
@@ -381,7 +410,7 @@
       let best = null, bestScore = -1;
       for (let i = 0; i < 60; i++) {
         let x, y;
-        if (this.gameMode === 'tdm') { // no seu lado do mapa
+        if (this.teamMode()) { // no seu lado do mapa
           const half = c.mapWidth / 2;
           x = (p.team === 'A' ? m : half) + Math.random() * (half - m);
           y = m + Math.random() * (c.mapHeight - 2 * m);
@@ -528,6 +557,7 @@
       this.updateHazards(dt);
       this.updateBullets(dt);
       this.updateBombs();
+      this.updateHill(dt);
 
       if (this.mode === 'sandbox' || (this.isDM() && this.phase === 'playing')) {
         for (const p of this.players.values()) {
@@ -747,18 +777,23 @@
       const timeUp = this.time - this.lightStart >= this.matchTime;
       let reached = false;
       if (this.gameMode === 'tdm') reached = this.score.A >= this.killLimit || this.score.B >= this.killLimit;
+      else if (this.gameMode === 'koth') reached = this.score.A >= this.hillTarget || this.score.B >= this.hillTarget;
       else for (const p of this.players.values()) if (p.stats.k >= this.killLimit) reached = true;
       if (!timeUp && !reached) return;
       this.phase = 'matchEnd';
       this.bullets = []; this.bombs = [];
       let winner = null;
-      if (this.gameMode === 'tdm') winner = this.score.A > this.score.B ? 'A' : this.score.B > this.score.A ? 'B' : null;
+      if (this.teamMode()) {
+        const a = Math.floor(this.score.A), b = Math.floor(this.score.B);
+        winner = a > b ? 'A' : b > a ? 'B' : null;
+      }
       else {
         const ranked = [...this.players.values()].sort((a, b) => b.stats.k - a.stats.k || a.stats.d - b.stats.d);
         if (ranked.length && (ranked.length < 2 || ranked[0].stats.k > ranked[1].stats.k)) winner = ranked[0].id;
       }
       this.matchWinner = winner;
-      this.events.push({ type: 'match_end', winner, mode: this.gameMode, timeUp, score: Object.assign({}, this.score) });
+      const sc = { A: Math.floor(this.score.A), B: Math.floor(this.score.B) };
+      this.events.push({ type: 'match_end', winner, mode: this.gameMode, timeUp, score: sc });
     }
 
     isMatchOver() {
@@ -795,9 +830,10 @@
       }
       return {
         t: Math.round(t * 1000) / 1000, ph: this.phase, pu: r1(Math.max(0, this.phaseUntil - t)), rd: this.round,
-        tr: this.totalRounds, sc: this.score, map: this.mapId, lg: this.lightState(), hz: this.hazardSnapshot(), pt: this.portalState(),
+        tr: this.totalRounds, sc: this.gameMode === 'koth' ? { A: Math.floor(this.score.A), B: Math.floor(this.score.B) } : this.score, map: this.mapId, lg: this.lightState(), hz: this.hazardSnapshot(), pt: this.portalState(),
         rt: this.mode === 'match' && this.phase === 'playing' ? r1(Math.max(0, (this.isDM() ? this.matchTime : this.cfg.roundTime) - (t - this.lightStart))) : null,
-        md: this.gameMode, kl: this.killLimit,
+        md: this.gameMode, kl: this.gameMode === 'koth' ? this.hillTarget : this.killLimit,
+        hl: this.gameMode === 'koth' ? (() => { const H = this.hillState(); return { x: r1(H.x), y: r1(H.y), r: H.r, n: r1(H.n), nx: r1(H.nx), ny: r1(H.ny), o: this.hillOwner || null }; })() : null,
         p: ps, b: this.bullets.map((b) => [b.id, r1(b.x), r1(b.y), b.hits, b.team]),
         bm: this.bombs.map((b) => {
           const k = Math.min(1, (t - b.t0) / b.flight);

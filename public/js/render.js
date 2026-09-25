@@ -223,6 +223,7 @@ window.PBRenderer = (function () {
       // mortos primeiro, depois vivos, pulando por último (ficam por cima)
       const ps = view.players.slice().sort((a, b) => (a.al - b.al) || ((a.jz >= 0) - (b.jz >= 0)));
       if (this.map.portals) this.drawPortals(view.pt, now);
+      if (view.hl) this.drawHill(view.hl, now);
       if (view.hz && view.hz.t === 'storm') this.drawStorm(view.hz, now);
       for (const p of ps) this.drawPlayer(p, p.id === view.meId, now);
       if (view.hz && view.hz.t === 'tornado') this.drawTornado(view.hz, now);
@@ -270,6 +271,28 @@ window.PBRenderer = (function () {
           }
         }
       });
+    }
+
+    // Rei da colina: área no chão; cor de quem domina, amarela piscando se disputada
+    drawHill(H, now) {
+      const g = this.ctx;
+      const col = H.o === 'A' ? '59,130,246' : H.o === 'B' ? '239,68,68' : H.o === 'X' ? '250,204,21' : '255,255,255';
+      const pulse = H.o === 'X' ? (Math.floor(now / 150) % 2 ? 0.28 : 0.12) : H.o ? 0.24 : 0.1;
+      g.save();
+      g.fillStyle = `rgba(${col},${pulse})`;
+      g.beginPath(); g.arc(H.x, H.y, H.r, 0, Math.PI * 2); g.fill();
+      g.setLineDash([14, 10]); g.lineDashOffset = -now / 40;
+      g.strokeStyle = `rgba(${col},.9)`; g.lineWidth = 4;
+      g.beginPath(); g.arc(H.x, H.y, H.r, 0, Math.PI * 2); g.stroke();
+      g.setLineDash([]);
+      g.font = `900 ${Math.round(H.r * 0.34)}px Segoe UI, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.globalAlpha = 0.55; g.fillText('👑', H.x, H.y); g.globalAlpha = 1;
+      if (H.n <= 5) { // próximo lugar da colina
+        g.setLineDash([6, 8]); g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 2;
+        g.beginPath(); g.arc(H.nx, H.ny, H.r, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+      }
+      g.restore();
+      g.textBaseline = 'alphabetic';
     }
 
     // bomba: [id, x, y, progresso do voo 0..1, time, tempo até explodir]

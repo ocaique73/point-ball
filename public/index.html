@@ -29,12 +29,14 @@
         <div class="grow"><label>Mapa</label>
           <select id="c-map"><option value="deserto">Deserto</option><option value="neve">Neve</option><option value="floresta">Floresta</option><option value="escuro">Sala escura</option><option value="portal">Portais</option></select></div>
         <div class="grow"><label>Modo</label>
-          <select id="c-mode"><option value="rounds">Rounds (eliminação)</option><option value="tdm">Mata-mata em equipe</option><option value="ffa">Mata-mata cada um por si</option></select></div>
+          <select id="c-mode"><option value="rounds">Rounds (eliminação)</option><option value="tdm">Mata-mata em equipe</option><option value="ffa">Mata-mata cada um por si</option><option value="koth">Rei da colina</option></select></div>
       </div>
       <div class="row">
         <div class="grow c-dm" style="display:none"><label>Tempo</label>
           <select id="c-dmtime"><option value="60">1 min</option><option value="120">2 min</option><option value="180" selected>3 min</option><option value="300">5 min</option></select></div>
-        <div class="grow c-dm" style="display:none"><label>Limite de abates</label>
+        <div class="grow c-koth" style="display:none"><label>Pontos para vencer</label>
+          <select id="c-hill"><option>50</option><option>75</option><option selected>100</option><option>150</option></select></div>
+        <div class="grow c-dm c-kills" style="display:none"><label>Limite de abates</label>
           <select id="c-kills"><option>20</option><option>25</option><option selected>30</option><option>50</option></select></div>
         <div class="grow c-rounds"><label>Rounds</label>
           <select id="c-rounds"><option>1</option><option>2</option><option selected>3</option><option>5</option><option>7</option></select></div>
@@ -82,8 +84,10 @@
   };
   $('c-map').addEventListener('change', showPreview);
   const modeUI = () => {
-    const dm = $('c-mode').value !== 'rounds';
+    const mode = $('c-mode').value, dm = mode !== 'rounds';
     document.querySelectorAll('.c-dm').forEach((e) => (e.style.display = dm ? '' : 'none'));
+    document.querySelectorAll('.c-kills').forEach((e) => (e.style.display = dm && mode !== 'koth' ? '' : 'none'));
+    document.querySelectorAll('.c-koth').forEach((e) => (e.style.display = mode === 'koth' ? '' : 'none'));
     document.querySelectorAll('.c-rounds').forEach((e) => (e.style.display = dm ? 'none' : ''));
   };
   $('c-mode').addEventListener('change', modeUI);
@@ -99,7 +103,7 @@
     if (pass && (pass.length < 3 || pass.length > 6)) return ($('c-err').textContent = 'Senha: mínimo 3 e máximo 6 caracteres.');
     $('btn-create').disabled = true;
     socket.emit('create_room', { name, password: pass, map: $('c-map').value, rounds: Number($('c-rounds').value),
-      gameMode: $('c-mode').value, dmTime: Number($('c-dmtime').value), killLimit: Number($('c-kills').value), clientId: PB.clientId() }, (res) => {
+      gameMode: $('c-mode').value, dmTime: Number($('c-dmtime').value), killLimit: Number($('c-kills').value), hillTarget: Number($('c-hill').value), clientId: PB.clientId() }, (res) => {
       $('btn-create').disabled = false;
       if (!res || !res.ok) return ($('c-err').textContent = (res && res.error) || 'Erro ao criar sala.');
       try { if (pass) sessionStorage.setItem('pb_pw_' + res.code, pass); } catch (e) {}
@@ -123,7 +127,7 @@
           <span class="code">${PB.esc(r.code)}</span>
           ${r.locked ? '<span title="Com senha">🔒</span>' : ''}
           <span class="badge">${PB.esc(PB.MAP_NAME[r.map] || r.map)}</span>
-          <span class="badge">${r.gameMode === 'tdm' ? 'Mata-mata equipe' : r.gameMode === 'ffa' ? 'Cada um por si' : r.rounds + ' round' + (r.rounds > 1 ? 's' : '')}</span>
+          <span class="badge">${r.gameMode === 'tdm' ? 'Mata-mata equipe' : r.gameMode === 'ffa' ? 'Cada um por si' : r.gameMode === 'koth' ? 'Rei da colina' : r.rounds + ' round' + (r.rounds > 1 ? 's' : '')}</span>
           ${r.phase === 'match' ? '<span class="badge live">em partida</span>' : ''}
           <span class="grow muted small" style="flex:1;text-align:right">${r.players}/10 ${r.queue ? '· fila ' + r.queue : ''}</span>
           <a class="btn" href="/sala/${encodeURIComponent(r.code)}">Entrar</a>

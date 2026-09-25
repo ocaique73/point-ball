@@ -66,9 +66,10 @@ window.PBHud = (function () {
       this.set('h-sb', String(s.sc ? s.sc.B : 0));
       let rt = '';
       if (s.rt != null) { const m = Math.floor(s.rt / 60), sec = Math.floor(s.rt % 60); rt = ` · <span class="${s.rt <= 10 ? 'warn' : ''}">⏱ ${m}:${String(sec).padStart(2, '0')}</span>`; }
-      const md = s.md || 'rounds', dm = md === 'tdm' || md === 'ffa';
-      const modeName = md === 'tdm' ? 'Mata-mata em equipe' : 'Cada um por si';
-      this.set('h-round', opts.sandbox ? 'Modo teste' : dm ? `${modeName} · meta ${s.kl} abates${rt}` : `Round ${s.rd || 1} de ${s.tr || 1}${rt}`);
+      const md = s.md || 'rounds', dm = md === 'tdm' || md === 'ffa' || md === 'koth';
+      const modeName = md === 'tdm' ? 'Mata-mata em equipe' : md === 'koth' ? 'Rei da colina' : 'Cada um por si';
+      const goal = md === 'koth' ? `${s.kl} pts` : `${s.kl} abates`;
+      this.set('h-round', opts.sandbox ? 'Modo teste' : dm ? `${modeName} · meta ${goal}${rt}` : `Round ${s.rd || 1} de ${s.tr || 1}${rt}`);
       // placar: times, ou líder no cada-um-por-si
       const ffa = md === 'ffa' && !opts.sandbox;
       this.$('h-teamscore').style.display = ffa ? 'none' : '';
@@ -93,6 +94,13 @@ window.PBHud = (function () {
       if (s.pt) lt = s.pt.o ? (s.pt.n < 1.5 ? `<span class="warn">🌀 Portais fechando...</span>` : `🌀 Portais <b>ABERTOS</b> · fecham em <b>${Math.ceil(s.pt.n)}s</b>`) : `🌀 Portais abrem em <b>${Math.ceil(s.pt.n)}s</b>`;
       if (hz && hz.t === 'sand') lt = hz.s === 2 ? '🏜️ TEMPESTADE DE AREIA!' : hz.s === 1 ? '<span class="warn">🏜️ Areia juntando no meio...</span>' : `🏜️ Tempestade de areia em <b>${Math.ceil(hz.n)}s</b>`;
       if (hz && hz.t === 'storm') lt = hz.s === 2 ? '❄️ TEMPESTADE FRIA!' : hz.s === 1 ? '<span class="warn">❄️ Tempestade chegando no centro...</span>' : `❄️ Tempestade em <b>${Math.ceil(hz.n)}s</b>`;
+      if (s.hl && s.ph === 'playing') {
+        const o = s.hl.o;
+        const ht = o === 'A' ? '<span class="tA">⛰️ AZUL dominando a colina</span>' : o === 'B' ? '<span class="tB">⛰️ VERMELHO dominando a colina</span>'
+          : o === 'X' ? '<span class="warn">⛰️ Colina disputada!</span>' : '⛰️ Colina livre';
+        const mv = s.hl.n <= 5 ? ` · <span class="warn">muda em ${Math.ceil(s.hl.n)}s</span>` : ` · muda em ${Math.ceil(s.hl.n)}s`;
+        lt = lt ? `${ht}${mv} &nbsp;|&nbsp; ${lt}` : `${ht}${mv}`;
+      }
       this.set('h-light', lt);
 
       const show = !!me;
