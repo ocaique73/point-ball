@@ -80,6 +80,11 @@ var tombs: Array = []
 var me: Fighter
 var camera: Camera3D
 var sun: DirectionalLight3D
+var world_env: Environment
+var player_torch: OmniLight3D
+var cur_map_id := "deserto"
+var hazard_light_on := true
+var hazard_next := 0.0
 var view_models := {}
 var time := 0.0
 var kick := 0.0
@@ -260,10 +265,17 @@ func _ready() -> void:
 	sun.directional_shadow_max_distance = 60.0
 	sun.rotation_degrees = Vector3(-50, -35, 0)
 	add_child(sun)
+	world_env = env
 	camera = Camera3D.new()
 	camera.near = 0.05
 	camera.fov = S["fov"]
 	add_child(camera)
+	player_torch = OmniLight3D.new()
+	player_torch.light_energy = 2.2
+	player_torch.omni_range = 13.0
+	player_torch.light_color = Color("#fff3d6")
+	player_torch.visible = false
+	camera.add_child(player_torch)
 	smoke_tex = _make_smoke_texture()
 	_build_view_models()
 	_build_ui()
@@ -325,7 +337,14 @@ func _new_game() -> void:
 		map_root.queue_free()
 	map_root = Node3D.new()
 	add_child(map_root)
-	var data: Dictionary = MapsData.MAPS[MAP_IDS[int(S["map"])]]
+	cur_map_id = MAP_IDS[int(S["map"])]
+	hazard_light_on = true
+	hazard_next = time + 6.0
+	sun.light_energy = 1.2
+	if world_env:
+		world_env.ambient_light_energy = 0.45
+	player_torch.visible = cur_map_id == "escuro"
+	var data: Dictionary = MapsData.MAPS[cur_map_id]
 	var th: Dictionary = data["theme"]
 	# chão (também é colisão)
 	var floor_body := StaticBody3D.new()
@@ -1022,6 +1041,7 @@ func _throw_nade(f: Fighter, smoke: bool) -> void:
 # ---------------- simulação (60 vezes por segundo; a imagem é interpolada) ----------------
 func _physics_process(dt: float) -> void:
 	time += dt
+	_update_hazard()
 	for f in fighters:
 		_update_fighter(f, dt)
 	_update_bullets(dt)
@@ -1035,6 +1055,17 @@ func _physics_process(dt: float) -> void:
 		if time >= t.until:
 			tombs.erase(t)
 			t.queue_free()
+
+
+func _update_hazard() -> void:
+	if cur_map_id != "escuro" or time < hazard_next:
+		return
+	hazard_light_on = not hazard_light_on
+	hazard_next = time + (randf_range(3.0, 6.0) if hazard_light_on else randf_range(2.0, 4.0))
+	sun.light_energy = 1.2 if hazard_light_on else 0.05
+	if world_env:
+		world_env.ambient_light_energy = 0.45 if hazard_light_on else 0.05
+	_feed("💡 A luz voltou" if hazard_light_on else "🕯️ A luz apagou...")
 
 
 func _update_fighter(f: Fighter, dt: float) -> void:
