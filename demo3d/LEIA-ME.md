@@ -29,7 +29,9 @@ cadência/recarga de cada arma — e ligar o "modo teste" (não morre) em qualqu
 
 ## Demo A — Three.js (web + PC)
 
-Tem física 3D própria (`public/demo3d/sim3d.js`): tiro e granada seguem a mira, ricochete no muro e no chão, pulo duplo. 4 mapas e bots com 3 níveis.
+Tem física 3D própria (`public/demo3d/sim3d.js`): tiro e granada seguem a mira, ricochete no muro e no chão, pulo duplo. 8 mapas e bots com 3 níveis.
+
+**Multiplayer** (aba "Multiplayer" do menu Esc): crie uma sala (código de 1 a 5 letras/números + senha opcional) ou entre numa sala existente pela lista ou pelo código. Escolha um time (Azul ou Vermelho); o dono da sala escolhe o mapa, os bots e o nível deles, e aperta "Iniciar partida". É igual ao multiplayer do jogo 2D. O servidor é quem manda no jogo (todo mundo vê o mesmo estado); só a mira/câmera do mouse responde na hora, o resto do corpo segue o que o servidor manda.
 
 **No navegador**
 1. Na pasta do projeto: `npm install` e `npm start`

@@ -52,6 +52,7 @@ export class Sim3D {
     this.tornadoActive = false; this.tornado = null;
     this.sandActive = false; this.sandK = 0;
     this.portalMap = opts.portalMap || null; this.cfg = opts.cfg || null; this.portalPairs = opts.portalPairs || null;
+    this.G = opts.G || null; // funções do shared/game.js (portais) — window.RC_GAME no navegador, injetado no servidor
     // teto que ricocheteia tiro (folhas da floresta / vidro da nave), null = sem teto
     this.ceilingY = opts.ceilingY != null ? opts.ceilingY : null;
     // vulcão: poças de lava (sorteadas uma vez no início, sem trocar de layout, pra simplificar)
@@ -220,6 +221,29 @@ export class Sim3D {
     this.tombs = this.tombs.filter((t) => this.time < t.until);
     const ev = this.events; this.events = [];
     return ev;
+  }
+  // estado leve pra mandar pela rede (multiplayer): só o que o cliente precisa pra desenhar
+  snapshot() {
+    const players = [];
+    for (const p of this.players.values()) {
+      players.push({ id: p.id, name: p.name, team: p.team, bot: p.bot, x: p.x, y: p.y, z: p.z, vx: p.vx, vy: p.vy, vz: p.vz,
+        yaw: p.yaw, pitch: p.pitch, lives: p.lives, alive: p.alive, weapon: p.weapon, primary: p.primary, grounded: !!p.grounded,
+        ammo: p.ammo[p.primary], mag: this.WEAPONS[p.primary].mag, mags: p.mags[p.primary], reloadUntil: p.reloadUntil || 0,
+        nades: p.nades, smokes: p.smokes, potions: p.potions, djReadyAt: p.djReadyAt || 0,
+        k: p.k, d: p.d, a: p.a, charge0: p.charge0 || 0, fireReady: p.fireReady || 0,
+        protectUntil: p.protectUntil || 0, respawnAt: p.respawnAt || 0, deadAt: p.deadAt || 0, lastHitBy: p.lastHitBy || {} });
+    }
+    return {
+      time: this.time, players,
+      bullets: this.bullets.map((b) => ({ id: b.id, team: b.team, x: b.x, y: b.y, z: b.z, vx: b.vx, vy: b.vy, vz: b.vz, r: b.r, kind: b.kind })),
+      nades: this.nades.map((g) => ({ id: g.id, team: g.team, smoke: g.smoke, x: g.x, y: g.y, z: g.z, spin: g.spin, t0: g.t0 })),
+      smokes: this.smokes.map((s) => ({ id: s.id, x: s.x, z: s.z, t0: s.t0, until: s.until })),
+      tombs: this.tombs.map((t) => ({ id: t.id, x: t.x, y: t.y, z: t.z, name: t.name, team: t.team, t0: t.t0, until: t.until })),
+      pickups: this.pickups.map((u) => ({ id: u.id, type: u.type, x: u.x, z: u.z, r: u.r, cdUntil: u.cdUntil })),
+      hazard: this.hazard, sandK: this.sandK, lavaActive: this.lavaActive, lightOn: this.lightOn,
+      lamps: this.lamps.map((l) => ({ i: l.i, x: l.x, z: l.z, offUntil: l.offUntil })),
+      lavaPools: this.lavaPools
+    };
   }
 
   updatePlayer(p, dt) {
@@ -425,7 +449,8 @@ export class Sim3D {
   }
   // portais (igual ao 2D): entrou num aberto, sai no par dele
   updatePortals() {
-    const Gm = (typeof window !== 'undefined') ? window.RC_GAME : null;
+    // no navegador usa window.RC_GAME (carregado via <script>); no servidor quem cria o Sim3D passa opts.G
+    const Gm = this.G || (typeof window !== 'undefined' ? window.RC_GAME : null);
     if (!Gm || !this.cfg) return;
     for (const p of this.players.values()) {
       if (!p.alive) continue;

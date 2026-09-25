@@ -606,7 +606,113 @@ document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () 
   document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('on', x === t));
   document.querySelectorAll('.pane').forEach((p) => p.classList.toggle('on', p.id === t.dataset.pane));
   drawPreview();
+  if (t.dataset.pane === 'p-mp' && $('mp-view-lobby').style.display === 'none') refreshRoomList();
 }));
+
+// ---------- multiplayer: menu (criar/entrar em sala, lobby, times, dono da sala) ----------
+function mpStatus(msg, id) { const el = $(id || 'mp-status'); if (el) el.textContent = msg || ''; }
+function switchMpView(v) {
+  $('mp-view-menu').style.display = v === 'lobby' ? 'none' : 'grid';
+  $('mp-view-lobby').style.display = v === 'lobby' ? 'grid' : 'none';
+}
+function ensureSocket() {
+  if (socket) return socket;
+  socket = io();
+  socket.on('3d_room_state', (state) => { room3d = state; renderLobby(); });
+  socket.on('3d_match_start', (d) => {
+    const mine = room3d && room3d.members.find((m) => m.id === myPid);
+    if (!mine || mine.status !== 'team') { mpStatus('A partida começou — escolha um time para entrar na próxima.', 'mp-status2'); return; }
+    enterNetMatch(d.map);
+    netMode = true;
+    lockPointer();
+  });
+  socket.on('3d_match_end', () => {
+    if (locked) { try { document.exitPointerLock(); } catch (e) {} }
+    showMenu(true);
+    switchMpView('lobby');
+    renderLobby();
+  });
+  socket.on('3d_state', (msg) => { if (netMode) applySnapshot(msg.s, msg.e); });
+  socket.on('3d_toast', (msg) => mpStatus(msg, room3d ? 'mp-status2' : 'mp-status'));
+  socket.on('3d_kicked', (msg) => { mpStatus(msg || 'Você foi desconectado da sala.', 'mp-status'); leaveNetRoom(true); });
+  socket.on('3d_room_closed', () => { mpStatus('A sala foi fechada.', 'mp-status'); leaveNetRoom(true); });
+  return socket;
+}
+function leaveNetRoom(silent) {
+  if (!silent && socket && room3d) socket.emit('3d_leave_room');
+  room3d = null; netMode = false;
+  if (locked) { try { document.exitPointerLock(); } catch (e) {} }
+  newGame();
+  switchMpView('menu');
+}
+function refreshRoomList() {
+  ensureSocket().emit('3d_list_rooms', null, (list) => {
+    const el = $('mp-list');
+    if (!el) return;
+    if (!list || !list.length) { el.textContent = 'Nenhuma sala aberta agora.'; return; }
+    el.innerHTML = list.map((r) => `<div class="row2" style="justify-content:space-between;padding:4px 0;border-bottom:1px solid #243044">
+      <span>${r.locked ? '🔒 ' : ''}<b>${esc(r.code)}</b> · ${esc(MAPS[r.map] ? MAPS[r.map].name : r.map)} · ${r.phase === 'match' ? 'em partida' : 'na sala'} · ${r.players} jogador(es)</span>
+      <button class="btn" data-code="${esc(r.code)}">Entrar</button></div>`).join('');
+    el.querySelectorAll('button[data-code]').forEach((b) => b.addEventListener('click', () => { $('mp-join-code').value = b.dataset.code; joinRoom(); }));
+  });
+}
+function createRoom() {
+  const code = $('mp-create-code').value.trim();
+  const pass = $('mp-create-pass').value;
+  if (!code) { mpStatus('Digite um nome para a sala (1 a 5 letras/números).'); return; }
+  ensureSocket().emit('3d_create_room', { name: code, clientId: window.PB.clientId(), map: S.map, password: pass }, (r) => {
+    if (!r || !r.ok) { mpStatus((r && r.error) || 'Não foi possível criar a sala.'); return; }
+    $('mp-join-code').value = r.code; $('mp-join-pass').value = pass;
+    joinRoom();
+  });
+}
+const MP_ERR = { not_found: 'Sala não encontrada.', wrong_password: 'Senha errada.', need_password: 'Essa sala tem senha.', full: 'Sala cheia.', bad_client: 'Erro de conexão, recarregue a página.' };
+function joinRoom() {
+  const name = $('mp-name').value.trim() || 'Jogador';
+  const code = $('mp-join-code').value.trim();
+  const pass = $('mp-join-pass').value;
+  if (!code) { mpStatus('Digite o código da sala.'); return; }
+  ensureSocket().emit('3d_join_room', { name, clientId: window.PB.clientId(), code, password: pass }, (r) => {
+    if (!r || !r.ok) { mpStatus(MP_ERR[r && r.error] || 'Não foi possível entrar.'); return; }
+    myPid = r.you; room3d = r.state;
+    mpStatus('');
+    switchMpView('lobby'); renderLobby();
+    if (r.match) mpStatus('Partida em andamento — escolha um time para entrar na próxima.', 'mp-status2');
+  });
+}
+function renderLobby() {
+  if (!room3d || $('mp-view-lobby').style.display === 'none') return;
+  $('mp-lobby-code').textContent = room3d.code;
+  $('mp-lobby-lock').textContent = room3d.hasPassword ? '🔒' : '';
+  const isHost = room3d.hostId === myPid;
+  const memberRow = (m) => `<div class="wdesc" style="padding:2px 0">${m.id === myPid ? '<b>' + esc(m.name) + ' (você)</b>' : esc(m.name)}${m.connected ? '' : ' (desconectado)'}${m.inMatch ? ' 🎮' : ''}</div>`;
+  const botRow = (b) => `<div class="wdesc">🤖 ${esc(b.name)}</div>`;
+  $('mp-team-A').innerHTML = room3d.members.filter((m) => m.status === 'team' && m.team === 'A').map(memberRow).join('') + (room3d.bots.team === 'A' ? room3d.bots.list.map(botRow).join('') : '');
+  $('mp-team-B').innerHTML = room3d.members.filter((m) => m.status === 'team' && m.team === 'B').map(memberRow).join('') + (room3d.bots.team === 'B' ? room3d.bots.list.map(botRow).join('') : '');
+  if (isHost) {
+    $('mp-host-settings').innerHTML = `
+      <label class="field" style="grid-template-columns:120px 1fr"><span>Mapa</span><select id="mp-set-map">${Object.keys(MAPS).map((k) => `<option value="${k}" ${k === room3d.map ? 'selected' : ''}>${esc(MAPS[k].name)}</option>`).join('')}</select><span></span></label>
+      <label class="field" style="grid-template-columns:120px 1fr"><span>Bots</span><select id="mp-set-bots">${[0, 1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${n === room3d.bots.list.length ? 'selected' : ''}>${n}</option>`).join('')}</select><span></span></label>
+      <label class="field" style="grid-template-columns:120px 1fr"><span>Time dos bots</span><select id="mp-set-botteam"><option value="A" ${room3d.bots.team === 'A' ? 'selected' : ''}>Azul</option><option value="B" ${room3d.bots.team === 'B' ? 'selected' : ''}>Vermelho</option></select><span></span></label>
+      <label class="field" style="grid-template-columns:120px 1fr"><span>Nível dos bots</span><select id="mp-set-level"><option value="iniciante" ${room3d.botLevel === 'iniciante' ? 'selected' : ''}>Iniciante</option><option value="amador" ${room3d.botLevel === 'amador' ? 'selected' : ''}>Amador</option><option value="pro" ${room3d.botLevel === 'pro' ? 'selected' : ''}>Profissional</option></select><span></span></label>`;
+    ['mp-set-map', 'mp-set-bots', 'mp-set-botteam', 'mp-set-level'].forEach((id) => $(id).addEventListener('change', () => {
+      socket.emit('3d_update_settings', { map: $('mp-set-map').value, bots: Number($('mp-set-bots').value), botTeam: $('mp-set-botteam').value, botLevel: $('mp-set-level').value });
+    }));
+  } else {
+    $('mp-host-settings').innerHTML = `<div class="wdesc">Mapa: ${esc(MAPS[room3d.map] ? MAPS[room3d.map].name : room3d.map)} · Bots: ${room3d.bots.list.length} (${room3d.bots.team === 'A' ? 'Azul' : 'Vermelho'}, ${room3d.botLevel})</div>`;
+  }
+  $('mp-start-row').innerHTML = room3d.phase === 'match'
+    ? '<div class="wdesc">⚔️ Partida em andamento...</div>'
+    : (isHost ? '<button class="btn primary" id="mp-start-btn">▶ Iniciar partida</button>' : '<div class="wdesc">Aguardando o dono da sala iniciar...</div>');
+  if (isHost && room3d.phase !== 'match') $('mp-start-btn').addEventListener('click', () => socket.emit('3d_start_match'));
+}
+$('mp-create-btn').addEventListener('click', createRoom);
+$('mp-join-btn').addEventListener('click', joinRoom);
+$('mp-refresh-btn').addEventListener('click', refreshRoomList);
+$('mp-leave-btn').addEventListener('click', () => leaveNetRoom(false));
+$('mp-join-A').addEventListener('click', () => ensureSocket().emit('3d_choose_team', { team: 'A' }));
+$('mp-join-B').addEventListener('click', () => ensureSocket().emit('3d_choose_team', { team: 'B' }));
+(() => { try { const pr = window.PB && window.PB.getProfile ? window.PB.getProfile() : null; if (pr && pr.name) $('mp-name').value = pr.name; } catch (e) {} })();
 $('o-weapon').innerHTML = WEAPON_IDS.map((w) => `<option value="${w}">${WEAPONS[w].name}</option>`).join('');
 const WDESC = {
   lancador: 'Rápido e reto, sem cair. 3 ricochetes. Um tiro por segundo.',
@@ -683,27 +789,44 @@ canvas.addEventListener('click', () => { if (!locked) lockPointer(); });
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === canvas;
   showMenu(!locked);
-  if (!locked) { const me = sim && sim.players.get('me'); if (me) me.input.fire = false; }
+  if (!locked) { netFireHeld = false; const me = sim && sim.players.get('me'); if (me) me.input.fire = false; }
 });
 
 // ---------- controles ----------
 let sim = null;
 const keys = {};
+// ---------- multiplayer: estado de rede ----------
+let socket = null, netMode = false, myPid = null, room3d = null;
+let netYaw = 0, netPitch = 0, netFireHeld = false, netInputT = 0, netRecvT = 0, netInterval = 130;
 document.addEventListener('mousemove', (e) => {
   if (!locked || !sim) return;
-  const me = sim.players.get('me'); if (!me) return;
   const s = S.sens * 0.0012;
+  if (netMode) {
+    netYaw += e.movementX * s;
+    netPitch = Math.max(-1.35, Math.min(1.35, netPitch - e.movementY * s * (S.invert === '1' ? -1 : 1)));
+    return;
+  }
+  const me = sim.players.get('me'); if (!me) return;
   me.yaw += e.movementX * s;
   me.pitch = Math.max(-1.35, Math.min(1.35, me.pitch - e.movementY * s * (S.invert === '1' ? -1 : 1)));
 });
-canvas.addEventListener('mousedown', (e) => { if (locked && e.button === 0) { const me = sim.players.get('me'); if (me) me.input.fire = true; } });
-window.addEventListener('mouseup', (e) => { if (e.button === 0 && sim) { const me = sim.players.get('me'); if (me) me.input.fire = false; } });
+canvas.addEventListener('mousedown', (e) => {
+  if (!locked || e.button !== 0) return;
+  if (netMode) { netFireHeld = true; return; }
+  const me = sim.players.get('me'); if (me) me.input.fire = true;
+});
+window.addEventListener('mouseup', (e) => {
+  if (e.button !== 0) return;
+  if (netMode) { netFireHeld = false; return; }
+  if (sim) { const me = sim.players.get('me'); if (me) me.input.fire = false; }
+});
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 let wheelT = 0;
 window.addEventListener('wheel', (e) => { // rodinha: troca de arma
   if (!locked) return;
   e.preventDefault();
   const now = performance.now(); if (now - wheelT < 110) return; wheelT = now;
+  if (netMode) { if (socket) socket.emit('3d_action', { t: 'cycle', dir: e.deltaY > 0 ? 1 : -1 }); return; }
   sim.cycleWeapon(sim.players.get('me'), e.deltaY > 0 ? 1 : -1);
 }, { passive: false });
 window.addEventListener('keydown', (e) => {
@@ -713,6 +836,18 @@ window.addEventListener('keydown', (e) => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   if (e.repeat) return;
   const me = sim.players.get('me'); if (!me) return;
+  if (e.code === 'KeyV') { S.cam = S.cam === '1' ? '3' : '1'; $('o-cam').value = S.cam; save(); return; }
+  if (netMode) {
+    if (!socket) return;
+    if (e.code === 'Space') socket.emit('3d_action', { t: 'jump' });
+    else if (e.code === 'KeyR') socket.emit('3d_action', { t: 'reload' });
+    else if (e.code === 'Digit1') socket.emit('3d_action', { t: 'weapon', w: 'primary' });
+    else if (e.code === 'Digit2') socket.emit('3d_action', { t: 'weapon', w: 'potion' });
+    else if (e.code === 'Digit3') socket.emit('3d_action', { t: 'weapon', w: 'knife' });
+    else if (e.code === 'Digit4') socket.emit('3d_action', { t: 'weapon', w: 'nade' });
+    else if (e.code === 'Digit5') socket.emit('3d_action', { t: 'weapon', w: 'smoke' });
+    return;
+  }
   if (e.code === 'Space') sim.jump(me);
   else if (e.code === 'KeyR') sim.reload(me);
   else if (e.code === 'Digit1') sim.setWeapon(me, 'primary');
@@ -720,7 +855,6 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'Digit3') sim.setWeapon(me, 'knife');
   else if (e.code === 'Digit4') sim.setWeapon(me, 'nade');
   else if (e.code === 'Digit5') sim.setWeapon(me, 'smoke');
-  else if (e.code === 'KeyV') { S.cam = S.cam === '1' ? '3' : '1'; $('o-cam').value = S.cam; save(); }
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; if (e.code === 'Tab') $('board').style.display = 'none'; });
 window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; $('board').style.display = 'none'; });
@@ -784,6 +918,7 @@ const WICON = { lancador: '🔫', estilingue: '🪃', mao: '✊', arco: '🏹', 
 // ---------- jogo ----------
 let prevPos = new Map(), acc = 0, last = performance.now(), fpsN = 0, fpsT = performance.now();
 function newGame() {
+  netMode = false;
   for (const a of avatars.values()) a.remove(); avatars.clear();
   for (const pool of [bulletMeshes, nadeMeshes, smokeMeshes, tombMeshes, pickupMeshes]) { for (const m of pool.values()) scene.remove(m); pool.clear(); }
   buildMap(S.map);
@@ -807,22 +942,90 @@ function newGame() {
 }
 const lerp = (a, b, k) => a + (b - a) * k;
 
+// ---------- multiplayer: entra numa partida em rede (dados vêm do servidor, sem física local) ----------
+function enterNetMatch(mapId) {
+  for (const a of avatars.values()) a.remove(); avatars.clear();
+  for (const pool of [bulletMeshes, nadeMeshes, smokeMeshes, tombMeshes, pickupMeshes]) { for (const m of pool.values()) scene.remove(m); pool.clear(); }
+  buildMap(mapId);
+  sim = new Sim3D(mapWalls, CFG.mapWidth, CFG.mapHeight, {});
+  prevPos = new Map();
+  netYaw = 0; netPitch = 0; netFireHeld = false;
+  netRecvT = 0; netInterval = 130;
+}
+const netRemapId = (id) => (id != null && id === myPid ? 'me' : id);
+function netRemapEvent(e) {
+  const r = Object.assign({}, e);
+  if (r.id != null) r.id = netRemapId(r.id);
+  if (r.by != null) r.by = netRemapId(r.by);
+  if (r.killer != null) r.killer = netRemapId(r.killer);
+  if (r.victim != null) r.victim = netRemapId(r.victim);
+  return r;
+}
+// aplica um snapshot do servidor no "sim" local (espelho de dados, sem calcular física aqui)
+function applySnapshot(snap, evs) {
+  if (!sim) return;
+  const now = performance.now();
+  const newPrev = new Map();
+  for (const p of sim.players.values()) newPrev.set(p.id, [p.x, p.y, p.z]);
+  for (const b of sim.bullets) newPrev.set('b' + b.id, [b.x, b.y, b.z]);
+  for (const g of sim.nades) newPrev.set('n' + g.id, [g.x, g.y, g.z]);
+  prevPos = newPrev;
+  sim.time = snap.time;
+  const newPlayers = new Map();
+  for (const sp of snap.players) {
+    const id = netRemapId(sp.id);
+    const p = {
+      id, name: sp.name, team: sp.team, bot: sp.bot,
+      x: sp.x, y: sp.y, z: sp.z, vx: sp.vx, vy: sp.vy, vz: sp.vz,
+      yaw: sp.yaw, pitch: sp.pitch, lives: sp.lives, alive: sp.alive,
+      weapon: sp.weapon, primary: sp.primary, grounded: sp.grounded,
+      ammo: { [sp.primary]: sp.ammo }, mags: { [sp.primary]: sp.mags },
+      reloadUntil: sp.reloadUntil, nades: sp.nades, smokes: sp.smokes, potions: sp.potions,
+      djReadyAt: sp.djReadyAt, k: sp.k, d: sp.d, a: sp.a, charge0: sp.charge0, fireReady: sp.fireReady,
+      protectUntil: sp.protectUntil, respawnAt: sp.respawnAt, deadAt: sp.deadAt, lastHitBy: sp.lastHitBy || {},
+      input: { fwd: 0, side: 0, fire: false }
+    };
+    if (id === 'me') { p.yaw = netYaw; p.pitch = netPitch; }
+    newPlayers.set(id, p);
+  }
+  sim.players = newPlayers;
+  sim.bullets = snap.bullets;
+  sim.nades = snap.nades;
+  sim.smokes = snap.smokes;
+  sim.tombs = snap.tombs;
+  sim.pickups = snap.pickups;
+  sim.hazard = snap.hazard; sim.sandK = snap.sandK; sim.lavaActive = snap.lavaActive; sim.lightOn = snap.lightOn;
+  sim.lamps = snap.lamps; sim.lavaPools = snap.lavaPools;
+  const prevRecvT = netRecvT; netRecvT = now;
+  if (prevRecvT) netInterval = Math.max(60, Math.min(400, now - prevRecvT));
+  for (const e of evs || []) handleEvent(netRemapEvent(e), now);
+}
+
 function frame(now) {
   const dtR = Math.min(0.1, (now - last) / 1000);
   acc += dtR; last = now;
   const me = sim.players.get('me');
+  if (!me) { requestAnimationFrame(frame); return; } // multiplayer: ainda não estou numa partida (na sala de espera)
   const f = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0), sd = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
   me.input.fwd = locked ? f : 0; me.input.side = locked ? sd : 0;
   if (!locked) me.input.fire = false;
-  while (acc >= STEP) {
-    prevPos = new Map();
-    for (const p of sim.players.values()) prevPos.set(p.id, [p.x, p.y, p.z]);
-    for (const b of sim.bullets) prevPos.set('b' + b.id, [b.x, b.y, b.z]);
-    for (const g of sim.nades) prevPos.set('n' + g.id, [g.x, g.y, g.z]);
-    for (const e of sim.step(STEP)) handleEvent(e, now);
-    acc -= STEP;
+  if (netMode) {
+    me.yaw = netYaw; me.pitch = netPitch;
+    if (locked && socket && now - netInputT > 50) {
+      netInputT = now;
+      socket.emit('3d_input', { fwd: me.input.fwd, side: me.input.side, fire: netFireHeld, yaw: netYaw, pitch: netPitch });
+    }
+  } else {
+    while (acc >= STEP) {
+      prevPos = new Map();
+      for (const p of sim.players.values()) prevPos.set(p.id, [p.x, p.y, p.z]);
+      for (const b of sim.bullets) prevPos.set('b' + b.id, [b.x, b.y, b.z]);
+      for (const g of sim.nades) prevPos.set('n' + g.id, [g.x, g.y, g.z]);
+      for (const e of sim.step(STEP)) handleEvent(e, now);
+      acc -= STEP;
+    }
   }
-  const k = acc / STEP;
+  const k = netMode ? Math.min(1, (now - netRecvT) / netInterval) : acc / STEP;
   const ip = (id, o) => { const p0 = prevPos.get(id); return p0 ? [lerp(p0[0], o.x, k), lerp(p0[1], o.y, k), lerp(p0[2], o.z, k)] : [o.x, o.y, o.z]; };
   const firstPerson = S.cam === '1';
   // tempestade de areia (deserto): fecha o fog pra reduzir a visibilidade de verdade

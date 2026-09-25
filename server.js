@@ -9,6 +9,7 @@ const { DEFAULT_CONFIG, mergeConfig } = require('./shared/config');
 const { Game } = require('./shared/game');
 const { MAPS } = require('./shared/maps');
 const Bots = require('./shared/bots');
+const { setup3D } = require('./server3d');
 
 // ---- Configuração (game-config.json na raiz sobrescreve os padrões) ----
 let CONFIG = DEFAULT_CONFIG;
@@ -416,6 +417,8 @@ io.on('connection', (socket) => {
     broadcastState(room);
   });
 });
+
+setup3D(io, CONFIG).catch((e) => console.error('[3d] falha ao iniciar multiplayer 3D:', e));
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Point Ball rodando em http://localhost:${PORT}`));

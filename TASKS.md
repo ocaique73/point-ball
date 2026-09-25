@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 25/09/2026 — v0.15.0 — demo 3D Three.js: todos os 7 mapas do 2D portados (deserto/neve/floresta/nave/portal/vulcão/escuro/cidade — 8 na verdade), sala de teste, pulo/velocidade/armas ajustáveis, poção, reabastecimento, indicador de bomba, explosão melhorada, cruz na lápide, reskins de mapa. Falta só o multiplayer (salas). Godot pausado por ora. Push pro GitHub pendente (ver observação abaixo). https://point-ball.onrender.com
+Última atualização: 25/09/2026 — v0.16.0 — demo 3D Three.js **completa**: todos os 8 mapas do 2D portados, sala de teste, pulo/velocidade/armas ajustáveis, poção, reabastecimento, indicador de bomba, explosão melhorada, cruz na lápide, reskins de mapa, e agora **multiplayer completo** (salas, senha, times, dono da sala, igual ao 2D). Godot pausado por ora. Push pro GitHub pendente (ver observação abaixo). https://point-ball.onrender.com
 
 ---
 
@@ -306,8 +306,8 @@
   - [x] Mapa **Vulcão**: poças de lava (sorteadas uma vez por partida, sempre espelhadas) que sobem e descem sozinhas — dói quando estão "ativas" (a troca de parede na erupção do 2D ficou de fora, pra simplificar)
   - [x] Mapa **Sala escura**: a luz apaga e acende sozinha de tempos em tempos
   - [x] Mapa **Cidade à noite**: escuro o tempo todo, só os postes iluminam — atirar num poste apaga ele por um tempo
-- [ ] Multiplayer (salas, senha, times) na demo 3D: ainda não começado — é o próximo bloco grande
-- [~] **Caique:** testar os blocos 1, 2 e 3
+- [x] v0.16.0 (Three.js): **multiplayer completo, igual ao 2D** — salas com código e senha, lista de salas abertas, escolha de time (azul/vermelho), dono da sala controla mapa/bots/nível, "Iniciar partida", reconexão se cair a conexão. Servidor autoritativo (`server3d.js`) roda o `Sim3D` como o 2D roda o `Game`, manda o estado pela rede a cada tick; o cliente só desenha o que o servidor manda (sem prever localmente — só a mira/câmera do mouse é instantânea, a posição do corpo segue o servidor com uma leve suavização). Sem previsão do lado do cliente foi decisão consciente pra simplificar.
+- [~] **Caique:** testar os blocos 1, 2, 3 e o multiplayer (v0.16.0)
 
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
 - [ ] Sons (tiro, batida na parede, acerto, faca, pulo)
