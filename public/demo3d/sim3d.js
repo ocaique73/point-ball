@@ -10,7 +10,11 @@ export const WEAPONS = {
   arco:       { name: 'Arco (flecha de borracha)', speed: 1500, minSpeed: 650, grav: 380, r: 5, bounces: 2, cd: 0.25, mag: 10, mags: 4, reload: 1.6, rest: 0.8, model: 'bow', arms: '2H', charge: 0.8, arrow: true },
   disco:      { name: 'Disco de borracha', speed: 620, grav: 0, r: 11, bounces: 7, cd: 1.1, mag: 8, mags: 4, reload: 1.8, rest: 1.0, model: 'disc', arms: 'throw', flat: true }
 };
-export const WEAPON_IDS = Object.keys(WEAPONS);
+// armas que dá pra escolher (o Caique deixou só estas); o tiro ficou 25% menor
+export const WEAPON_IDS = ['arco', 'estilingue', 'mao'];
+WEAPONS.arco.r = 3.75; WEAPONS.estilingue.r = 4.5; WEAPONS.mao.r = 6;
+export const MODES = ['tdm', 'rounds', 'ffa', 'koth', 'livre'];
+export const SPRINT = { k: 1.5, out: 0.18 }; // correr (Shift): 50% mais rápido, sem atirar; 0,18 s pra poder atirar depois
 
 export const P = {
   radius: 25, height: 64, eye: 56, chest: 40, speed: 260, airControl: 0.35,
@@ -230,10 +234,23 @@ export class Sim3D {
     // cidade à noite / sala escura: postes de luz e ciclo de escuridão
     this.lamps = (opts.lamps || []).map((p, i) => ({ x: p[0], z: p[1], i, offUntil: 0 }));
     this.lightOn = true; this.lightS = 0;
+    // modos (iguais ao 2D): tdm = mata-mata em equipe, rounds = eliminação, ffa = cada um por si, koth = rei da colina, livre = sem fim
+    this.mode = MODES.includes(opts.mode) ? opts.mode : 'livre';
+    this.killLimit = opts.killLimit || 0; this.matchTime = opts.matchTime || 0;
+    this.totalRounds = opts.rounds || 3; this.hillTarget = opts.hillTarget || 100;
+    this.roundTime = v(c.roundTime, 120); this.startDelay = v(c.roundStartDelay, 3); this.endDelay = v(c.roundEndDelay, 3);
+    this.score = { A: 0, B: 0 }; this.round = 1; this.result = null; this.hill = null; this.hillOwner = null;
+    this.phase = this.mode === 'rounds' ? 'countdown' : 'playing';
+    this.phaseUntil = this.mode === 'rounds' ? this.startDelay : 0;
+    this.hzStart = this.phaseUntil; // os eventos do mapa contam a partir do começo do round
   }
+  // quem é inimigo de quem (no "cada um por si" todo mundo é inimigo)
+  hostile(ownerId, team, q) { return this.mode === 'ffa' ? q.id !== ownerId : q.team !== team; }
+  canAct() { return this.phase === 'playing'; }
   // ciclo genérico do 2D: s=0 esperando, s=1 aviso (k vai de 0 a 1), s=2 acontecendo; n = segundos até começar
   cycle(key) {
-    const [interval, pre, dur] = this.hz[key], period = interval + dur, el = this.time;
+    const [interval, pre, dur] = this.hz[key], period = interval + dur, el = this.time - (this.hzStart || 0);
+    if (this.phase !== 'playing' || el < 0) return { idx: -1, s: 0, n: interval - Math.max(0, el), k: 0 };
     const idx = Math.floor(el / period), t = el - idx * period;
     if (t < interval - pre) return { idx, s: 0, n: interval - t, k: 0 };
     if (t < interval) return { idx, s: 1, n: interval - t, k: pre > 0 ? (t - (interval - pre)) / pre : 1 };
@@ -264,11 +281,11 @@ export class Sim3D {
   addPlayer(o) {
     const p = {
       id: o.id, name: o.name, team: o.team, bot: !!o.bot, level: o.level || 'amador',
-      primary: o.primary || 'lancador', x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, grounded: true,
+      primary: WEAPON_IDS.includes(o.primary) ? o.primary : o.bot ? WEAPON_IDS[Math.floor(Math.random() * WEAPON_IDS.length)] : 'arco', x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, grounded: true,
       yaw: o.team === 'A' ? 0 : Math.PI, pitch: 0, lives: this.P.lives, alive: true,
       weapon: 'primary', lastWeapon: 'primary', ammo: {}, mags: {}, reloadUntil: 0, fireReady: 0, charge0: 0,
       nades: 1, smokes: 1, potions: 1, drinkReady: 0, invulnUntil: 0, protectUntil: 0, respawnAt: 0, djReadyAt: 0, djUsed: false, jumps: 0,
-      k: 0, d: 0, a: 0, input: { fwd: 0, side: 0, fire: false }, ai: {}, lastHitBy: {}, deadAt: 0
+      k: 0, d: 0, a: 0, input: { fwd: 0, side: 0, fire: false, sprint: false }, ai: {}, lastHitBy: {}, deadAt: 0, sprinting: false, sprintOut: 0
     };
     for (const w of WEAPON_IDS) { p.ammo[w] = this.WEAPONS[w].mag; p.mags[w] = this.WEAPONS[w].mags; }
     this.players.set(p.id, p);
@@ -279,10 +296,17 @@ export class Sim3D {
   heightOf(p) { return this.P.height * (p.lives >= this.P.lives ? 1 : this.P.shrink); }
   spawn(p) {
     const r = this.P.radius + 6;
+    let bestD = -1;
     for (let i = 0; i < 60; i++) {
-      const x = p.team === 'A' ? 60 + Math.random() * 160 : this.W - 60 - Math.random() * 160;
+      // cada um por si: nasce em qualquer lugar, o mais longe possível dos outros
+      const ffa = this.mode === 'ffa';
+      const x = ffa ? 70 + Math.random() * (this.W - 140) : p.team === 'A' ? 60 + Math.random() * 160 : this.W - 60 - Math.random() * 160;
       const z = 80 + Math.random() * (this.H - 160);
-      if (!this.boxes.some((b) => this.circleBox(x, z, r, b)) && !this.holeAt(x, z, -r - 20)) { p.x = x; p.z = z; break; }
+      if (this.boxes.some((b) => this.circleBox(x, z, r, b)) || this.holeAt(x, z, -r - 20)) continue;
+      if (!ffa) { p.x = x; p.z = z; break; }
+      let d = 1e9; for (const q of this.players.values()) if (q !== p && q.alive) d = Math.min(d, Math.hypot(q.x - x, q.z - z));
+      if (d > bestD) { bestD = d; p.x = x; p.z = z; }
+      if (i > 20 && bestD > 500) break;
     }
     p.y = this.groundAt(p.x, p.z); p.vx = p.vy = p.vz = 0; p.grounded = true;
     p.lives = this.P.lives; p.alive = true; p.weapon = 'primary';
@@ -293,6 +317,8 @@ export class Sim3D {
     p.lastHitBy = {}; p.spin = null; p.slowUntil = 0;
   }
   weaponDef(p) { return this.WEAPONS[p.primary]; }
+  // troca a arma principal (menu Esc)
+  setPrimary(p, w) { if (!WEAPON_IDS.includes(w)) return; p.primary = w; p.reloadUntil = 0; p.charge0 = 0; }
   aimDir(p) { const c = Math.cos(p.pitch); return [Math.cos(p.yaw) * c, Math.sin(p.pitch), Math.sin(p.yaw) * c]; }
 
   setWeapon(p, w) {
@@ -434,11 +460,15 @@ export class Sim3D {
   // ---------- passo da simulação ----------
   step(dt) {
     this.time += dt;
+    this.updatePhase();
+    if (this.phase === 'matchEnd') { const ev = this.events; this.events = []; return ev; }
     for (const p of this.players.values()) this.updatePlayer(p, dt);
     this.updateBullets(dt);
     this.updateNades(dt);
     this.updatePickups();
     this.updateHazard(dt);
+    this.updateHill(dt);
+    this.checkEnd();
     this.smokes = this.smokes.filter((s) => this.time < s.until);
     this.tombs = this.tombs.filter((t) => this.time < t.until);
     const ev = this.events; this.events = [];
@@ -454,7 +484,7 @@ export class Sim3D {
         nades: p.nades, smokes: p.smokes, potions: p.potions, djReadyAt: p.djReadyAt || 0,
         k: p.k, d: p.d, a: p.a, charge0: p.charge0 || 0, fireReady: p.fireReady || 0,
         protectUntil: p.protectUntil || 0, respawnAt: p.respawnAt || 0, deadAt: p.deadAt || 0, lastHitBy: p.lastHitBy || {},
-        slowUntil: p.slowUntil || 0, spin: !!p.spin });
+        slowUntil: p.slowUntil || 0, spin: !!p.spin, sprinting: !!p.sprinting });
     }
     return {
       time: this.time, players,
@@ -467,7 +497,10 @@ export class Sim3D {
       tornado: this.tornado ? { x: this.tornado.x, z: this.tornado.z, s: this.tornado.s, k: this.tornado.k } : null,
       storm: this.storm ? { x: this.storm.x, z: this.storm.z, r: this.storm.r, s: this.storm.s, k: this.storm.k } : null,
       holes: this.holes, erupt: this.erupt && !this.erupt.done ? { pts: this.erupt.pts, r: this.erupt.r } : null,
-      lamps: this.lamps.map((l) => ({ i: l.i, x: l.x, z: l.z, offUntil: l.offUntil }))
+      lamps: this.lamps.map((l) => ({ i: l.i, x: l.x, z: l.z, offUntil: l.offUntil })),
+      mode: this.mode, phase: this.phase, phaseUntil: this.phaseUntil, hzStart: this.hzStart, score: this.score, round: this.round,
+      totalRounds: this.totalRounds, killLimit: this.killLimit, hillTarget: this.hillTarget, matchTime: this.matchTime,
+      hill: this.hill ? { x: this.hill.x, z: this.hill.z, r: this.hill.r, n: this.hill.n, pv: this.hill.pv, o: this.hillOwner } : null, result: this.result
     };
   }
 
@@ -475,7 +508,9 @@ export class Sim3D {
     if (p.reloadUntil && this.time >= p.reloadUntil) {
       p.reloadUntil = 0; p.ammo[p.primary] = this.weaponDef(p).mag; p.mags[p.primary]--;
     }
-    if (!p.alive) { if (this.time >= p.respawnAt) { this.spawn(p); this.events.push({ type: 'respawn', id: p.id }); } return; }
+    if (!p.alive) { if (this.mode !== 'rounds' && this.time >= p.respawnAt) { this.spawn(p); this.events.push({ type: 'respawn', id: p.id }); } return; }
+    // contagem antes do round / fim de round: ninguém anda nem atira
+    if (!this.canAct()) { p.vx = p.vz = 0; p.input.fire = false; p.charge0 = 0; if (p.bot) p.input.fwd = p.input.side = 0; }
     // pego pelo furacão: gira subindo dentro dele e depois é jogado longe
     if (p.spin) { this.updateSpin(p, dt); return; }
     if (p.bot) this.botThink(p, dt);
@@ -484,7 +519,11 @@ export class Sim3D {
     let wx = fx * p.input.fwd + rx * p.input.side, wz = fz * p.input.fwd + rz * p.input.side;
     const wl = Math.hypot(wx, wz); if (wl > 1) { wx /= wl; wz /= wl; }
     // tempestade de areia atrapalha andar; chuva congelante deixa bem devagar por um tempo
-    const spdK = ((this.hazard === 'sand' && this.sandActive) ? 0.72 : 1) * (this.time < (p.slowUntil || 0) ? p.slowF : 1);
+    // correr (Shift): só andando pra frente; enquanto corre não atira (igual BF/COD)
+    const sprint = !!p.input.sprint && p.input.fwd > 0 && this.canAct();
+    if (p.sprinting && !sprint) p.sprintOut = this.time + SPRINT.out;
+    p.sprinting = sprint; if (sprint) p.charge0 = 0;
+    const spdK = ((this.hazard === 'sand' && this.sandActive) ? 0.72 : 1) * (this.time < (p.slowUntil || 0) ? p.slowF : 1) * (sprint ? SPRINT.k : 1);
     wx *= this.P.speed * spdK; wz *= this.P.speed * spdK;
     // subindo a montanha de areia: fica mais devagar conforme a subida
     if (this.dunes && p.grounded && wl > 0.01) {
@@ -541,7 +580,8 @@ export class Sim3D {
     // lá embaixo é lava
     if (this.holes && p.y < -HOLE.kill) { this.lavaFall(p); return; }
     // atirar / usar
-    if (p.input.fire) this.useWeapon(p, false);
+    if (!this.canAct() || p.sprinting || this.time < p.sprintOut) { if (p.charge0 && !p.input.fire) p.charge0 = 0; }
+    else if (p.input.fire) this.useWeapon(p, false);
     else if (p.charge0) this.useWeapon(p, true); // soltou o botão do arco
   }
 
@@ -591,7 +631,7 @@ export class Sim3D {
     p.fireReady = this.time + this.P.knifeCd;
     this.events.push({ type: 'knife', id: p.id });
     for (const q of this.players.values()) {
-      if (!q.alive || q.team === p.team) continue;
+      if (!q.alive || !this.hostile(p.id, p.team, q)) continue;
       const dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz);
       if (d > this.radius(p) + this.P.knifeRange + this.radius(q) || Math.abs(q.y - p.y) > 50) continue;
       let da = Math.atan2(dz, dx) - p.yaw; da = Math.atan2(Math.sin(da), Math.cos(da));
@@ -850,7 +890,7 @@ export class Sim3D {
           if (b.bounces > b.max || (hit === 'floor' && Math.abs(b.vy) < 60 && b.grav)) dead = true;
         }
         for (const q of this.players.values()) {
-          if (!q.alive || q.team === b.team || this.time < q.protectUntil) continue;
+          if (!q.alive || !this.hostile(b.owner, b.team, q) || this.time < q.protectUntil) continue;
           const r = this.radius(q), h = this.heightOf(q);
           const cy = clamp(b.y, q.y + r * 0.5, q.y + h - r * 0.4);
           if ((b.x - q.x) ** 2 + (b.z - q.z) ** 2 + (b.y - cy) ** 2 < (r + b.r) ** 2) { this.damage(q, b.owner, b.kind); dead = true; break; }
@@ -897,7 +937,7 @@ export class Sim3D {
   explode(g) {
     this.events.push({ type: 'explode', x: g.x, y: g.y, z: g.z });
     for (const q of this.players.values()) {
-      if (!q.alive || q.team === g.team || this.time < q.protectUntil) continue;
+      if (!q.alive || !this.hostile(g.owner, g.team, q) || this.time < q.protectUntil) continue;
       const cy = clamp(g.y, q.y, q.y + this.heightOf(q));
       const d = Math.hypot(q.x - g.x, cy - g.y, q.z - g.z);
       if (d > this.P.nadeRadius + this.radius(q)) continue;
@@ -918,12 +958,102 @@ export class Sim3D {
     const a = this.players.get(by);
     if (v.lives <= 0) {
       v.alive = false; v.d++; v.respawnAt = this.time + this.P.respawn; v.deadAt = this.time; v.reloadUntil = 0; v.charge0 = 0;
-      if (a) a.k++;
+      if (a) { a.k++; if (this.mode === 'tdm' && a.team !== v.team) this.score[a.team]++; }
       for (const id in v.lastHitBy) if (id !== by && this.time - v.lastHitBy[id] < 10) { const h = this.players.get(id); if (h) h.a++; }
       // lápide com o nome no lugar da morte (o corpo some)
       this.tombs.push({ id: this.nextId++, x: v.x, y: v.y, z: v.z, name: v.name, team: v.team, until: this.time + this.P.tombTime, t0: this.time });
       this.events.push({ type: 'kill', killer: by, victim: v.id, weapon });
     } else this.events.push({ type: 'hit', by, victim: v.id, weapon });
+  }
+
+  // ---------- modos de jogo ----------
+  // troca de fase: contagem -> jogando -> fim do round -> (próximo round | fim da partida)
+  updatePhase() {
+    if (this.phase === 'countdown' && this.time >= this.phaseUntil) {
+      this.phase = 'playing'; this.hzStart = this.time;
+      this.events.push({ type: 'round_start', round: this.round });
+    } else if (this.phase === 'roundEnd' && this.time >= this.phaseUntil) {
+      const need = Math.floor(this.totalRounds / 2) + 1;
+      if (this.score.A >= need || this.score.B >= need || this.round >= this.totalRounds) {
+        const s = this.score, winner = s.A > s.B ? 'A' : s.B > s.A ? 'B' : null;
+        this.finish({ mode: 'rounds', winner, score: Object.assign({}, s) });
+      } else this.nextRound();
+    }
+  }
+  nextRound() {
+    this.round++;
+    this.bullets = []; this.nades = []; this.smokes = []; this.tombs = [];
+    if (this.holes) { this.holes = []; this.erupted = 0; this.erupt = null; }
+    this.tornado = null; this.storm = null; this.sandK = 0; this.sandS = 0; this.sandActive = false; this.lightOn = true; this.lightS = 0;
+    for (const L of this.lamps) L.offUntil = 0;
+    for (const p of this.players.values()) this.spawn(p);
+    this.phase = 'countdown'; this.phaseUntil = this.time + this.startDelay; this.hzStart = this.phaseUntil;
+    this.events.push({ type: 'round_countdown', round: this.round });
+  }
+  finish(res) {
+    if (this.phase === 'matchEnd') return;
+    const players = [...this.players.values()].map((p) => ({ id: p.id, name: p.name, team: p.team, k: p.k, d: p.d, a: p.a }));
+    this.result = Object.assign({ players, rounds: this.totalRounds, killLimit: this.killLimit, hillTarget: this.hillTarget }, res);
+    this.phase = 'matchEnd'; this.bullets = []; this.nades = [];
+    this.events.push(Object.assign({ type: 'match_end' }, this.result));
+  }
+  checkEnd() {
+    if (this.phase !== 'playing') return;
+    const el = this.time - this.hzStart;
+    if (this.mode === 'rounds') {
+      let aA = 0, aB = 0;
+      for (const p of this.players.values()) if (p.alive) { if (p.team === 'A') aA++; else aB++; }
+      const timeUp = el >= this.roundTime;
+      if (aA > 0 && aB > 0 && !timeUp) return;
+      const winner = timeUp && aA > 0 && aB > 0 ? null : aA > 0 ? 'A' : aB > 0 ? 'B' : null; // tempo acabou = empate
+      if (winner) this.score[winner]++;
+      this.phase = 'roundEnd'; this.phaseUntil = this.time + this.endDelay; this.bullets = [];
+      this.events.push({ type: 'round_end', winner, timeUp: timeUp && !!(aA && aB), score: Object.assign({}, this.score), round: this.round });
+      return;
+    }
+    if (this.mode === 'livre') return;
+    const timeUp = this.matchTime > 0 && el >= this.matchTime;
+    let reached = false;
+    if (this.mode === 'tdm') reached = this.killLimit > 0 && (this.score.A >= this.killLimit || this.score.B >= this.killLimit);
+    else if (this.mode === 'koth') reached = this.score.A >= this.hillTarget || this.score.B >= this.hillTarget;
+    else if (this.mode === 'ffa') for (const p of this.players.values()) if (this.killLimit > 0 && p.k >= this.killLimit) reached = true;
+    if (!timeUp && !reached) return;
+    let winner = null;
+    if (this.mode === 'ffa') {
+      const ranked = [...this.players.values()].sort((a, b) => b.k - a.k || a.d - b.d);
+      if (ranked.length && (ranked.length < 2 || ranked[0].k > ranked[1].k)) winner = ranked[0].id;
+    } else {
+      const a = Math.floor(this.score.A), b = Math.floor(this.score.B); winner = a > b ? 'A' : b > a ? 'B' : null;
+    }
+    this.finish({ mode: this.mode, winner, timeUp, score: { A: Math.floor(this.score.A), B: Math.floor(this.score.B) } });
+  }
+  // rei da colina: a área vale 30 s (depois mostra 3 s onde vai ser a próxima); ponto por segundo pra quem estiver sozinho nela
+  updateHill(dt) {
+    if (this.mode !== 'koth') return;
+    const c = this.cfg || {}, every = c.hillMoveEvery || 30, prev = c.hillPreview != null ? c.hillPreview : 3, R = c.hillRadius || 130;
+    const el = Math.max(0, this.time - this.hzStart);
+    let idx, n, pv = 0;
+    if (el < every) { idx = 0; n = every - el; }
+    else { const per = prev + every, e = el - every, t = e % per; idx = 1 + Math.floor(e / per); if (t < prev) { pv = 1; n = prev - t; } else n = per - t; }
+    if (!this.hill || this.hill.idx !== idx) {
+      let best = null;
+      for (let i = 0; i < 60; i++) {
+        const x = this.W * (0.32 + Math.random() * 0.36), z = R + this.wallT + 20 + Math.random() * (this.H - 2 * (R + this.wallT + 20));
+        if (this.boxes.some((b) => this.circleBox(x, z, 30, b)) || this.holeAt(x, z, -40)) continue;
+        if (this.hill && Math.hypot(x - this.hill.x, z - this.hill.z) < R * 1.6) continue;
+        best = { x, z }; break;
+      }
+      best = best || { x: this.W / 2, z: this.H / 2 };
+      this.hill = { idx, x: best.x, z: best.z, r: R };
+      this.events.push({ type: 'hill_move', x: best.x, z: best.z });
+    }
+    this.hill.n = n; this.hill.pv = pv;
+    if (pv || this.phase !== 'playing') { this.hillOwner = null; return; }
+    const inside = { A: 0, B: 0 };
+    for (const p of this.players.values()) if (p.alive && Math.hypot(p.x - this.hill.x, p.z - this.hill.z) <= R && p.y < this.groundAt(p.x, p.z) + 80) inside[p.team]++;
+    const owner = inside.A && !inside.B ? 'A' : inside.B && !inside.A ? 'B' : inside.A && inside.B ? 'X' : null;
+    if (owner === 'A' || owner === 'B') this.score[owner] += dt * (c.hillPointsPerSec || 1);
+    this.hillOwner = owner;
   }
 
   // ---------- bots ----------
@@ -932,7 +1062,7 @@ export class Sim3D {
     ai.t = (ai.t || 0) - dt; ai.aimT = (ai.aimT || 0) - dt;
     let target = null, best = 1e9, sees = false;
     for (const q of this.players.values()) {
-      if (!q.alive || q.team === p.team) continue;
+      if (!q.alive || !this.hostile(p.id, p.team, q)) continue;
       const d = Math.hypot(q.x - p.x, q.z - p.z), vis = this.canSee(p, q), score = d + (vis ? 0 : 700);
       if (score < best) { best = score; target = q; sees = vis; }
     }
@@ -945,6 +1075,12 @@ export class Sim3D {
       else if (target && sees) { fwd = dist > 350 ? 0.6 : dist < 150 ? -0.4 : 0; side = Math.random() < 0.5 ? 1 : -1; }
       else if (target) { fwd = 1; side = (Math.random() - 0.5) * 0.8; ai.wander = Math.atan2(target.z - p.z, target.x - p.x) + (Math.random() - 0.5) * 1.2; }
       else { ai.wander = Math.random() * Math.PI * 2; }
+      // rei da colina: sem inimigo à vista, vai pra colina (e fica rondando lá dentro)
+      if (this.mode === 'koth' && this.hill && !this.hill.pv && !(target && sees)) {
+        const dh = Math.hypot(this.hill.x - p.x, this.hill.z - p.z);
+        ai.wander = Math.atan2(this.hill.z - p.z, this.hill.x - p.x) + (dh < this.hill.r * 0.6 ? Math.PI * (Math.random() - 0.5) * 2 : (Math.random() - 0.5) * 0.5);
+        fwd = dh < this.hill.r * 0.5 ? (Math.random() < 0.5 ? 0.4 : 0) : 1; side = 0;
+      }
       ai.fwd = fwd; ai.side = side;
       if (Math.random() < L.jump) this.jump(p);
     }

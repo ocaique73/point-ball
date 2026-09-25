@@ -12,7 +12,26 @@ const MEMBER_GRACE = 2 * 60 * 1000;
 const MAX_PER_TEAM = 5;
 const ROOM_NAME_RE = /^[A-Za-z0-9]{1,5}$/;
 const VALID_LEVELS = ['iniciante', 'amador', 'pro'];
-const VALID_ROUND_TIMES = [0, 120, 180, 300, 600];
+const VALID_ROUND_TIMES = [0, 60, 120, 180, 300, 600]; // tempo da partida (mata-mata / colina); 0 = sem limite
+const VALID_MODES = ['tdm', 'rounds', 'ffa', 'koth'];
+const VALID_ROUNDS = [1, 2, 3, 5, 7];
+const VALID_KILLS = [20, 25, 30, 50];
+const VALID_HILL = [50, 75, 100, 150];
+const FLY_REGIONS = { gru: 'São Paulo, Brasil', gig: 'Rio de Janeiro, Brasil', eze: 'Buenos Aires, Argentina', scl: 'Santiago, Chile', bog: 'Bogotá, Colômbia', mia: 'Miami, EUA', iad: 'Virginia, EUA', ord: 'Chicago, EUA', dfw: 'Dallas, EUA', lax: 'Los Angeles, EUA', sjc: 'San Jose, EUA', sea: 'Seattle, EUA', ams: 'Amsterdã, Holanda', fra: 'Frankfurt, Alemanha', lhr: 'Londres, Inglaterra', cdg: 'Paris, França', mad: 'Madri, Espanha', nrt: 'Tóquio, Japão', sin: 'Singapura', syd: 'Sydney, Austrália' };
+// onde o servidor está (pra mostrar no Tab): SERVER_LOCATION > região do Fly.io > descobre pelo IP público
+let serverLocation = process.env.SERVER_LOCATION || (process.env.FLY_REGION && (FLY_REGIONS[process.env.FLY_REGION] || process.env.FLY_REGION)) || null;
+async function detectLocation() {
+  if (serverLocation) return;
+  try {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 4000);
+    const r = await fetch('http://ip-api.com/json/?fields=status,city,regionName,country', { signal: ctl.signal });
+    clearTimeout(t);
+    const j = await r.json();
+    if (j && j.status === 'success') serverLocation = [j.city, j.regionName, j.country].filter(Boolean).join(', ');
+  } catch (e) { /* sem internet ou bloqueado: fica "desconhecido" */ }
+  if (!serverLocation) serverLocation = process.env.RENDER ? 'Render (EUA)' : 'desconhecido';
+  console.log('[3d] servidor em:', serverLocation);
+}
 
 function pidOf(clientId) { return crypto.createHash('sha256').update(String(clientId)).digest('hex').slice(0, 12); }
 
@@ -22,11 +41,12 @@ async function setup3D(io, CFG) {
   const { Sim3D, portalLayout, forestTrees, CEILING_Y, BORDER_H } = await import('./public/demo3d/sim3d.js');
   const rooms = new Map();
   const key = (code) => '3d:' + code;
+  detectLocation();
 
   function teamCount(room, team) {
     let n = 0;
     for (const m of room.members.values()) if (m.status === 'team' && (!team || m.team === team)) n++;
-    if (!team || team === room.bots.team) n += room.bots.list.length;
+    for (const t of ['A', 'B']) if (!team || team === t) n += room.bots[t].length;
     return n;
   }
   function humansIn(room, team) {
@@ -34,20 +54,22 @@ async function setup3D(io, CFG) {
     for (const m of room.members.values()) if (m.status === 'team' && m.team === team) n++;
     return n;
   }
+  // bots nos dois times (dá pra ter bot no seu time também)
   function setBots(room, count, team) {
     team = team === 'A' ? 'A' : 'B';
     const max = MAX_PER_TEAM - humansIn(room, team);
     count = Math.max(0, Math.min(max, Math.floor(Number(count) || 0)));
-    const list = team === room.bots.team ? room.bots.list.slice(0, count) : [];
-    const names = Bots.randomNames(count - list.length, list.map((b) => b.name));
-    for (const name of names) { let i = 1; while (list.some((b) => b.id === 'bot-' + i)) i++; list.push({ id: 'bot-' + i, name }); }
-    room.bots = { team, list };
+    const list = room.bots[team].slice(0, count), other = room.bots[team === 'A' ? 'B' : 'A'];
+    const names = Bots.randomNames(count - list.length, list.concat(other).map((b) => b.name));
+    for (const name of names) { let i = 1; while (list.some((b) => b.id === 'bot-' + team + i)) i++; list.push({ id: 'bot-' + team + i, name }); }
+    room.bots[team] = list;
   }
 
   function publicState(room) {
     return {
       code: room.code, hasPassword: !!room.password, map: room.map, hostId: room.hostId, phase: room.phase,
-      botLevel: room.botLevel, roundTime: room.roundTime, bots: { team: room.bots.team, list: room.bots.list.map((b) => ({ id: b.id, name: b.name, team: room.bots.team, bot: true })) },
+      botLevel: room.botLevel, roundTime: room.roundTime, mode: room.mode, rounds: room.rounds, killLimit: room.killLimit, hillTarget: room.hillTarget,
+      bots: { A: room.bots.A.map((b) => ({ id: b.id, name: b.name, team: 'A', bot: true })), B: room.bots.B.map((b) => ({ id: b.id, name: b.name, team: 'B', bot: true })) },
       members: [...room.members.values()].map((m) => ({ id: m.pid, name: m.name, status: m.status, team: m.team, connected: m.connected, inMatch: m.inMatch }))
     };
   }
@@ -78,7 +100,7 @@ async function setup3D(io, CFG) {
     room.members.delete(cid);
     if (room.sim && m.inMatch) {
       const p = room.sim.players.get(m.pid);
-      if (p) p.input = { fwd: 0, side: 0, fire: false };
+      if (p) p.input = { fwd: 0, side: 0, fire: false, sprint: false };
     }
     pickHost(room);
     scheduleCloseIfEmpty(room);
@@ -111,22 +133,25 @@ async function setup3D(io, CFG) {
       cfg: CFG, portals, holes, borderH: BORDER_H[room.map] || null,
       terrain: room.map === 'deserto' ? 'dunes' : null,
       ceilingY: CEILING_Y[room.map] || null,
-      lamps: lampsFor(room.map, W, H)
+      lamps: lampsFor(room.map, W, H),
+      mode: room.mode, rounds: room.rounds, killLimit: room.killLimit, hillTarget: room.hillTarget,
+      matchTime: room.mode === 'rounds' ? 0 : room.roundTime
     });
-    room.matchInfo = { map: room.map, roundTime: room.roundTime, portalPairs };
+    room.matchInfo = { map: room.map, roundTime: room.mode === 'rounds' ? 0 : room.roundTime, portalPairs, mode: room.mode };
     for (const m of room.members.values()) {
       if (m.status === 'team' && m.connected) { sim.addPlayer({ id: m.pid, name: m.name, team: m.team }); m.inMatch = true; }
     }
-    for (const b of room.bots.list) sim.addPlayer({ id: b.id, name: b.name, team: room.bots.team, bot: true, level: room.botLevel });
+    for (const t of ['A', 'B']) for (const b of room.bots[t]) sim.addPlayer({ id: b.id, name: b.name, team: t, bot: true, level: room.botLevel });
     room.sim = sim;
     room.phase = 'match';
     const dt = 1 / CFG.tickRate;
     const every = Math.max(1, Math.round(CFG.tickRate / CFG.sendRate));
     let tick = 0, pending = [];
     room.loop = setInterval(() => {
-      if (room.roundTime > 0 && sim.time >= room.roundTime) { endMatch(room, 'time'); return; }
       const evs = sim.step(dt);
       if (evs.length) pending.push(...evs);
+      // acabou a partida (limite de abates / pontos / rounds / tempo): mostra o resultado uns segundos e volta pra sala
+      if (sim.result && !room.endTimer) room.endTimer = setTimeout(() => { room.endTimer = null; if (room.sim === sim) endMatch(room, sim.result); }, 4000);
       if (++tick % every === 0) {
         io.to(key(room.code)).emit('3d_state', { s: sim.snapshot(), e: pending });
         pending = [];
@@ -136,17 +161,12 @@ async function setup3D(io, CFG) {
     broadcastState(room);
   }
 
-  function endMatch(room, reason) {
-    let result = null;
-    if (reason === 'time' && room.sim) {
-      let kA = 0, kB = 0;
-      for (const p of room.sim.players.values()) { if (p.team === 'A') kA += p.k; else kB += p.k; }
-      result = { reason, killsA: kA, killsB: kB, winner: kA > kB ? 'A' : kB > kA ? 'B' : null };
-    }
+  function endMatch(room, result) {
+    if (room.endTimer) { clearTimeout(room.endTimer); room.endTimer = null; }
     if (room.loop) clearInterval(room.loop);
     room.loop = null; room.sim = null; room.phase = 'lobby'; room.matchInfo = null;
     for (const m of room.members.values()) m.inMatch = false;
-    io.to(key(room.code)).emit('3d_match_end', result);
+    io.to(key(room.code)).emit('3d_match_end', result || null);
     broadcastState(room);
   }
 
@@ -176,8 +196,8 @@ async function setup3D(io, CFG) {
       const room = {
         code, password: pass, map: MAPS[d.map] && d.map !== 'teste' ? d.map : 'deserto',
         hostId: null, creatorPid: pidOf(d.clientId), phase: 'lobby', members: new Map(),
-        sim: null, loop: null, closeTimer: null, bots: { team: 'B', list: [] }, botLevel: 'amador',
-        roundTime: 300
+        sim: null, loop: null, closeTimer: null, bots: { A: [], B: [] }, botLevel: 'amador',
+        roundTime: 300, mode: 'tdm', rounds: 3, killLimit: 30, hillTarget: 100
       };
       rooms.set(code, room);
       scheduleCloseIfEmpty(room);
@@ -230,8 +250,13 @@ async function setup3D(io, CFG) {
       const { room, m } = ctx(); if (!m || room.hostId !== m.pid || room.phase !== 'lobby') return;
       if (d && MAPS[d.map] && d.map !== 'teste') room.map = d.map;
       if (d && VALID_LEVELS.includes(d.botLevel)) room.botLevel = d.botLevel;
-      if (d && (d.bots != null || d.botTeam)) setBots(room, d.bots != null ? d.bots : room.bots.list.length, d.botTeam || room.bots.team);
+      if (d && d.botsA != null) setBots(room, d.botsA, 'A');
+      if (d && d.botsB != null) setBots(room, d.botsB, 'B');
       if (d && VALID_ROUND_TIMES.includes(Number(d.roundTime))) room.roundTime = Number(d.roundTime);
+      if (d && VALID_MODES.includes(d.mode)) room.mode = d.mode;
+      if (d && VALID_ROUNDS.includes(Number(d.rounds))) room.rounds = Number(d.rounds);
+      if (d && VALID_KILLS.includes(Number(d.killLimit))) room.killLimit = Number(d.killLimit);
+      if (d && VALID_HILL.includes(Number(d.hillTarget))) room.hillTarget = Number(d.hillTarget);
       broadcastState(room);
     });
 
@@ -239,8 +264,8 @@ async function setup3D(io, CFG) {
       const { room, m } = ctx(); if (!m) return;
       if (room.hostId !== m.pid) return socket.emit('3d_toast', 'Só o dono da sala pode iniciar.');
       if (room.phase !== 'lobby') return;
-      const ready = (t) => [...room.members.values()].filter((x) => x.status === 'team' && x.team === t && x.connected).length + (room.bots.team === t ? room.bots.list.length : 0);
-      if (ready('A') < 1 || ready('B') < 1) return socket.emit('3d_toast', 'Precisa de pelo menos 1 jogador (ou bot) em cada time.');
+      const ready = (t) => [...room.members.values()].filter((x) => x.status === 'team' && x.team === t && x.connected).length + room.bots[t].length;
+      if (room.mode === 'ffa' ? ready('A') + ready('B') < 2 : ready('A') < 1 || ready('B') < 1) return socket.emit('3d_toast', room.mode === 'ffa' ? 'Precisa de pelo menos 2 jogadores (ou bots).' : 'Precisa de pelo menos 1 jogador (ou bot) em cada time.');
       startMatch(room);
     });
 
@@ -263,7 +288,7 @@ async function setup3D(io, CFG) {
       const p = room.sim.players.get(m.pid); if (!p || !p.alive) return;
       p.input.fwd = Math.max(-1, Math.min(1, Number(d.fwd) || 0));
       p.input.side = Math.max(-1, Math.min(1, Number(d.side) || 0));
-      p.input.fire = !!d.fire;
+      p.input.fire = !!d.fire; p.input.sprint = !!d.sprint;
       if (Number.isFinite(d.yaw)) p.yaw = Number(d.yaw);
       if (Number.isFinite(d.pitch)) p.pitch = Math.max(-1.5, Math.min(1.5, Number(d.pitch)));
     });
@@ -275,7 +300,10 @@ async function setup3D(io, CFG) {
       else if (d.t === 'reload') room.sim.reload(p);
       else if (d.t === 'weapon' && typeof d.w === 'string') room.sim.setWeapon(p, d.w);
       else if (d.t === 'cycle') room.sim.cycleWeapon(p, d.dir > 0 ? 1 : -1);
+      else if (d.t === 'primary' && typeof d.w === 'string') room.sim.setPrimary(p, d.w);
     });
+    // ping: o navegador mede o tempo de ida e volta; aproveita pra dizer onde o servidor está
+    socket.on('3d_ping', (d, ack) => { if (typeof ack === 'function') ack({ loc: serverLocation || 'descobrindo...' }); });
 
     socket.on('3d_leave_room', () => {
       const { room, m } = ctx(); if (!m) return;
@@ -285,7 +313,7 @@ async function setup3D(io, CFG) {
     socket.on('disconnect', () => {
       const { room, m } = ctx(); if (!m) return;
       m.connected = false; m.socketId = null;
-      if (room.sim && m.inMatch) { const p = room.sim.players.get(m.pid); if (p) p.input = { fwd: 0, side: 0, fire: false }; }
+      if (room.sim && m.inMatch) { const p = room.sim.players.get(m.pid); if (p) p.input = { fwd: 0, side: 0, fire: false, sprint: false }; }
       m.graceTimer = setTimeout(() => removeMember(room, m.cid), MEMBER_GRACE);
       scheduleCloseIfEmpty(room);
       broadcastState(room);

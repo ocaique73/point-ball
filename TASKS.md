@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 25/09/2026 — v0.18.0 (Three.js): mapas refeitos a pedido do Caique (portais ovais de ver através, base na Lua, postes que iluminam, deserto com montanhas de areia, árvores grandes, vulcão com buracos de lava, gelo de verdade) + modo teste só pra você + sala reconecta sozinha. Antes, v0.17.0 (Three.js): **tempo limite de round** no multiplayer (dono escolhe: sem limite/2/3/5/10 min; acaba a partida quando zera, ganha quem tem mais abates, empate se empatar) e **sons** sintetizados (tiro, faca, acerto, abate, pulo, aterrissagem, ricochete, recarga, explosão, arremesso, pickup — com volume/direção por distância e botão de mudo em Controles). Godot pausado por ora. https://point-ball.onrender.com
+Última atualização: 25/09/2026 — v0.19.0 (Three.js): modos do 2D (rounds, mata-mata em equipe, cada um por si, rei da colina), killcam, correr no Shift, só arco/estilingue/bolinha, eventos de mapa com a regra dos 25 s, vulcão flutuante, mapas fechados até o teto, opções de som, ping no Tab, bots no seu time. Antes, v0.18.0 (Three.js): mapas refeitos a pedido do Caique (portais ovais de ver através, base na Lua, postes que iluminam, deserto com montanhas de areia, árvores grandes, vulcão com buracos de lava, gelo de verdade) + modo teste só pra você + sala reconecta sozinha. Antes, v0.17.0 (Three.js): **tempo limite de round** no multiplayer (dono escolhe: sem limite/2/3/5/10 min; acaba a partida quando zera, ganha quem tem mais abates, empate se empatar) e **sons** sintetizados (tiro, faca, acerto, abate, pulo, aterrissagem, ricochete, recarga, explosão, arremesso, pickup — com volume/direção por distância e botão de mudo em Controles). Godot pausado por ora. https://point-ball.onrender.com
 
 ---
 
@@ -323,6 +323,29 @@
 - [x] Godot: mecânica da **Sala escura** (luz apaga/acende sozinha, com lanterna fraca pra dar pra jogar) e do **Vulcão** (4 poças de lava espelhadas que alternam ativa/inativa e doem quando ativas).
 - [ ] Godot: falta a mecânica de **Portais** (teletransporte — é a mais complexa, precisa abrir buracos na parede e sincronizar posição/velocidade) e da **Cidade à noite** (postes que acendem/apagam ao levar tiro; hoje o mapa não é permanentemente escuro ainda).
 - [ ] Godot: **multiplayer do zero** (o Godot não usa o servidor Node/Socket.IO da versão web — precisa de servidor dedicado ENet, salas, times, dono da sala). Fase grande, ainda não iniciada.
+
+- [x] v0.19.0 (Three.js): segunda rodada de ajustes do Caique
+  - [x] Sala escura, Portais e base na Lua **fechados até o teto** (borda 360, teto ricocheteia tiro, alto pra não atrapalhar a 3ª pessoa); na base as paredes do casco vão até o vidro, com 2 fileiras de janela
+  - [x] Mapas escuros (sala escura e cidade): **sem nome e sem círculo no chão**; o nome só aparece com a mira em cima do inimigo e se ele estiver na luz
+  - [x] Deserto: montanha **só onde eram as paredes**. Borda com **parede invisível** (ninguém sai do mapa pulando)
+  - [x] Floresta: paredes de madeira sem árvore; **10 árvores altas espalhadas** (tronco bate tiro e gente, copa lá em cima)
+  - [x] Portais **azul com azul e rosa com rosa** (igual ao 2D)
+  - [x] **Eventos com a regra do 2D**: só começam 25 s depois e repetem a cada 25 s (ciclo espera → aviso → efeito); contador no topo ("Furacão em 12s")
+  - [x] Deserto: tempestade de areia **mais forte** (quase o mapa todo some, céu fica de areia, areia voando)
+  - [x] Neve: **chuva congelante** numa área sorteada de 1/5 do mapa; 2 s antes aparece a sombra da nuvem no chão; quem pega fica devagar (e azulado) por 1,5 s
+  - [x] Floresta: **furacão com visual** — nasce (2 s), anda pelo mapa, pega quem encosta, gira subindo e joga longe
+  - [x] Sala escura: **pisca 1 s antes de apagar**; 3 fileiras de lâmpadas no teto que clareiam a sala e piscam/apagam no evento
+  - [x] Vulcão: o mapa é uma **laje flutuando em cima de um vulcão gigante**; na erupção o chão racha (aviso), o fogo sobe e **fura** o chão — quem cai, cai dentro do vulcão. Só 2 erupções = **4 buracos** (2 de cada lado)
+  - [x] Cidade: postes **mais altos**, lâmpada **mais fácil de acertar**, luz um pouco menor
+  - [x] Tirei os **círculos verde/amarelo** (áreas de reabastecer) e o **nome das lápides**
+  - [x] Armas: só **arco (padrão), estilingue e bolinha na mão**; tiro **25% menor**, sempre **da cor do seu time**, com rastrinho
+  - [x] **Shift = correr** (50% mais rápido; correndo não atira, igual BF/COD)
+  - [x] "**Você pode morrer**": Sim por padrão; Não pra testar (só você, os bots morrem normal)
+  - [x] **Bots no seu time** (offline e no multiplayer: bots no Azul e no Vermelho)
+  - [x] **Modos do 2D**: Rounds (eliminação, 1/2/3/5/7 rounds, 2 min por round, contagem de 3 s), Mata-mata em equipe (20/25/30/50 abates), Cada um por si, Rei da colina (50/75/100/150 pontos, colina muda a cada 30 s com 3 s de aviso), e Treino livre (offline)
+  - [x] **Killcam**: quando alguém te mata, mostra o replay do último 1,5 s pelos olhos de quem te matou (dá pra desligar no menu)
+  - [x] **Tab**: ping até o servidor e onde ele fica (cidade/país; dá pra fixar com a variável SERVER_LOCATION)
+  - [x] **Sons**: tiro mais grave (flecha/bola de neve); na aba Sala de teste dá pra escolher entre 4 e 7 opções pra cada som, com prévia
 
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
 - [x] Sons (tiro, ricochete, acerto, faca, pulo, recarga, explosão) + botão de mudo — v0.17.0

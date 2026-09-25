@@ -3,3 +3,6 @@ game-config.local.json
 
 # Godot cache
 .godot/
+
+# pasta local do Claude Code
+.claude/
