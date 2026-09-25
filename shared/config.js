@@ -6,7 +6,7 @@
   else root.RC_CONFIG = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   const DEFAULT_CONFIG = {
-    cfgVersion: 10,         // muda quando os padrões mudam (o /teste descarta valores salvos antigos)
+    cfgVersion: 12,         // muda quando os padrões mudam (o /teste descarta valores salvos antigos)
 
     // ---- Mapa ----
     mapWidth: 1600,        // largura do mapa (unidades do mundo)
@@ -50,9 +50,28 @@
     bombRadius: 105,       // raio da explosão
     // ---- Fumaça (rodinha do mouse) — voa igual à bomba ----
     smokeCount: 1,         // fumaças por round / por vida
-    smokeRadius: 150,      // raio da cortina de fumaça
+    smokeRadius: 200,      // raio da cortina de fumaça
     smokeTime: 5,          // quanto tempo a fumaça dura (s)
     smokeCore: 0.55,       // parte do meio totalmente fechada (0.55 = 55% do raio); daí até a borda vai clareando
+
+    // ---- Cidade à noite ----
+    lampLight: 190,        // raio da luz de cada poste
+    lampOff: 8,            // tempo que o poste fica apagado depois de levar tiro (s)
+    nightSee: 110,         // no escuro você enxerga só isso em volta de você
+    nightDark: 0.9,        // quão escuro fica fora da luz (0-1)
+    // ---- Vulcão ----
+    lavaInterval: 25,      // a cada quantos segundos a lava sobe (s)
+    lavaWarn: 2,           // aviso piscando antes (s)
+    lavaDuration: 7,       // tempo com lava (s)
+    lavaPairs: 3,          // pares de poças (um de cada lado)
+    lavaRadius: 75,        // tamanho médio da poça
+    // ---- Nave espacial ----
+    meteorInterval: 25,    // a cada quantos segundos caem os 2 meteoros (s)
+    meteorWarn: 2,         // tempo mostrando onde vai cair (s)
+    holeRadius: 75,        // tamanho do buraco
+    holeTime: 18,          // tempo até o buraco ser consertado (s)
+    holeGrace: 1.1,        // tempo "segurando" na beira antes de cair (s)
+    holePull: 55,          // força que o buraco puxa (unid/s)
 
     // ---- Mata-mata ----
     respawnDelay: 2,       // tempo para renascer (s)
@@ -64,7 +83,8 @@
     hillMoveEvery: 40,     // a colina muda de lugar a cada (s)
 
     // ---- Portais (mapa 'portal') ----
-    portalFirstClosed: 7,  // fechados no começo do round (s)
+    portalFirstOpen: 3,    // abertos no começo do round, cima <-> baixo (s)
+    portalFirstClosed: 6,  // depois fecham por esse tempo (s), e aí começa o ciclo normal
     portalOpen: 10,        // tempo aberto (s)
     portalClosed: 5,       // tempo fechado entre as aberturas (s)
 
@@ -127,7 +147,7 @@
     tornadoSpeed: [50, 1000, 10], tornadoThrow: [80, 1000, 10], tornadoAirTime: [0.3, 3, 0.05],
     stormInterval: [5, 120, 1], stormWarn: [0, 5, 0.1], stormDuration: [0.5, 15, 0.1],
     stormBand: [0.05, 1, 0.05], bombCount: [0, 5, 1], bombRange: [80, 900, 10], bombFlight: [0.1, 2, 0.05],
-    bombFuse: [0, 3, 0.05], bombRadius: [20, 300, 5], smokeCount: [0, 5, 1], smokeRadius: [40, 400, 5], smokeTime: [0.5, 20, 0.5], smokeCore: [0.1, 1, 0.05], respawnDelay: [0, 10, 0.5], hillRadius: [40, 400, 5], hillPointsPerSec: [0.1, 10, 0.1], hillMoveEvery: [5, 300, 1], portalFirstClosed: [0, 60, 1], portalOpen: [1, 60, 1], portalClosed: [1, 60, 1], spawnProtect: [0, 5, 0.1], freezeSlow: [0.1, 1, 0.05], freezeTime: [0.1, 6, 0.1]
+    bombFuse: [0, 3, 0.05], bombRadius: [20, 300, 5], smokeCount: [0, 5, 1], smokeRadius: [40, 400, 5], smokeTime: [0.5, 20, 0.5], smokeCore: [0.1, 1, 0.05], lampLight: [60, 500, 5], lampOff: [0, 60, 0.5], nightSee: [0, 400, 5], nightDark: [0.3, 1, 0.01], lavaInterval: [5, 120, 1], lavaWarn: [0, 5, 0.1], lavaDuration: [0.5, 30, 0.5], lavaPairs: [1, 6, 1], lavaRadius: [20, 200, 5], meteorInterval: [5, 120, 1], meteorWarn: [0.5, 5, 0.1], holeRadius: [20, 200, 5], holeTime: [2, 120, 1], holeGrace: [0, 3, 0.05], holePull: [0, 300, 5], respawnDelay: [0, 10, 0.5], hillRadius: [40, 400, 5], hillPointsPerSec: [0.1, 10, 0.1], hillMoveEvery: [5, 300, 1], portalFirstOpen: [0, 30, 0.5], portalFirstClosed: [0, 60, 1], portalOpen: [1, 60, 1], portalClosed: [1, 60, 1], spawnProtect: [0, 5, 0.1], freezeSlow: [0.1, 1, 0.05], freezeTime: [0.1, 6, 0.1]
   };
 
   function mergeConfig(base, override) {

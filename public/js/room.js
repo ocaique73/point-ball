@@ -14,7 +14,7 @@
   let roundMsg = '';
   let gameMap = null;
   let pred = { init: false, x: 0, y: 0, fx: 1, fy: 0 };
-  let walls = [], wallsAll = [], openCache = { key: '', walls: [] };
+  let walls = [], wallsAll = [], openCache = { key: '', walls: [] }, curLay = 0;
   let lastPreview = null;
 
   const renderer = new PBRenderer($('game-canvas'));
@@ -98,7 +98,7 @@
   function setupGame(mapId) {
     gameMap = mapId;
     renderer.setup(config, mapId);
-    wallsAll = RC_GAME.buildWalls(mapId, config);
+    wallsAll = RC_GAME.buildWalls(mapId, config, 0); curLay = 0;
     openCache = { key: '', walls: wallsAll };
     walls = wallsAll;
     snaps = []; latest = null; pred.init = false; roundMsg = '';
@@ -278,7 +278,7 @@
   function handleEvent(e) {
     renderer.effect(e);
     if (e.type === 'kill') {
-      hud.addFeed(`<span class="t${teamOf(e.killer)}">${esc(nameOf(e.killer))}</span> ${e.weapon === 'knife' ? '🔪' : e.weapon === 'bomb' ? '💣' : '🔫'} <span class="t${teamOf(e.victim)}">${esc(nameOf(e.victim))}</span>`);
+      hud.addFeed(`${e.killer ? `<span class="t${teamOf(e.killer)}">${esc(nameOf(e.killer))}</span> ` : ''}${e.weapon === 'knife' ? '🔪' : e.weapon === 'bomb' ? '💣' : e.weapon === 'lava' ? '🌋' : e.weapon === 'fall' ? '🕳️' : '🔫'} <span class="t${teamOf(e.victim)}">${esc(nameOf(e.victim))}</span>`);
     } else if (e.type === 'round_end') {
       roundMsg = e.winner ? `<span class="t${e.winner}">Time ${e.winner === 'A' ? 'Azul' : 'Vermelho'}</span> venceu o round!<small>Azul ${e.score.A} x ${e.score.B} Vermelho</small>` : `${e.timeUp ? '⏱ Tempo esgotado — ' : ''}Round empatado!<small>Azul ${e.score.A} x ${e.score.B} Vermelho</small>`;
     } else if (e.type === 'round_start') {
@@ -365,6 +365,8 @@
     if ($('scr-game').classList.contains('hidden') || !latest || !config) return;
     const view = interpolated(now);
     if (!view) return;
+    const lay = (latest.hz && latest.hz.lay) || 0; // vulcão: paredes do meio mudaram de lugar
+    if (lay !== curLay) { curLay = lay; wallsAll = RC_GAME.buildWalls(gameMap, config, lay); openCache = { key: '', walls: wallsAll }; }
     if (latest.pt && latest.pt.o && latest.pt.pr) {
       const key = JSON.stringify(latest.pt.pr);
       if (openCache.key !== key) openCache = { key, walls: RC_GAME.openWalls(wallsAll, latest.pt.pr) };

@@ -27,7 +27,9 @@ window.PBRenderer = (function () {
       this.cfg = cfg;
       this.mapId = RC_MAPS.MAPS[mapId] ? mapId : 'deserto';
       this.map = RC_MAPS.MAPS[this.mapId];
-      this.walls = RC_GAME.buildWalls(this.mapId, cfg);
+      this.walls = RC_GAME.buildWalls(this.mapId, cfg, 0);
+      // paredes que mudam de lugar (vulcão): uma lista por desenho
+      this.layWalls = this.map.layouts ? this.map.layouts.map((_, i) => RC_GAME.buildWalls(this.mapId, cfg, i).filter((R) => R.mv)) : null;
       this.resize();
     }
 
@@ -46,6 +48,27 @@ window.PBRenderer = (function () {
       this.ox = (this.canvas.width - W * this.scale) / 2;
       this.oy = top + (availH - H * this.scale) / 2;
       this.buildBackground();
+      this.stars = this.map.space ? this.starCanvas(this.canvas.width, this.canvas.height, 7) : null;
+    }
+
+    // céu estrelado (fundo da nave e dentro dos buracos)
+    starCanvas(w, h, seed) {
+      const cv = document.createElement('canvas'); cv.width = Math.max(1, w); cv.height = Math.max(1, h);
+      const g = cv.getContext('2d'), rnd = seeded(seed);
+      g.fillStyle = '#03040b'; g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 3; i++) { // nebulosas fraquinhas
+        const x = rnd() * w, y = rnd() * h, R = (0.2 + rnd() * 0.3) * Math.max(w, h);
+        const grd = g.createRadialGradient(x, y, 0, x, y, R);
+        grd.addColorStop(0, ['rgba(90,60,170,.18)', 'rgba(30,110,170,.16)', 'rgba(170,50,120,.12)'][i]); grd.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = grd; g.fillRect(0, 0, w, h);
+      }
+      const n = Math.round(w * h / 1400);
+      for (let i = 0; i < n; i++) {
+        const b = rnd();
+        g.fillStyle = `rgba(255,255,255,${(0.25 + b * 0.75).toFixed(2)})`;
+        g.fillRect(rnd() * w, rnd() * h, b > 0.93 ? 2 : 1, b > 0.93 ? 2 : 1);
+      }
+      return cv;
     }
 
     buildBackground() {
@@ -89,6 +112,42 @@ window.PBRenderer = (function () {
             g.fillStyle = 'rgba(255,230,160,.05)';
             g.beginPath(); g.arc(x, y, 60 * s, 0, Math.PI * 2); g.fill();
           }
+        } else if (th.deco === 'city') {
+          if (i === 0) { // faixas de rua
+            g.strokeStyle = 'rgba(250,204,21,.18)'; g.lineWidth = 4 * s; g.setLineDash([26 * s, 22 * s]);
+            g.beginPath(); g.moveTo(0, H * 0.5); g.lineTo(W, H * 0.5); g.moveTo(W * 0.5, 0); g.lineTo(W * 0.5, H); g.stroke();
+            g.setLineDash([]);
+            g.fillStyle = 'rgba(255,255,255,.07)'; // faixa de pedestre
+            for (let k = 0; k < 6; k++) { g.fillRect(W * 0.47 + k * 16 * s, H * 0.3, 8 * s, 50 * s); g.fillRect(W * 0.47 + k * 16 * s, H * 0.66, 8 * s, 50 * s); }
+          }
+          g.fillStyle = 'rgba(0,0,0,.18)'; // manchas no asfalto
+          g.beginPath(); g.ellipse(x, y, 16 * s * k, 7 * s * k, rnd() * 3, 0, Math.PI * 2); g.fill();
+        } else if (th.deco === 'ash') {
+          g.fillStyle = 'rgba(15,8,6,.35)';
+          g.beginPath(); g.ellipse(x, y, 14 * s * k, 9 * s * k, rnd() * 3, 0, Math.PI * 2); g.fill();
+          g.fillStyle = 'rgba(255,110,40,.35)'; // brasinhas
+          g.beginPath(); g.arc(x + 10 * s, y - 6 * s, 1.8 * s, 0, Math.PI * 2); g.fill();
+          if (i < 10) { // rachaduras com brilho
+            g.strokeStyle = 'rgba(255,90,20,.22)'; g.lineWidth = 2 * s;
+            g.beginPath(); g.moveTo(x, y); let cx = x, cy = y;
+            for (let q = 0; q < 4; q++) { cx += (rnd() - 0.5) * 50 * s; cy += (rnd() - 0.5) * 50 * s; g.lineTo(cx, cy); }
+            g.stroke();
+          }
+        } else if (th.deco === 'panels') {
+          if (i === 0) { // placas de metal com rebites
+            const step = 80 * s;
+            g.strokeStyle = 'rgba(0,0,0,.28)'; g.lineWidth = Math.max(1, 2 * s);
+            g.beginPath();
+            for (let gx = 0; gx < W; gx += step) { g.moveTo(gx, 0); g.lineTo(gx, H); }
+            for (let gy = 0; gy < H; gy += step) { g.moveTo(0, gy); g.lineTo(W, gy); }
+            g.stroke();
+            g.fillStyle = 'rgba(255,255,255,.08)';
+            for (let gx = 0; gx < W; gx += step) for (let gy = 0; gy < H; gy += step) {
+              for (const [ox, oy] of [[6, 6], [step / s - 6, 6], [6, step / s - 6], [step / s - 6, step / s - 6]]) { g.beginPath(); g.arc(gx + ox * s, gy + oy * s, 1.6 * s, 0, Math.PI * 2); g.fill(); }
+            }
+            g.fillStyle = 'rgba(56,189,248,.06)'; // faixa luminosa no meio
+            g.fillRect(W * 0.5 - 30 * s, 0, 60 * s, H);
+          }
         } else if (th.deco === 'snow') {
           g.fillStyle = 'rgba(255,255,255,.9)';
           g.beginPath(); g.ellipse(x, y, 18 * s * k, 9 * s * k, 0, 0, Math.PI * 2); g.fill();
@@ -103,15 +162,16 @@ window.PBRenderer = (function () {
           g.beginPath(); g.arc(x - 5 * s * k, y - 5 * s * k, 9 * s * k, 0, Math.PI * 2); g.fill();
         }
       }
+      const skip = (R) => R.door || R.mv || R.space || R.lamp != null; // desenhados por cima (mudam)
       // muros
       for (const R of this.walls) {
-        if (R.door) continue; // portas dos portais são desenhadas por cima (mudam)
+        if (skip(R)) continue;
         const x = R.x * s, y = R.y * s, w = R.w * s, h = R.h * s;
         g.fillStyle = 'rgba(0,0,0,.22)';
         g.fillRect(x + 4 * s, y + 5 * s, w, h);
       }
       for (const R of this.walls) {
-        if (R.door) continue;
+        if (skip(R)) continue;
         const x = R.x * s, y = R.y * s, w = R.w * s, h = R.h * s;
         g.fillStyle = R.border ? th.border : th.wall;
         g.fillRect(x, y, w, h);
@@ -119,6 +179,20 @@ window.PBRenderer = (function () {
         g.strokeRect(x + 1, y + 1, w - 2, h - 2);
         g.fillStyle = 'rgba(255,255,255,.12)';
         g.fillRect(x, y, w, Math.max(1, 3 * s));
+      }
+      // cantos do casco da nave: espaço estrelado (por cima da borda) com a beirada do casco
+      const sp = this.walls.filter((R) => R.space);
+      if (sp.length) {
+        const st = this.starCanvas(W, H, 11);
+        for (const R of sp) g.drawImage(st, R.x * s, R.y * s, R.w * s, R.h * s, R.x * s, R.y * s, R.w * s, R.h * s);
+        g.fillStyle = th.border;
+        const t = c.wallThickness * s;
+        for (const R of sp) {
+          const x = R.x * s, y = R.y * s, w = R.w * s, h = R.h * s, right = R.x > c.mapWidth / 2, bottom = R.y > c.mapHeight / 2;
+          g.fillRect(right ? x - t : x + w, bottom ? y - t : y, t, h + t); // lado de dentro
+          g.fillRect(x, bottom ? y - t : y + h, w, t);
+        }
+        for (const R of sp) g.drawImage(st, R.x * s, R.y * s, R.w * s, R.h * s, R.x * s, R.y * s, R.w * s, R.h * s);
       }
       this.bg = bg;
     }
@@ -141,6 +215,9 @@ window.PBRenderer = (function () {
       else if (ev.type === 'hit') this.effects.push({ k: 'hit', x: ev.x, y: ev.y, t0: now, d: 700 });
       else if (ev.type === 'kill') this.effects.push({ k: 'kill', x: ev.x, y: ev.y, t0: now, d: 900 });
       else if (ev.type === 'explode') this.effects.push({ k: 'boom', x: ev.x, y: ev.y, t0: now, d: 550 });
+      else if (ev.type === 'fall') this.effects.push({ k: 'fall', x: ev.x, y: ev.y, t0: now, d: 900 });
+      else if (ev.type === 'sucked') this.effects.push({ k: 'sucked', x: ev.x, y: ev.y, t0: now, d: 350 });
+      else if (ev.type === 'lamp_off') this.effects.push({ k: 'lamp', x: ev.x, y: ev.y, t0: now, d: 500 });
     }
 
     // posição do mouse (tela) -> coordenadas do mapa
@@ -195,8 +272,8 @@ window.PBRenderer = (function () {
       const light = view.light || 0;
       const dark = light === 2 || (light === 1 && Math.floor(now / 70) % 2 === 0);
       g.setTransform(1, 0, 0, 1, 0, 0);
-      g.fillStyle = dark ? '#000' : '#070a10';
-      g.fillRect(0, 0, this.canvas.width, this.canvas.height);
+      if (this.stars && !dark) g.drawImage(this.stars, 0, 0);
+      else { g.fillStyle = dark ? '#000' : '#070a10'; g.fillRect(0, 0, this.canvas.width, this.canvas.height); }
 
       if (dark) {
         // escuro total: só o tiro aparece, um pouco claro, com rastro de fogo
@@ -221,23 +298,46 @@ window.PBRenderer = (function () {
       g.setTransform(s, 0, 0, s, this.ox, this.oy);
 
       // mortos primeiro, depois vivos, pulando por último (ficam por cima)
-      const ps = view.players.slice().sort((a, b) => (a.al - b.al) || ((a.jz >= 0) - (b.jz >= 0)));
+      let ps = view.players.slice().sort((a, b) => (a.al - b.al) || ((a.jz >= 0) - (b.jz >= 0)));
+      const hz = view.hz;
+      const meP = view.players.find((p) => p.id === view.meId);
+      const night = !!this.map.lamps;
+      let hidden = [];
+      if (night) { // cidade: inimigo só aparece na luz, perto de você ou no clarão do tiro
+        const myTm = meP ? meP.tm : null;
+        const vis = (p) => p.id === view.meId || (myTm && p.tm === myTm) || this.litAt(p, hz) ||
+          (meP && Math.hypot(p.x - meP.x, p.y - meP.y) < c.nightSee + 30) || (p.fc > 0 && p.fc > c.fireCooldown - 0.25);
+        hidden = ps.filter((p) => !vis(p)); ps = ps.filter(vis);
+      }
       if (this.map.portals) this.drawPortals(view.pt, now);
+      if (hz && hz.t === 'meteor') this.drawHoles(hz, now);
+      if (hz && hz.t === 'lava') this.drawLava(hz, now);
+      if (this.layWalls) this.drawMovingWalls(hz, now);
       if (view.hl) this.drawHill(view.hl, now);
-      if (view.hz && view.hz.t === 'storm') this.drawStorm(view.hz, now);
-      for (const p of ps) this.drawPlayer(p, p.id === view.meId, now);
+      if (hz && hz.t === 'storm') this.drawStorm(hz, now);
+      for (const p of ps) {
+        if (p.fa > 0 && p.al) { // caindo no buraco: treme e encolhe
+          const k = 1 - p.fa * 0.35, jx = (Math.random() - 0.5) * 4 * p.fa, jy = (Math.random() - 0.5) * 4 * p.fa;
+          g.save(); g.translate(p.x + jx, p.y + jy); g.scale(k, k); g.translate(-p.x, -p.y);
+          this.drawPlayer(p, p.id === view.meId, now); g.restore();
+        } else this.drawPlayer(p, p.id === view.meId, now);
+      }
+      if (night) {
+        this.drawNight(hz, meP, now);
+        if (meP && meP.tm) { // aliados no escuro: aparecem apagadinhos
+          g.globalAlpha = 0.55;
+          for (const p of ps) if (p.id !== view.meId && p.tm === meP.tm && p.al && !this.litAt(p, hz)) this.drawPlayer(p, false, now);
+          g.globalAlpha = 1;
+        }
+        if (view.hl) this.drawHill(view.hl, now);
+      }
+      if (hz && hz.t === 'meteor') this.drawMeteors(hz, now);
       if (view.hz && view.hz.t === 'tornado') this.drawTornado(view.hz, now);
       this.drawTrails(0.28);
       for (const b of view.bullets) this.drawBullet(b);
       for (const b of view.bombs || []) this.drawBomb(b, now);
-      // fumaça por cima de todo mundo (esconde quem está no meio); você continua se vendo
-      if (view.smokes && view.smokes.length) {
-        for (const m of view.smokes) this.drawSmoke(m, now);
-        const meP = ps.find((p) => p.id === view.meId && p.al);
-        if (meP && view.smokes.some((m) => Math.hypot(m[1] - meP.x, m[2] - meP.y) < c.smokeRadius + meP.r)) {
-          g.globalAlpha = 0.85; this.drawPlayer(meP, true, now); g.globalAlpha = 1;
-        }
-      }
+      // fumaça por cima de todo mundo — no meio ninguém aparece, nem você (a ideia é se perder nela)
+      if (view.smokes && view.smokes.length) for (const m of view.smokes) this.drawSmoke(m, now);
       if (view.bombAim) this.drawBombAim(view.bombAim);
       this.drawEffects(now);
       if (view.hz && view.hz.t === 'sand') this.drawSand(view.hz, now); // por cima de tudo
@@ -302,6 +402,153 @@ window.PBRenderer = (function () {
       g.globalAlpha = 0.55; g.fillText('👑', H.x, H.y); g.globalAlpha = 1;
       g.restore();
       g.textBaseline = 'alphabetic';
+    }
+
+    // ---------- Cidade à noite ----------
+    lampOnC(i, hz) { return !(hz && hz.lo && hz.lo[i] > 0); }
+    litAt(p, hz) {
+      const c = this.cfg, L = this.map.lamps;
+      for (let i = 0; i < L.length; i++) if (this.lampOnC(i, hz) && Math.hypot(L[i][0] * c.mapWidth - p.x, L[i][1] * c.mapHeight - p.y) < c.lampLight * 0.8) return true;
+      return false;
+    }
+    drawNight(hz, meP, now) {
+      const g = this.ctx, c = this.cfg, s = this.scale, L = this.map.lamps;
+      if (!this.nightCv || this.nightCv.width !== this.canvas.width || this.nightCv.height !== this.canvas.height) {
+        this.nightCv = document.createElement('canvas'); this.nightCv.width = this.canvas.width; this.nightCv.height = this.canvas.height;
+      }
+      const n = this.nightCv.getContext('2d');
+      n.globalCompositeOperation = 'source-over';
+      n.clearRect(0, 0, this.nightCv.width, this.nightCv.height);
+      n.fillStyle = `rgba(3,5,14,${c.nightDark})`;
+      n.fillRect(this.ox, this.oy, c.mapWidth * s, c.mapHeight * s);
+      n.globalCompositeOperation = 'destination-out';
+      const hole = (x, y, R, a) => {
+        const X = this.ox + x * s, Y = this.oy + y * s, RR = R * s;
+        const grd = n.createRadialGradient(X, Y, 0, X, Y, RR);
+        grd.addColorStop(0, `rgba(0,0,0,${a})`); grd.addColorStop(0.55, `rgba(0,0,0,${a})`); grd.addColorStop(1, 'rgba(0,0,0,0)');
+        n.fillStyle = grd; n.beginPath(); n.arc(X, Y, RR, 0, Math.PI * 2); n.fill();
+      };
+      L.forEach((l, i) => {
+        if (!this.lampOnC(i, hz)) return;
+        const flick = 0.96 + Math.sin(now / 90 + i * 7) * 0.04;
+        hole(l[0] * c.mapWidth, l[1] * c.mapHeight, c.lampLight * flick, 1);
+      });
+      if (meP && meP.al && c.nightSee > 0) hole(meP.x, meP.y, c.nightSee, 0.75);
+      g.save();
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.drawImage(this.nightCv, 0, 0);
+      g.restore();
+      // postes (sempre visíveis) com a luz amarelada
+      L.forEach((l, i) => {
+        const x = l[0] * c.mapWidth, y = l[1] * c.mapHeight, on = this.lampOnC(i, hz);
+        if (on) {
+          const grd = g.createRadialGradient(x, y, 0, x, y, c.lampLight);
+          grd.addColorStop(0, 'rgba(255,214,120,.16)'); grd.addColorStop(1, 'rgba(255,214,120,0)');
+          g.fillStyle = grd; g.beginPath(); g.arc(x, y, c.lampLight, 0, Math.PI * 2); g.fill();
+        }
+        g.fillStyle = '#111318'; g.fillRect(x - 8, y - 8, 16, 16);
+        g.strokeStyle = '#4b5263'; g.lineWidth = 2; g.strokeRect(x - 7, y - 7, 14, 14);
+        g.fillStyle = on ? '#fde68a' : '#3a3f4b';
+        g.beginPath(); g.arc(x, y, 5, 0, Math.PI * 2); g.fill();
+        if (!on && hz && hz.lo) { // tempo para acender de novo
+          g.strokeStyle = 'rgba(253,230,138,.6)'; g.lineWidth = 2;
+          g.beginPath(); g.arc(x, y, 12, -Math.PI / 2, -Math.PI / 2 + (1 - hz.lo[i] / c.lampOff) * Math.PI * 2); g.stroke();
+        }
+      });
+    }
+
+    // ---------- Vulcão ----------
+    drawLava(hz, now) {
+      if (!hz.p || hz.s === 0) return;
+      const g = this.ctx;
+      for (const [x, y, R] of hz.p) {
+        if (hz.s === 1) { // aviso: chão rachando e piscando
+          const blink = Math.floor(now / (hz.k > 0.6 ? 90 : 170)) % 2 === 0;
+          g.fillStyle = `rgba(255,90,20,${blink ? 0.28 : 0.1})`;
+          g.beginPath(); g.arc(x, y, R * (0.5 + hz.k * 0.5), 0, Math.PI * 2); g.fill();
+          g.setLineDash([10, 8]); g.strokeStyle = 'rgba(255,140,40,.85)'; g.lineWidth = 3;
+          g.beginPath(); g.arc(x, y, R, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+          continue;
+        }
+        const cool = hz.k > 0.85 ? (hz.k - 0.85) / 0.15 : 0; // no fim vai esfriando
+        const grd = g.createRadialGradient(x, y, 0, x, y, R);
+        grd.addColorStop(0, cool ? `rgba(255,190,80,${1 - cool * 0.6})` : '#ffe066');
+        grd.addColorStop(0.55, '#ff6a00');
+        grd.addColorStop(1, '#8f1d0a');
+        g.fillStyle = grd; g.beginPath(); g.arc(x, y, R, 0, Math.PI * 2); g.fill();
+        g.strokeStyle = '#2b140e'; g.lineWidth = 5; g.stroke();
+        for (let i = 0; i < 5; i++) { // bolhas
+          const a = i * 1.7 + x * 0.01, ph = (now / 700 + i * 0.37) % 1;
+          g.fillStyle = `rgba(255,236,160,${(0.7 * (1 - ph)).toFixed(2)})`;
+          g.beginPath(); g.arc(x + Math.cos(a) * R * 0.5, y + Math.sin(a) * R * 0.5, 3 + ph * 7, 0, Math.PI * 2); g.fill();
+        }
+      }
+    }
+    drawMovingWalls(hz, now) {
+      const g = this.ctx, th = this.map.theme;
+      const lay = hz && hz.lay != null ? hz.lay : 0;
+      for (const R of this.layWalls[lay] || []) {
+        g.fillStyle = 'rgba(0,0,0,.22)'; g.fillRect(R.x + 4, R.y + 5, R.w, R.h);
+        g.fillStyle = th.wall; g.fillRect(R.x, R.y, R.w, R.h);
+        g.strokeStyle = th.wallEdge; g.lineWidth = 2; g.strokeRect(R.x + 1, R.y + 1, R.w - 2, R.h - 2);
+        g.fillStyle = 'rgba(255,120,40,.25)'; g.fillRect(R.x, R.y, R.w, 3); // brilho de lava nas paredes que mexem
+      }
+      if (hz && hz.s === 1 && hz.nl != null && hz.nl !== lay) { // onde as paredes vão aparecer
+        g.setLineDash([8, 6]); g.lineWidth = 2;
+        g.strokeStyle = `rgba(255,140,40,${Math.floor(now / 150) % 2 ? 0.9 : 0.4})`;
+        for (const R of this.layWalls[hz.nl] || []) g.strokeRect(R.x, R.y, R.w, R.h);
+        g.setLineDash([]);
+      }
+    }
+
+    // ---------- Nave espacial ----------
+    drawHoles(hz, now) {
+      const g = this.ctx;
+      for (const [id, x, y, R, left] of hz.h || []) {
+        if (R <= 1) continue;
+        const rnd = seeded(id * 131 + 7), pts = [];
+        for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; pts.push([x + Math.cos(a) * R * (0.86 + rnd() * 0.22), y + Math.sin(a) * R * (0.86 + rnd() * 0.22)]); }
+        const path = () => { g.beginPath(); pts.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); g.closePath(); };
+        g.save(); path(); g.clip();
+        g.fillStyle = '#02030a'; g.fillRect(x - R * 1.2, y - R * 1.2, R * 2.4, R * 2.4);
+        const srnd = seeded(id * 17 + 3);
+        for (let i = 0; i < 40; i++) {
+          const b = srnd(), tw = 0.6 + 0.4 * Math.sin(now / 300 + i);
+          g.fillStyle = `rgba(255,255,255,${(0.3 + b * 0.7 * tw).toFixed(2)})`;
+          g.fillRect(x - R + srnd() * R * 2, y - R + srnd() * R * 2, b > 0.9 ? 2 : 1.2, b > 0.9 ? 2 : 1.2);
+        }
+        const grd = g.createRadialGradient(x, y, R * 0.4, x, y, R);
+        grd.addColorStop(0, 'rgba(0,0,0,0)'); grd.addColorStop(1, 'rgba(0,0,0,.7)');
+        g.fillStyle = grd; g.fillRect(x - R, y - R, R * 2, R * 2);
+        g.restore();
+        path();
+        g.strokeStyle = '#1b2230'; g.lineWidth = 7; g.stroke();
+        const hot = Math.max(0, 1 - (this.cfg.holeTime - left) / 3); // metal quente logo depois do impacto
+        g.strokeStyle = `rgba(255,${120 + hot * 80},40,${(0.25 + hot * 0.6).toFixed(2)})`; g.lineWidth = 2.5; g.stroke();
+        if (left < 2) { // sendo consertado
+          g.strokeStyle = `rgba(56,189,248,${Math.floor(now / 120) % 2 ? 0.8 : 0.3})`; g.lineWidth = 2; g.setLineDash([6, 6]);
+          g.beginPath(); g.arc(x, y, R + 8, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+        }
+      }
+    }
+    drawMeteors(hz, now) {
+      if (hz.s !== 1 || !hz.m) return;
+      const g = this.ctx, R = this.cfg.holeRadius, k = hz.k;
+      for (const [x, y] of hz.m) {
+        const blink = Math.floor(now / (k > 0.6 ? 80 : 160)) % 2 === 0;
+        g.fillStyle = `rgba(239,68,68,${blink ? 0.22 : 0.1})`; g.strokeStyle = 'rgba(239,68,68,.9)'; g.lineWidth = 3;
+        g.beginPath(); g.arc(x, y, R * (0.4 + k * 0.6), 0, Math.PI * 2); g.fill();
+        g.setLineDash([12, 8]); g.beginPath(); g.arc(x, y, R, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+        // meteoro chegando de cima com rastro de fogo
+        const dx = x < this.cfg.mapWidth / 2 ? -1 : 1;
+        const mx = x + dx * 320 * (1 - k), my = y - 560 * (1 - k), mr = 16 + 10 * (1 - k);
+        const tail = g.createLinearGradient(mx, my, mx + dx * 120, my - 210);
+        tail.addColorStop(0, 'rgba(255,200,80,.9)'); tail.addColorStop(1, 'rgba(255,80,20,0)');
+        g.strokeStyle = tail; g.lineWidth = mr * 1.4; g.lineCap = 'round';
+        g.beginPath(); g.moveTo(mx, my); g.lineTo(mx + dx * 120, my - 210); g.stroke();
+        g.fillStyle = '#5b4636'; g.beginPath(); g.arc(mx, my, mr, 0, Math.PI * 2); g.fill();
+        g.strokeStyle = '#ffb347'; g.lineWidth = 3; g.stroke();
+      }
     }
 
     // cortina de fumaça: [id, x, y, k 0..1]. Miolo totalmente fechado; da metade até a borda vai clareando até sumir
@@ -648,6 +895,17 @@ window.PBRenderer = (function () {
           grd.addColorStop(0, 'rgba(255,240,180,.95)'); grd.addColorStop(0.5, 'rgba(255,140,40,.7)'); grd.addColorStop(1, 'rgba(120,40,10,0)');
           g.fillStyle = grd;
           g.beginPath(); g.arc(e.x, e.y, R * (0.6 + t * 0.6), 0, Math.PI * 2); g.fill();
+        } else if (e.k === 'fall') { // espiral sumindo no buraco
+          g.strokeStyle = '#e2e8f0'; g.lineWidth = 3;
+          g.beginPath();
+          for (let a = 0; a < Math.PI * 4; a += 0.3) { const rr = (1 - t) * (30 - a * 2); g.lineTo(e.x + Math.cos(a + t * 8) * rr, e.y + Math.sin(a + t * 8) * rr); }
+          g.stroke();
+        } else if (e.k === 'sucked') {
+          g.strokeStyle = 'rgba(147,197,253,.9)'; g.lineWidth = 2;
+          g.beginPath(); g.arc(e.x, e.y, 12 * (1 - t) + 1, 0, Math.PI * 2); g.stroke();
+        } else if (e.k === 'lamp') {
+          g.fillStyle = '#fde68a';
+          for (let q = 0; q < 6; q++) { const a = q / 6 * Math.PI * 2; g.beginPath(); g.arc(e.x + Math.cos(a) * t * 26, e.y + Math.sin(a) * t * 26, 2.5, 0, Math.PI * 2); g.fill(); }
         } else if (e.k === 'spark') {
           g.strokeStyle = '#fff'; g.lineWidth = 2;
           g.beginPath(); g.arc(e.x, e.y, 4 + t * 14, 0, Math.PI * 2); g.stroke();
