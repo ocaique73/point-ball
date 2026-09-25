@@ -26,6 +26,8 @@
   .tA { color: #60a5fa; } .tB { color: #f87171; }
   .lost { opacity: .25; }
   #dead { position: fixed; left: 50%; top: 34%; transform: translate(-50%, -50%); font-size: 26px; font-weight: 800; text-shadow: 0 2px 6px #000; display: none; text-align: center; }
+  #bombwarn { position: fixed; left: 50%; top: 78px; transform: translate(-50%, 0); display: none; text-align: center; padding: 6px 14px; border-radius: 10px; background: rgba(120,20,10,.55); border: 1px solid #ef4444; color: #fecaca; font-weight: 800; }
+  #bombwarn .arrow { display: inline-block; margin-right: 6px; font-size: 18px; }
   #dead small { display: block; font-size: 15px; color: var(--muted); }
   /* tabela (Tab) */
   #board { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(720px, 94vw); display: none; background: rgba(8, 11, 18, .92); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
@@ -65,6 +67,7 @@
 <canvas id="view"></canvas>
 <canvas id="cross" width="240" height="240"></canvas>
 <div id="dead"></div>
+<div class="panel" id="bombwarn"></div>
 <div class="panel" id="top">POINT BALL 3D · THREE.JS · FPS <b id="fps">--</b> <span>(segue o Hz do monitor)</span></div>
 <div class="panel" id="hud">
   <div class="row"><span id="h-lives"></span></div>
@@ -84,10 +87,11 @@
     <div class="tab" data-pane="p-weapon">Arma</div>
     <div class="tab" data-pane="p-cross">Mira</div>
     <div class="tab" data-pane="p-keys">Controles</div>
+    <div class="tab" data-pane="p-test">Sala de teste</div>
   </div>
   <div class="pane on" id="p-game">
     <label class="field"><span>Câmera</span><select id="o-cam"><option value="1">1ª pessoa</option><option value="3">3ª pessoa (por trás)</option></select><span></span></label>
-    <label class="field"><span>Mapa</span><select id="o-map"><option value="deserto">Deserto</option><option value="neve">Neve</option><option value="floresta">Floresta</option><option value="nave">Nave espacial</option></select><span></span></label>
+    <label class="field"><span>Mapa</span><select id="o-map"><option value="deserto">Deserto</option><option value="neve">Neve</option><option value="floresta">Floresta</option><option value="nave">Nave espacial</option><option value="teste">Sala de teste</option></select><span></span></label>
     <label class="field"><span>Bots inimigos</span><select id="o-bots"><option>0</option><option>1</option><option selected>2</option><option>3</option><option>5</option></select><span></span></label>
     <label class="field"><span>Nível dos bots</span><select id="o-level"><option value="iniciante">Iniciante</option><option value="amador" selected>Amador</option><option value="pro">Profissional</option></select><span></span></label>
     <label class="field"><span>Sombras</span><select id="o-shadow"><option value="1">Ligadas</option><option value="0">Desligadas</option></select><span></span></label>
@@ -122,11 +126,22 @@
     <div class="keys">
       <kbd>WASD</kbd> andar · <kbd>Mouse</kbd> olhar e mirar · <kbd>Clique</kbd> atirar / usar<br>
       <kbd>Espaço</kbd> pular (sem limite) · <kbd>Espaço</kbd> de novo no ar = <b>pulo duplo</b> (carrega a cada 15 s, passa por cima dos muros)<br>
-      <kbd>1</kbd> arma principal · <kbd>3</kbd> faca · <kbd>4</kbd> granada · <kbd>5</kbd> fumaça · <kbd>Rodinha</kbd> troca de arma<br>
-      Granada e fumaça: aperte <kbd>4</kbd> ou <kbd>5</kbd> para pegar e <kbd>Clique</kbd> para jogar (vai para onde a mira aponta)<br>
+      <kbd>1</kbd> arma principal · <kbd>2</kbd> poção (1 vida) · <kbd>3</kbd> faca · <kbd>4</kbd> granada · <kbd>5</kbd> fumaça · <kbd>Rodinha</kbd> troca de arma<br>
+      Granada, fumaça e poção: aperte <kbd>2</kbd>/<kbd>4</kbd>/<kbd>5</kbd> para pegar e <kbd>Clique</kbd> para usar (poção bebe na hora, granada/fumaça vão para onde a mira aponta)<br>
       Arco: segure o <kbd>Clique</kbd> para puxar e solte para atirar<br>
-      <kbd>R</kbd> recarregar · <kbd>V</kbd> 1ª/3ª pessoa · <kbd>Tab</kbd> (segurar) placar · <kbd>Esc</kbd> este menu
+      <kbd>R</kbd> recarregar · <kbd>V</kbd> 1ª/3ª pessoa · <kbd>Tab</kbd> (segurar) placar · <kbd>Esc</kbd> este menu<br>
+      Áreas no chão reabastecem granada/fumaça (amarelo) e poção (verde) sozinhas quando você fica em cima
     </div>
+  </div>
+  <div class="pane" id="p-test">
+    <label class="field"><span>Modo teste (não morre)</span><select id="o-test"><option value="0">Desligado</option><option value="1">Ligado</option></select><span></span></label>
+    <label class="field"><span>Velocidade do personagem</span><input type="range" id="o-speed" min="120" max="480" step="10"><span class="v" id="v-o-speed"></span></label>
+    <label class="field"><span>Altura do pulo</span><input type="range" id="o-jumpv" min="200" max="650" step="10"><span class="v" id="v-o-jumpv"></span></label>
+    <label class="field"><span>Arma para ajustar</span><select id="o-tweapon"></select><span></span></label>
+    <label class="field"><span>Cadência (s entre tiros)</span><input type="range" id="o-tcd" min="0.1" max="2" step="0.05"><span class="v" id="v-o-tcd"></span></label>
+    <label class="field"><span>Tempo de recarga (s)</span><input type="range" id="o-treload" min="0.3" max="3" step="0.05"><span class="v" id="v-o-treload"></span></label>
+    <div class="wdesc">Escolha "Sala de teste" no mapa para jogar sozinho, sem bots e sem morrer. As mudanças aqui valem na hora.</div>
+    <div class="row2"><button class="btn" id="o-treset">Voltar valores padrão</button></div>
   </div>
   <div class="foot"><span class="wdesc">Bonecos: KayKit Adventurers por Kay Lousberg (CC0)</span><button class="btn primary" id="btn-play">Jogar</button></div>
 </div></div>

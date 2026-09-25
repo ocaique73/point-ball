@@ -9,10 +9,17 @@ jogando bomba e fumaça, levando tiro e morrendo. As pernas e os braços são an
 
 Controles: clique em **Jogar** (o mouse fica preso; **Esc** abre o menu) · WASD andar · mouse olhar/mirar · clique atirar/usar ·
 Espaço pular (sem limite) · Espaço de novo no ar = **pulo duplo** (carrega a cada 15 s, passa por cima dos muros) ·
-1 arma · 3 faca · 4 granada · 5 fumaça (pega e joga com o clique) · rodinha troca de arma · R recarregar · V 1ª/3ª pessoa · **Tab** placar.
+1 arma · **2 poção** (bebe e recupera 1 vida) · 3 faca · 4 granada · 5 fumaça (pega e usa/joga com o clique) · rodinha troca de arma ·
+R recarregar · V 1ª/3ª pessoa · **Tab** placar.
 
-Menu do **Esc**: câmera, mapa, bots, nível, sombras, FOV, arma principal (lançador, estilingue, bolinha na mão, arco, disco),
-sensibilidade do mouse e **editor de mira** (cor, tamanho, espessura, espaço, ponto, círculo de recarga e marcador de acerto em X).
+Áreas no chão reabastecem granada/fumaça (amarela) e poção (verde) sozinhas quando você fica em cima. Uma granada
+inimiga lançada mostra a distância e a direção no topo da tela pra você correr.
+
+Menu do **Esc**: câmera, mapa (inclui **Sala de teste**, um mapa aberto sem bots e sem morrer, feito pra treinar),
+bots, nível, sombras, FOV, arma principal (lançador, estilingue, bolinha na mão, arco, disco), sensibilidade do mouse,
+**editor de mira** (cor, tamanho, espessura, espaço, ponto, círculo de recarga e marcador de acerto em X) e a aba
+**Sala de teste**, que deixa ajustar ao vivo (sem reiniciar) a velocidade do personagem, a altura do pulo e a
+cadência/recarga de cada arma — e ligar o "modo teste" (não morre) em qualquer mapa, não só no de teste.
 
 ## Demo A — Three.js (web + PC)
 

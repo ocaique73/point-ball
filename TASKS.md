@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 24/09/2026 — v0.12.0 — demos 3D (Three.js e Godot) com física 3D, armas, menu, mira e placar (próximo passo: demos 3D em Three.js e Godot) em https://point-ball.onrender.com
+Última atualização: 25/09/2026 — v0.13.0 — demo 3D Three.js: sala de teste, pulo mais alto, velocidade/armas ajustáveis, poção de vida, áreas de reabastecimento, indicador de bomba, explosão melhorada, cruz na lápide (Godot pausado por ora) em https://point-ball.onrender.com
 
 ---
 
@@ -285,7 +285,16 @@
   - [x] **Mira editável**: cor, contorno, tamanho, espessura, espaço, ponto, círculo de recarga, marcador de acerto em X (amarelo = acerto, vermelho = abate)
   - [x] **Tab** (segurar): placar com abates, mortes, assistências e K/D
 - [x] v0.12.0 (Godot): as mesmas mudanças (física com CharacterBody3D/RigidBody3D, menu com abas, mira editável, placar, lápide, 5 armas, fumaça macia)
-- [~] **Caique:** testar as duas e escolher
+- [x] v0.13.0 (Three.js — foco só nesta demo por enquanto pra economizar, Godot fica pausado): "bloco 1" de ajustes
+  - [x] **Sala de teste**: opção "Sala de teste" no mapa (arena aberta, sem bots, sem morrer) + aba **Sala de teste** no menu Esc pra ajustar velocidade, altura do pulo, cadência e recarga de cada arma ao vivo (sem precisar reiniciar)
+  - [x] Pulo normal mais alto (jumpV 330→400)
+  - [x] Velocidade e cadência/recarga de cada arma agora são valores por partida (`Sim3D` aceita overrides), ajustáveis pela sala de teste
+  - [x] Poção de vida na tecla **2**: pega, bebe (animação `Use_Item`) e recupera 1 vida — uma poção por vida
+  - [x] Áreas no mapa que reabastecem granada/fumaça (amarela) e poção (verde) sozinhas
+  - [x] Indicador de granada inimiga: seta de direção + distância em metros no topo da tela
+  - [x] Explosão da bomba com visual mais suave (textura de fogo em gradiente + anel de onda de choque + faíscas), sem mais o icosaedro de baixo poli serrilhado
+  - [x] Lápide ganhou uma cruz de madeira em cima
+- [~] **Caique:** testar o bloco 1
 
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
 - [ ] Sons (tiro, batida na parede, acerto, faca, pulo)

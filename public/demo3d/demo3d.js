@@ -17,10 +17,11 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 // ---------- configurações (ficam salvas neste navegador) ----------
 const DEFAULTS = {
   cam: '1', map: 'deserto', bots: '2', level: 'amador', shadow: '1', fov: 80, weapon: 'lancador', sens: 1.6, invert: '0',
+  test: '0', speed: P.speed, jumpv: P.jumpV, tweapon: WEAPON_IDS[0], wtune: {},
   x: { color: '#ffffff', outline: '1', len: 7, thick: 2, gap: 4, dot: '1', dotsize: 2, ring: '1', ringr: 22, ringw: 2, hit: '1', hitlen: 10, hitw: 1 }
 };
 let S = JSON.parse(JSON.stringify(DEFAULTS));
-try { const saved = JSON.parse(localStorage.getItem('pb3d_settings') || 'null'); if (saved) { S = Object.assign(S, saved); S.x = Object.assign({}, DEFAULTS.x, saved.x || {}); } } catch (e) {}
+try { const saved = JSON.parse(localStorage.getItem('pb3d_settings') || 'null'); if (saved) { S = Object.assign(S, saved); S.x = Object.assign({}, DEFAULTS.x, saved.x || {}); S.wtune = Object.assign({}, saved.wtune || {}); } } catch (e) {}
 const save = () => { try { localStorage.setItem('pb3d_settings', JSON.stringify(S)); } catch (e) {} };
 
 // ---------- renderizador ----------
@@ -78,8 +79,31 @@ function wallTexture(color) {
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   return tex;
 }
+function buildTestRoom() {
+  const W = CFG.mapWidth, H = CFG.mapHeight;
+  mapGroup = new THREE.Group();
+  scene.background = new THREE.Color(0x9cc7ee);
+  scene.fog = new THREE.Fog(0x9cc7ee, 1400, 4200);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshStandardMaterial({ color: 0x3d4a5c, roughness: 0.9 }));
+  ground.rotation.x = -Math.PI / 2; ground.position.set(W / 2, 0, H / 2); ground.receiveShadow = true;
+  mapGroup.add(ground);
+  // só a borda, sem muros no meio: mapa aberto pra testar mira/movimento à vontade
+  mapWalls = [
+    { x: -20, y: -20, w: 20, h: H + 40, border: true }, { x: W, y: -20, w: 20, h: H + 40, border: true },
+    { x: -20, y: -20, w: W + 40, h: 20, border: true }, { x: -20, y: H, w: W + 40, h: 20, border: true }
+  ];
+  for (const R of mapWalls) {
+    const hgt = P.borderH;
+    const box = new THREE.Mesh(new THREE.BoxGeometry(R.w, hgt, R.h), mat(0x334155));
+    box.position.set(R.x + R.w / 2, hgt / 2, R.y + R.h / 2); box.castShadow = box.receiveShadow = true;
+    mapGroup.add(box);
+  }
+  scene.add(mapGroup);
+  sun.position.set(W / 2 - 600, 1500, H / 2 + 800); sun.target.position.set(W / 2, 0, H / 2);
+}
 function buildMap(mapId) {
   if (mapGroup) scene.remove(mapGroup);
+  if (mapId === 'teste') return buildTestRoom();
   const map = MAPS[mapId], th = map.theme, W = CFG.mapWidth, H = CFG.mapHeight;
   mapGroup = new THREE.Group();
   scene.background = new THREE.Color(map.space ? 0x03040b : 0x9cc7ee);
@@ -247,9 +271,13 @@ function makeTomb(t) {
   top.rotation.set(Math.PI / 2, 0, Math.PI / 2); top.position.y = 35;
   const cross1 = new THREE.Mesh(new THREE.BoxGeometry(3, 14, 1.5), dark); cross1.position.set(0, 24, 4.4);
   const cross2 = new THREE.Mesh(new THREE.BoxGeometry(9, 3, 1.5), dark); cross2.position.set(0, 27, 4.4);
-  for (const m of [base, slab, top]) { m.castShadow = true; m.receiveShadow = true; }
-  g.add(base, slab, top, cross1, cross2);
-  const label = textSprite(t.name, t.team === 'A' ? '#93c5fd' : '#fca5a5', 0.035); label.position.y = 58;
+  // cruz de madeira em cima da lápide
+  const wood = mat(0x6b4a2f);
+  const post = new THREE.Mesh(new THREE.BoxGeometry(2.6, 20, 2.6), wood); post.position.y = 49;
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(13, 2.6, 2.6), wood); beam.position.y = 53;
+  for (const m of [base, slab, top, post, beam]) { m.castShadow = true; m.receiveShadow = true; }
+  g.add(base, slab, top, cross1, cross2, post, beam);
+  const label = textSprite(t.name, t.team === 'A' ? '#93c5fd' : '#fca5a5', 0.035); label.position.y = 68;
   g.add(label);
   g.position.set(t.x, t.y, t.z);
   g.rotation.y = Math.random() * 0.6 - 0.3;
@@ -303,7 +331,13 @@ function updateSmoke(g, s, sim, dt) {
 }
 
 // ---------- tiros, granadas, efeitos ----------
-const bulletMeshes = new Map(), nadeMeshes = new Map(), smokeMeshes = new Map(), effects = [];
+const bulletMeshes = new Map(), nadeMeshes = new Map(), smokeMeshes = new Map(), pickupMeshes = new Map(), effects = [];
+function makePickup(u) {
+  const color = u.type === 'nade' ? 0xfacc15 : 0x4ade80;
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(u.r, 24), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }));
+  disc.rotation.x = -Math.PI / 2; disc.position.set(u.x, 0.6, u.z);
+  return disc;
+}
 const TEAM_EMIS = { A: 0x3b82f6, B: 0xef4444 }, TEAM_BALL = { A: 0x93c5fd, B: 0xfca5a5 };
 function makeBullet(b) {
   const team = b.team, m = new THREE.MeshStandardMaterial({ color: TEAM_BALL[team], emissive: TEAM_EMIS[team], emissiveIntensity: 1.8, roughness: 0.4 });
@@ -325,12 +359,42 @@ function makeNade(g) {
   const led = new THREE.Mesh(new THREE.SphereGeometry(2, 6, 4), new THREE.MeshBasicMaterial({ color: 0xff3b30 })); led.position.y = P.nadeR; grp.add(led); grp.userData.led = led;
   return grp;
 }
+// textura suave (gradiente radial) pro fogo da explosão — sem serrilhado de geometria de baixo poli
+const FIRE_TEX = (() => {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+  const g = cv.getContext('2d');
+  const grd = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grd.addColorStop(0, 'rgba(255,255,235,1)'); grd.addColorStop(0.22, 'rgba(255,210,90,.98)');
+  grd.addColorStop(0.5, 'rgba(255,130,35,.85)'); grd.addColorStop(0.78, 'rgba(255,70,20,.35)'); grd.addColorStop(1, 'rgba(255,60,20,0)');
+  g.fillStyle = grd; g.beginPath(); g.arc(64, 64, 64, 0, Math.PI * 2); g.fill();
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+})();
+const RING_TEX = (() => {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+  const g = cv.getContext('2d');
+  g.strokeStyle = 'rgba(255,220,150,.9)'; g.lineWidth = 10; g.beginPath(); g.arc(64, 64, 50, 0, Math.PI * 2); g.stroke();
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+})();
 function addEffect(e, now) {
   if (e.type === 'explode') {
-    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 2), new THREE.MeshBasicMaterial({ color: 0xffa640, transparent: true, opacity: 0.85, depthWrite: false }));
-    m.position.set(e.x, e.y, e.z); scene.add(m);
-    const light = new THREE.PointLight(0xffa640, 6, 500, 1.5); light.position.set(e.x, e.y + 20, e.z); scene.add(light);
-    effects.push({ m, light, t0: now, d: 450, r: P.nadeRadius });
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: FIRE_TEX, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    m.position.set(e.x, e.y + 6, e.z); m.scale.setScalar(1); scene.add(m);
+    const ring = new THREE.Sprite(new THREE.SpriteMaterial({ map: RING_TEX, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.9 }));
+    ring.position.set(e.x, e.y + 3, e.z); ring.scale.setScalar(1); scene.add(ring);
+    const light = new THREE.PointLight(0xffa640, 7, 550, 1.6); light.position.set(e.x, e.y + 30, e.z); scene.add(light);
+    // faíscas voando (pontinhos que sobem e apagam)
+    const sparkGeo = new THREE.BufferGeometry(); const N = 22, pos = new Float32Array(N * 3), vel = [];
+    for (let i = 0; i < N; i++) {
+      const a = Math.random() * Math.PI * 2, s = 60 + Math.random() * 220;
+      vel.push([Math.cos(a) * s, 120 + Math.random() * 220, Math.sin(a) * s]);
+      pos[i * 3] = e.x; pos[i * 3 + 1] = e.y + 6; pos[i * 3 + 2] = e.z;
+    }
+    sparkGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const sparks = new THREE.Points(sparkGeo, new THREE.PointsMaterial({ color: 0xffcf7a, size: 5, sizeAttenuation: true, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending }));
+    scene.add(sparks);
+    effects.push({ m, ring, light, sparks, sparkVel: vel, sparkPos: pos, t0: now, d: 480, r: P.nadeRadius });
   }
 }
 
@@ -432,6 +496,40 @@ bindSetting('o-weapon', 'weapon', null, () => { const me = sim.players.get('me')
 $('w-desc').textContent = WDESC[S.weapon];
 bindSetting('o-sens', 'sens');
 bindSetting('o-invert', 'invert');
+// ---------- sala de teste: velocidade / pulo / cadência / recarga ajustáveis ----------
+bindSetting('o-test', 'test', null, () => { if (sim) sim.godMode = S.test === '1'; });
+bindSetting('o-speed', 'speed', null, () => { if (sim) sim.setParam('speed', S.speed); });
+bindSetting('o-jumpv', 'jumpv', null, () => { if (sim) sim.setParam('jumpV', S.jumpv); });
+$('o-tweapon').innerHTML = WEAPON_IDS.map((w) => `<option value="${w}">${WEAPONS[w].name}</option>`).join('');
+function loadTweaponSliders() {
+  const base = WEAPONS[S.tweapon], ov = S.wtune[S.tweapon] || {};
+  const cd = ov.cd != null ? ov.cd : base.cd, rl = ov.reload != null ? ov.reload : base.reload;
+  $('o-tcd').value = cd; $('v-o-tcd').textContent = cd;
+  $('o-treload').value = rl; $('v-o-treload').textContent = rl;
+}
+$('o-tweapon').value = S.tweapon;
+loadTweaponSliders();
+$('o-tweapon').addEventListener('change', () => { S.tweapon = $('o-tweapon').value; save(); loadTweaponSliders(); });
+$('o-tcd').addEventListener('input', () => {
+  const v = Number($('o-tcd').value); $('v-o-tcd').textContent = v;
+  S.wtune[S.tweapon] = Object.assign({}, S.wtune[S.tweapon], { cd: v }); save();
+  if (sim) sim.setWeaponParam(S.tweapon, 'cd', v);
+});
+$('o-treload').addEventListener('input', () => {
+  const v = Number($('o-treload').value); $('v-o-treload').textContent = v;
+  S.wtune[S.tweapon] = Object.assign({}, S.wtune[S.tweapon], { reload: v }); save();
+  if (sim) sim.setWeaponParam(S.tweapon, 'reload', v);
+});
+$('o-treset').addEventListener('click', () => {
+  S.speed = DEFAULTS.speed; S.jumpv = DEFAULTS.jumpv; S.wtune = {}; save();
+  $('o-speed').value = S.speed; $('v-o-speed').textContent = S.speed;
+  $('o-jumpv').value = S.jumpv; $('v-o-jumpv').textContent = S.jumpv;
+  loadTweaponSliders();
+  if (sim) {
+    sim.setParam('speed', S.speed); sim.setParam('jumpV', S.jumpv);
+    for (const k of WEAPON_IDS) { sim.setWeaponParam(k, 'cd', WEAPONS[k].cd); sim.setWeaponParam(k, 'reload', WEAPONS[k].reload); }
+  }
+});
 for (const k of ['color', 'outline', 'len', 'thick', 'gap', 'dot', 'dotsize', 'ring', 'ringr', 'ringw', 'hit', 'hitlen', 'hitw']) bindSetting('x-' + k, k, S.x);
 $('x-reset').addEventListener('click', () => {
   S.x = Object.assign({}, DEFAULTS.x); save();
@@ -481,7 +579,8 @@ window.addEventListener('keydown', (e) => {
   const me = sim.players.get('me'); if (!me) return;
   if (e.code === 'Space') sim.jump(me);
   else if (e.code === 'KeyR') sim.reload(me);
-  else if (e.code === 'Digit1' || e.code === 'Digit2') sim.setWeapon(me, 'primary');
+  else if (e.code === 'Digit1') sim.setWeapon(me, 'primary');
+  else if (e.code === 'Digit2') sim.setWeapon(me, 'potion');
   else if (e.code === 'Digit3') sim.setWeapon(me, 'knife');
   else if (e.code === 'Digit4') sim.setWeapon(me, 'nade');
   else if (e.code === 'Digit5') sim.setWeapon(me, 'smoke');
@@ -505,24 +604,39 @@ function renderBoard() {
 }
 
 // ---------- HUD ----------
-const SLOT_NAMES = { primary: '1', knife: '3', nade: '4', smoke: '5' };
+const SLOT_NAMES = { primary: '1', potion: '2', knife: '3', nade: '4', smoke: '5' };
 function hud(me) {
   let h = ''; for (let i = 0; i < P.lives; i++) h += `<span class="${i < me.lives && me.alive ? '' : 'lost'}">❤️</span>`;
   $('h-lives').innerHTML = h;
-  const w = WEAPONS[me.primary];
+  const w = sim.WEAPONS[me.primary];
   if (me.weapon === 'primary') { $('h-ammo').textContent = me.reloadUntil ? 'recarregando...' : `${me.ammo[me.primary]}/${w.mag}`; $('h-mags').textContent = `· pentes ${me.mags[me.primary]}`; }
   else if (me.weapon === 'knife') { $('h-ammo').textContent = 'FACA'; $('h-mags').textContent = ''; }
+  else if (me.weapon === 'potion') { $('h-ammo').textContent = 'POÇÃO'; $('h-mags').textContent = '· clique para beber'; }
   else { $('h-ammo').textContent = me.weapon === 'nade' ? 'GRANADA' : 'FUMAÇA'; $('h-mags').textContent = '· clique para jogar'; }
   $('h-weapon').textContent = me.weapon === 'primary' ? w.name : '';
   const dj = sim.time >= me.djReadyAt;
   $('h-jump').innerHTML = dj ? '🦘 Pulo duplo <b style="color:#86efac">PRONTO</b> (Espaço 2x)' : `🦘 Pulo duplo em ${Math.ceil(me.djReadyAt - sim.time)}s`;
   const slot = (k, name, off) => `<div class="slot ${me.weapon === k ? 'on' : ''} ${off ? 'off' : ''}"><b>${SLOT_NAMES[k]}</b>${name}</div>`;
-  $('slots').innerHTML = slot('primary', w.name.split(' ')[0]) + slot('knife', 'Faca') + slot('nade', `Granada ×${me.nades}`, !me.nades) + slot('smoke', `Fumaça ×${me.smokes}`, !me.smokes);
+  $('slots').innerHTML = slot('primary', w.name.split(' ')[0]) + slot('potion', `Poção ×${me.potions}`, !me.potions || me.lives >= P.lives) + slot('knife', 'Faca') + slot('nade', `Granada ×${me.nades}`, !me.nades) + slot('smoke', `Fumaça ×${me.smokes}`, !me.smokes);
   if (!me.alive) {
     const killer = [...sim.players.values()].find((p) => me.lastHitBy[p.id] && Math.abs(me.lastHitBy[p.id] - me.deadAt) < 0.05);
     $('dead').style.display = 'block';
     $('dead').innerHTML = `Você foi eliminado${killer ? ' por <span class="t' + killer.team + '">' + esc(killer.name) + '</span>' : ''}<small>renascendo em ${Math.max(0, Math.ceil(me.respawnAt - sim.time))}s</small>`;
   } else $('dead').style.display = 'none';
+  // indicador de granada inimiga: distância em metros e seta de direção pra correr
+  let nearest = null, best = 1e9;
+  for (const g of sim.nades) {
+    if (g.smoke || g.team === me.team) continue;
+    const d = Math.hypot(g.x - me.x, g.z - me.z);
+    if (d < best) { best = d; nearest = g; }
+  }
+  const bw = $('bombwarn');
+  if (nearest && me.alive && best < 700) {
+    const ang = Math.atan2(nearest.z - me.z, nearest.x - me.x) - me.yaw;
+    const arrow = ['⬆️', '↖️', '⬅️', '↙️', '⬇️', '↘️', '➡️', '↗️'][Math.round((((ang + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2)) * 8) % 8];
+    bw.style.display = 'block';
+    bw.innerHTML = `<span class="arrow">${arrow}</span>💣 granada a ${Math.round(best / 10)}m — corra!`;
+  } else bw.style.display = 'none';
 }
 function feed(html) {
   const d = document.createElement('div'); d.innerHTML = html; $('feed').prepend(d);
@@ -535,11 +649,16 @@ const WICON = { lancador: '🔫', estilingue: '🪃', mao: '✊', arco: '🏹', 
 let prevPos = new Map(), acc = 0, last = performance.now(), fpsN = 0, fpsT = performance.now();
 function newGame() {
   for (const a of avatars.values()) a.remove(); avatars.clear();
-  for (const pool of [bulletMeshes, nadeMeshes, smokeMeshes, tombMeshes]) { for (const m of pool.values()) scene.remove(m); pool.clear(); }
+  for (const pool of [bulletMeshes, nadeMeshes, smokeMeshes, tombMeshes, pickupMeshes]) { for (const m of pool.values()) scene.remove(m); pool.clear(); }
   buildMap(S.map);
-  sim = new Sim3D(mapWalls, CFG.mapWidth, CFG.mapHeight);
+  const isTestRoom = S.map === 'teste';
+  sim = new Sim3D(mapWalls, CFG.mapWidth, CFG.mapHeight, {
+    godMode: isTestRoom || S.test === '1',
+    params: { speed: S.speed, jumpV: S.jumpv },
+    weapons: S.wtune
+  });
   sim.addPlayer({ id: 'me', name: 'Você', team: 'A', primary: S.weapon });
-  const n = Number(S.bots), names = BOTS.randomNames(n);
+  const n = isTestRoom ? 0 : Number(S.bots), names = BOTS.randomNames(n);
   for (let i = 0; i < n; i++) sim.addPlayer({ id: 'bot' + i, name: names[i], team: 'B', bot: true, level: S.level });
   prevPos = new Map();
 }
@@ -575,6 +694,14 @@ function frame(now) {
     a.model.scale.setScalar(a.baseScale * sc); a.ring.scale.setScalar(sc);
     a.root.visible = p.alive && !(p.id === 'me' && firstPerson) && !(sim.time < p.protectUntil && Math.floor(now / 100) % 2 === 0);
     a.update(p, sim, dtR, now);
+  }
+  // áreas de reabastecimento (granada/fumaça e poção)
+  for (const u of sim.pickups) {
+    let m = pickupMeshes.get(u.id);
+    if (!m) { m = makePickup(u); scene.add(m); pickupMeshes.set(u.id, m); }
+    const ready = sim.time >= u.cdUntil;
+    m.material.opacity = ready ? 0.55 + Math.sin(now / 260) * 0.15 : 0.12;
+    m.position.y = 0.6;
   }
   // lápides
   const tseen = new Set();
@@ -614,8 +741,22 @@ function frame(now) {
   for (const [id, m] of smokeMeshes) if (!sseen.has(id)) { scene.remove(m); smokeMeshes.delete(id); }
   for (let i = effects.length - 1; i >= 0; i--) {
     const e = effects[i], t = (now - e.t0) / e.d;
-    if (t >= 1) { scene.remove(e.m); scene.remove(e.light); effects.splice(i, 1); continue; }
-    e.m.scale.setScalar(e.r * (0.4 + t * 0.7)); e.m.material.opacity = 0.85 * (1 - t); e.light.intensity = 6 * (1 - t);
+    if (t >= 1) {
+      scene.remove(e.m); scene.remove(e.light);
+      if (e.ring) scene.remove(e.ring); if (e.sparks) scene.remove(e.sparks);
+      effects.splice(i, 1); continue;
+    }
+    e.m.scale.setScalar(e.r * 0.55 * (0.35 + t * 0.9)); e.m.material.opacity = 0.95 * (1 - t) ** 1.3; e.light.intensity = 7 * (1 - t);
+    if (e.ring) { e.ring.scale.setScalar(e.r * 1.4 * (0.15 + t * 1.1)); e.ring.material.opacity = 0.85 * (1 - t); }
+    if (e.sparks) {
+      const dt2 = 1 / 60, pos = e.sparkPos;
+      for (let k = 0; k < e.sparkVel.length; k++) {
+        const v = e.sparkVel[k]; v[1] -= 500 * dt2;
+        pos[k * 3] += v[0] * dt2; pos[k * 3 + 1] += v[1] * dt2; pos[k * 3 + 2] += v[2] * dt2;
+      }
+      e.sparks.geometry.attributes.position.needsUpdate = true;
+      e.sparks.material.opacity = Math.max(0, 1 - t * 1.2);
+    }
   }
 
   // câmera
@@ -648,7 +789,7 @@ function frame(now) {
   for (const k2 in VIEW) VIEW[k2].visible = firstPerson && me.alive && k2 === wkey;
   const vg = VIEW[wkey];
   if (vg) {
-    const w = WEAPONS[me.primary], reloading = me.weapon === 'primary' && me.reloadUntil;
+    const w = sim.WEAPONS[me.primary], reloading = me.weapon === 'primary' && me.reloadUntil;
     const charge = me.charge0 ? Math.min(1, (sim.time - me.charge0) / (w.charge || 1)) : 0;
     const base = wkey === 'arco' ? [6, -6, -24] : [8, -8, -22];
     vg.position.set(base[0], base[1] - (reloading ? 7 : 0) + swing * 5, base[2] + kick * 3 - swing * 6);
@@ -662,7 +803,7 @@ function frame(now) {
   kick = Math.max(0, kick - dtR * 7); swing = Math.max(0, swing - dtR * 4);
 
   // mira
-  const w = WEAPONS[me.primary];
+  const w = sim.WEAPONS[me.primary];
   let prog = 1;
   if (me.weapon === 'primary' && me.reloadUntil) prog = 1 - (me.reloadUntil - sim.time) / w.reload;
   else if (me.fireReady > sim.time) prog = 1 - (me.fireReady - sim.time) / (me.weapon === 'primary' ? w.cd : me.weapon === 'knife' ? P.knifeCd : 0.6);
@@ -685,6 +826,8 @@ function handleEvent(e, now) {
   if (e.type === 'shot' && a) { const s = SHOOT_ANIM[e.weapon]; a.trigger(s[0], s[1], now); if (e.id === 'me') { kick = 1; if (e.weapon === 'mao' || e.weapon === 'disco') swing = 1; } }
   if (e.type === 'knife' && a) { a.trigger('1H_Melee_Attack_Stab', 1.9, now); if (e.id === 'me') swing = 1; }
   if ((e.type === 'nade_throw' || e.type === 'smoke_throw') && a) { a.trigger('Throw', 1.7, now); if (e.id === 'me') swing = 1; }
+  if (e.type === 'drink' && a) { a.trigger('Use_Item', 1.1, now); if (e.id === 'me') swing = 1; }
+  if (e.type === 'pickup' && e.id === 'me') feed(e.kind === 'potion' ? '🧪 Poção reabastecida' : '💣 Granada/fumaça reabastecida');
   if (e.type === 'jump' && a) a.legsOnce('Jump_Start', 1.6, now);
   if (e.type === 'djump' && a) a.legsOnce('Jump_Full_Short', 1.6, now);
   if (e.type === 'land' && a) a.legsOnce('Jump_Land', 1.8, now);
