@@ -14,7 +14,7 @@ export const WEAPON_IDS = Object.keys(WEAPONS);
 
 export const P = {
   radius: 25, height: 64, eye: 56, chest: 40, speed: 260, airControl: 0.35,
-  gravity: 1400, jumpV: 330, doubleJumpV: 540, doubleJumpCd: 15, lives: 2, shrink: 0.65, invuln: 0.4,
+  gravity: 1400, jumpV: 400, doubleJumpV: 540, doubleJumpCd: 15, lives: 2, shrink: 0.65, invuln: 0.4,
   respawn: 2, protect: 1, tombTime: 8, wallH: 120, borderH: 150,
   knifeRange: 50, knifeCd: 0.4, knifeArc: 55 * Math.PI / 180,
   nadeR: 7, nadeSpeed: 620, nadeUp: 160, nadeFuse: 1.8, nadeRadius: 105, smokeFuse: 1.3, smokeRadius: 200, smokeTime: 6
@@ -30,58 +30,87 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
 export class Sim3D {
   // walls = retângulos do 2D ({x, y, w, h, border}) — y do 2D vira z aqui
-  constructor(walls, mapW, mapH) {
+  constructor(walls, mapW, mapH, opts) {
+    opts = opts || {};
     this.W = mapW; this.H = mapH;
-    this.boxes = walls.filter((R) => !R.space).map((R) => ({ x0: R.x, z0: R.y, x1: R.x + R.w, z1: R.y + R.h, top: R.border ? P.borderH : P.wallH }));
+    // sala de teste pode ajustar velocidade/pulo/etc sem mexer nos valores padrão
+    this.P = Object.assign({}, P, opts.params || {});
+    this.WEAPONS = {}; for (const k of WEAPON_IDS) this.WEAPONS[k] = Object.assign({}, WEAPONS[k], (opts.weapons && opts.weapons[k]) || {});
+    this.godMode = !!opts.godMode; // sala de teste: não morre, pra facilitar testar
+    this.boxes = walls.filter((R) => !R.space).map((R) => ({ x0: R.x, z0: R.y, x1: R.x + R.w, z1: R.y + R.h, top: R.border ? this.P.borderH : this.P.wallH }));
     this.players = new Map();
     this.bullets = []; this.nades = []; this.smokes = []; this.tombs = [];
     this.time = 0; this.nextId = 1; this.events = [];
+    // áreas que reabastecem granada/fumaça e poção (uma perto de cada metade do mapa)
+    this.pickups = opts.noPickups ? [] : [
+      { id: 1, type: 'nade', x: this.W * 0.5, y: 0, z: this.H * 0.28, r: 55, cdUntil: 0 },
+      { id: 2, type: 'potion', x: this.W * 0.5, y: 0, z: this.H * 0.72, r: 55, cdUntil: 0 }
+    ];
+    // eventos especiais de mapa (furacão/tempestade de areia) e portais (igual ao 2D)
+    this.hazard = opts.hazard || null;
+    this.hazardT = this.hazard === 'tornado' ? 8 : 6;
+    this.tornadoActive = false; this.tornado = null;
+    this.sandActive = false; this.sandK = 0;
+    this.portalMap = opts.portalMap || null; this.cfg = opts.cfg || null; this.portalPairs = opts.portalPairs || null;
+    this.G = opts.G || null; // funções do shared/game.js (portais) — window.RC_GAME no navegador, injetado no servidor
+    // teto que ricocheteia tiro (folhas da floresta / vidro da nave), null = sem teto
+    this.ceilingY = opts.ceilingY != null ? opts.ceilingY : null;
+    // vulcão: poças de lava (sorteadas uma vez no início, sem trocar de layout, pra simplificar)
+    this.lavaPools = opts.lavaPools || null; this.lavaActive = false; this.lavaT = 5;
+    // cidade à noite / sala escura: postes de luz e ciclo de escuridão
+    this.lamps = (opts.lamps || []).map((p, i) => ({ x: p[0], z: p[1], i, offUntil: 0 }));
+    this.lightOn = true; this.darkT = 6;
   }
+  // sala de teste: muda um valor de física ao vivo (ex: 'speed', 'jumpV')
+  setParam(key, val) { if (key in this.P) this.P[key] = val; }
+  // sala de teste: muda cadência/recarga/etc de uma arma ao vivo
+  setWeaponParam(wid, key, val) { if (this.WEAPONS[wid] && key in this.WEAPONS[wid]) this.WEAPONS[wid][key] = val; }
 
   // ---------- jogadores ----------
   addPlayer(o) {
     const p = {
       id: o.id, name: o.name, team: o.team, bot: !!o.bot, level: o.level || 'amador',
       primary: o.primary || 'lancador', x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, grounded: true,
-      yaw: o.team === 'A' ? 0 : Math.PI, pitch: 0, lives: P.lives, alive: true,
+      yaw: o.team === 'A' ? 0 : Math.PI, pitch: 0, lives: this.P.lives, alive: true,
       weapon: 'primary', lastWeapon: 'primary', ammo: {}, mags: {}, reloadUntil: 0, fireReady: 0, charge0: 0,
-      nades: 1, smokes: 1, invulnUntil: 0, protectUntil: 0, respawnAt: 0, djReadyAt: 0, djUsed: false, jumps: 0,
+      nades: 1, smokes: 1, potions: 1, drinkReady: 0, invulnUntil: 0, protectUntil: 0, respawnAt: 0, djReadyAt: 0, djUsed: false, jumps: 0,
       k: 0, d: 0, a: 0, input: { fwd: 0, side: 0, fire: false }, ai: {}, lastHitBy: {}, deadAt: 0
     };
-    for (const w of WEAPON_IDS) { p.ammo[w] = WEAPONS[w].mag; p.mags[w] = WEAPONS[w].mags; }
+    for (const w of WEAPON_IDS) { p.ammo[w] = this.WEAPONS[w].mag; p.mags[w] = this.WEAPONS[w].mags; }
     this.players.set(p.id, p);
     this.spawn(p);
     return p;
   }
-  radius(p) { return P.radius * (p.lives >= P.lives ? 1 : P.shrink); }
-  heightOf(p) { return P.height * (p.lives >= P.lives ? 1 : P.shrink); }
+  radius(p) { return this.P.radius * (p.lives >= this.P.lives ? 1 : this.P.shrink); }
+  heightOf(p) { return this.P.height * (p.lives >= this.P.lives ? 1 : this.P.shrink); }
   spawn(p) {
-    const r = P.radius + 6;
+    const r = this.P.radius + 6;
     for (let i = 0; i < 60; i++) {
       const x = p.team === 'A' ? 60 + Math.random() * 160 : this.W - 60 - Math.random() * 160;
       const z = 80 + Math.random() * (this.H - 160);
       if (!this.boxes.some((b) => this.circleBox(x, z, r, b))) { p.x = x; p.z = z; break; }
     }
     p.y = 0; p.vx = p.vy = p.vz = 0; p.grounded = true;
-    p.lives = P.lives; p.alive = true; p.weapon = 'primary';
-    for (const w of WEAPON_IDS) { p.ammo[w] = WEAPONS[w].mag; p.mags[w] = WEAPONS[w].mags; }
-    p.nades = 1; p.smokes = 1; p.reloadUntil = 0; p.charge0 = 0;
-    p.protectUntil = this.time + P.protect; p.invulnUntil = 0;
+    p.lives = this.P.lives; p.alive = true; p.weapon = 'primary';
+    for (const w of WEAPON_IDS) { p.ammo[w] = this.WEAPONS[w].mag; p.mags[w] = this.WEAPONS[w].mags; }
+    p.nades = 1; p.smokes = 1; p.potions = 1; p.reloadUntil = 0; p.charge0 = 0;
+    p.protectUntil = this.time + this.P.protect; p.invulnUntil = 0;
     p.yaw = p.team === 'A' ? 0 : Math.PI;
     p.lastHitBy = {};
   }
-  weaponDef(p) { return WEAPONS[p.primary]; }
+  weaponDef(p) { return this.WEAPONS[p.primary]; }
   aimDir(p) { const c = Math.cos(p.pitch); return [Math.cos(p.yaw) * c, Math.sin(p.pitch), Math.sin(p.yaw) * c]; }
 
   setWeapon(p, w) {
     if (!p.alive) return;
     if (w === 'nade' && p.nades < 1) return;
     if (w === 'smoke' && p.smokes < 1) return;
+    if (w === 'potion' && (p.potions < 1 || p.lives >= this.P.lives)) return;
     if (p.weapon !== w) { if (p.weapon === 'primary' || p.weapon === 'knife') p.lastWeapon = p.weapon; p.weapon = w; p.reloadUntil = 0; p.charge0 = 0; }
   }
   // rodinha do mouse: próxima/anterior arma da lista
   cycleWeapon(p, dir) {
-    const list = ['primary', 'knife'].concat(p.nades ? ['nade'] : [], p.smokes ? ['smoke'] : []);
+    const list = ['primary', 'knife'].concat(p.nades ? ['nade'] : [], p.smokes ? ['smoke'] : [], (p.potions && p.lives < this.P.lives) ? ['potion'] : []);
     const i = list.indexOf(p.weapon);
     this.setWeapon(p, list[(i + dir + list.length) % list.length]);
   }
@@ -95,10 +124,10 @@ export class Sim3D {
   jump(p) {
     if (!p.alive) return;
     if (p.grounded) { // pulo normal: sem limite, vai para onde você está andando
-      p.vy = P.jumpV; p.grounded = false; p.jumps = 1;
+      p.vy = this.P.jumpV; p.grounded = false; p.jumps = 1;
       this.events.push({ type: 'jump', id: p.id });
     } else if (!p.djUsed && this.time >= p.djReadyAt) { // pulo duplo: precisa estar carregado
-      p.vy = P.doubleJumpV; p.djUsed = true; p.djReadyAt = this.time + P.doubleJumpCd; p.jumps = 2;
+      p.vy = this.P.doubleJumpV; p.djUsed = true; p.djReadyAt = this.time + this.P.doubleJumpCd; p.jumps = 2;
       const [fx, , fz] = this.aimDir(p), l = Math.hypot(fx, fz) || 1;
       if (Math.hypot(p.vx, p.vz) < 60) { p.vx += fx / l * 120; p.vz += fz / l * 120; }
       this.events.push({ type: 'djump', id: p.id });
@@ -138,17 +167,17 @@ export class Sim3D {
   smokeBlocks(ax, ay, az, bx, by, bz) {
     for (const s of this.smokes) {
       const k = this.smokeK(s); if (k < 0.6) continue;
-      const R = P.smokeRadius * 0.55 * k;
+      const R = this.P.smokeRadius * 0.55 * k;
       const dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz || 1;
       const u = clamp(((s.x - ax) * dx + (s.z - az) * dz) / L2, 0, 1);
       const px = ax + dx * u, pz = az + dz * u, py = ay + (by - ay) * u;
-      if (Math.hypot(px - s.x, pz - s.z) < R && py < P.smokeRadius * 0.9) return true;
+      if (Math.hypot(px - s.x, pz - s.z) < R && py < this.P.smokeRadius * 0.9) return true;
     }
     return false;
   }
   smokeK(s) { return clamp(Math.min((this.time - s.t0) / 0.5, (s.until - this.time) / 1.0), 0, 1); }
   canSee(p, q) {
-    return !this.segBlocked(p.x, p.y + P.eye, p.z, q.x, q.y + P.chest, q.z) && !this.smokeBlocks(p.x, p.y + P.eye, p.z, q.x, q.y + P.chest, q.z);
+    return !this.segBlocked(p.x, p.y + this.P.eye, p.z, q.x, q.y + this.P.chest, q.z) && !this.smokeBlocks(p.x, p.y + this.P.eye, p.z, q.x, q.y + this.P.chest, q.z);
   }
   // a mira: primeiro ponto que o raio (olho -> direção) acerta (muro, chão ou alguém)
   raycast(ox, oy, oz, dx, dy, dz, maxD, ignoreId) {
@@ -186,10 +215,35 @@ export class Sim3D {
     for (const p of this.players.values()) this.updatePlayer(p, dt);
     this.updateBullets(dt);
     this.updateNades(dt);
+    this.updatePickups();
+    this.updateHazard(dt);
     this.smokes = this.smokes.filter((s) => this.time < s.until);
     this.tombs = this.tombs.filter((t) => this.time < t.until);
     const ev = this.events; this.events = [];
     return ev;
+  }
+  // estado leve pra mandar pela rede (multiplayer): só o que o cliente precisa pra desenhar
+  snapshot() {
+    const players = [];
+    for (const p of this.players.values()) {
+      players.push({ id: p.id, name: p.name, team: p.team, bot: p.bot, x: p.x, y: p.y, z: p.z, vx: p.vx, vy: p.vy, vz: p.vz,
+        yaw: p.yaw, pitch: p.pitch, lives: p.lives, alive: p.alive, weapon: p.weapon, primary: p.primary, grounded: !!p.grounded,
+        ammo: p.ammo[p.primary], mag: this.WEAPONS[p.primary].mag, mags: p.mags[p.primary], reloadUntil: p.reloadUntil || 0,
+        nades: p.nades, smokes: p.smokes, potions: p.potions, djReadyAt: p.djReadyAt || 0,
+        k: p.k, d: p.d, a: p.a, charge0: p.charge0 || 0, fireReady: p.fireReady || 0,
+        protectUntil: p.protectUntil || 0, respawnAt: p.respawnAt || 0, deadAt: p.deadAt || 0, lastHitBy: p.lastHitBy || {} });
+    }
+    return {
+      time: this.time, players,
+      bullets: this.bullets.map((b) => ({ id: b.id, team: b.team, x: b.x, y: b.y, z: b.z, vx: b.vx, vy: b.vy, vz: b.vz, r: b.r, kind: b.kind })),
+      nades: this.nades.map((g) => ({ id: g.id, team: g.team, smoke: g.smoke, x: g.x, y: g.y, z: g.z, spin: g.spin, t0: g.t0 })),
+      smokes: this.smokes.map((s) => ({ id: s.id, x: s.x, z: s.z, t0: s.t0, until: s.until })),
+      tombs: this.tombs.map((t) => ({ id: t.id, x: t.x, y: t.y, z: t.z, name: t.name, team: t.team, t0: t.t0, until: t.until })),
+      pickups: this.pickups.map((u) => ({ id: u.id, type: u.type, x: u.x, z: u.z, r: u.r, cdUntil: u.cdUntil })),
+      hazard: this.hazard, sandK: this.sandK, lavaActive: this.lavaActive, lightOn: this.lightOn,
+      lamps: this.lamps.map((l) => ({ i: l.i, x: l.x, z: l.z, offUntil: l.offUntil })),
+      lavaPools: this.lavaPools
+    };
   }
 
   updatePlayer(p, dt) {
@@ -202,10 +256,11 @@ export class Sim3D {
     const fx = Math.cos(p.yaw), fz = Math.sin(p.yaw), rx = -fz, rz = fx;
     let wx = fx * p.input.fwd + rx * p.input.side, wz = fz * p.input.fwd + rz * p.input.side;
     const wl = Math.hypot(wx, wz); if (wl > 1) { wx /= wl; wz /= wl; }
-    wx *= P.speed; wz *= P.speed;
+    const spdK = (this.hazard === 'sand' && this.sandActive) ? 0.72 : 1; // tempestade de areia atrapalha andar
+    wx *= this.P.speed * spdK; wz *= this.P.speed * spdK;
     if (p.grounded) { p.vx = wx; p.vz = wz; }
     else { // no ar: mantém o impulso, com um pouco de controle
-      const k = Math.min(1, P.airControl * dt * 6);
+      const k = Math.min(1, this.P.airControl * dt * 6);
       if (wl > 0.01) { p.vx += (wx - p.vx) * k; p.vz += (wz - p.vz) * k; }
     }
     const r = this.radius(p);
@@ -220,7 +275,7 @@ export class Sim3D {
     }
     // vertical: gravidade, chão e topo dos muros
     const y0 = p.y;
-    p.vy -= P.gravity * dt; p.y += p.vy * dt;
+    p.vy -= this.P.gravity * dt; p.y += p.vy * dt;
     let floor = 0;
     for (const b of this.boxes) if (this.circleBox(p.x, p.z, r * 0.7, b) && y0 >= b.top - 2) floor = Math.max(floor, b.top);
     if (p.y <= floor) {
@@ -238,6 +293,7 @@ export class Sim3D {
     if (!p.alive || this.time < p.protectUntil) return;
     if (this.time < p.fireReady) return;
     if (p.weapon === 'knife') return this.knife(p);
+    if (p.weapon === 'potion') return this.drinkPotion(p);
     if (p.weapon === 'nade' || p.weapon === 'smoke') return this.throwNade(p, p.weapon === 'smoke');
     const w = this.weaponDef(p);
     if (p.reloadUntil) return;
@@ -266,24 +322,144 @@ export class Sim3D {
   }
   muzzleAndTarget(p) {
     const [dx, dy, dz] = this.aimDir(p);
-    const ex = p.x, ey = p.y + P.eye, ez = p.z;
+    const ex = p.x, ey = p.y + this.P.eye, ez = p.z;
     const eye = p.camPos || [ex, ey, ez]; // na 3ª pessoa a mira sai da câmera
     const t = this.raycast(eye[0], eye[1], eye[2], dx, dy, dz, 4000, p.id);
     const tx = eye[0] + dx * t, ty = eye[1] + dy * t, tz = eye[2] + dz * t;
     const rx = -Math.sin(p.yaw), rz = Math.cos(p.yaw);
     const r = this.radius(p);
-    const ox = p.x + Math.cos(p.yaw) * (r + 4) + rx * 8, oy = p.y + P.chest + 4, oz = p.z + Math.sin(p.yaw) * (r + 4) + rz * 8;
+    const ox = p.x + Math.cos(p.yaw) * (r + 4) + rx * 8, oy = p.y + this.P.chest + 4, oz = p.z + Math.sin(p.yaw) * (r + 4) + rz * 8;
     return [ox, oy, oz, tx, ty, tz];
   }
   knife(p) {
-    p.fireReady = this.time + P.knifeCd;
+    p.fireReady = this.time + this.P.knifeCd;
     this.events.push({ type: 'knife', id: p.id });
     for (const q of this.players.values()) {
       if (!q.alive || q.team === p.team) continue;
       const dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz);
-      if (d > this.radius(p) + P.knifeRange + this.radius(q) || Math.abs(q.y - p.y) > 50) continue;
+      if (d > this.radius(p) + this.P.knifeRange + this.radius(q) || Math.abs(q.y - p.y) > 50) continue;
       let da = Math.atan2(dz, dx) - p.yaw; da = Math.atan2(Math.sin(da), Math.cos(da));
-      if (Math.abs(da) < P.knifeArc && !this.segBlocked(p.x, p.y + P.chest, p.z, q.x, q.y + P.chest, q.z)) { this.damage(q, p.id, 'knife'); break; }
+      if (Math.abs(da) < this.P.knifeArc && !this.segBlocked(p.x, p.y + this.P.chest, p.z, q.x, q.y + this.P.chest, q.z)) { this.damage(q, p.id, 'knife'); break; }
+    }
+  }
+  // poção: bebe (animação no cliente) e recupera 1 vida, gasta 1 poção
+  drinkPotion(p) {
+    if (p.potions < 1 || p.lives >= this.P.lives) { p.weapon = p.lastWeapon || 'primary'; return; }
+    p.fireReady = this.time + 1.1; // duração da animação de beber
+    p.potions--; p.lives = Math.min(this.P.lives, p.lives + 1);
+    this.events.push({ type: 'drink', id: p.id });
+    p.weapon = p.lastWeapon || 'primary';
+  }
+  // ---------- áreas de reabastecimento ----------
+  updatePickups() {
+    for (const u of this.pickups) {
+      if (this.time < u.cdUntil) continue;
+      for (const p of this.players.values()) {
+        if (!p.alive) continue;
+        const d = Math.hypot(p.x - u.x, p.z - u.z);
+        if (d > u.r) continue;
+        if (u.type === 'nade') {
+          if (p.nades >= 1 && p.smokes >= 1) continue;
+          p.nades = 1; p.smokes = 1;
+        } else { // potion
+          if (p.potions >= 1) continue;
+          p.potions = 1;
+        }
+        u.cdUntil = this.time + 18;
+        this.events.push({ type: 'pickup', id: p.id, kind: u.type, x: u.x, z: u.z });
+        break;
+      }
+    }
+  }
+  // ---------- eventos especiais de mapa ----------
+  updateHazard(dt) {
+    if (this.hazard === 'tornado') this.updateTornado(dt);
+    else if (this.hazard === 'sand') this.updateSand(dt);
+    else if (this.hazard === 'lava') this.updateLava(dt);
+    else if (this.hazard === 'dark') this.updateDark(dt);
+    if (this.portalMap) this.updatePortals();
+  }
+  // vulcão: a lava sobe (machuca) e desce de tempos em tempos
+  updateLava(dt) {
+    if (!this.lavaPools) return;
+    this.lavaT -= dt;
+    if (this.lavaT <= 0) {
+      this.lavaActive = !this.lavaActive;
+      this.lavaT = this.lavaActive ? 6 : 8;
+      this.events.push({ type: this.lavaActive ? 'lava_on' : 'lava_off' });
+    }
+    if (!this.lavaActive) return;
+    for (const p of this.players.values()) {
+      if (!p.alive) continue;
+      const r = this.radius(p);
+      if (this.lavaPools.some((q) => Math.hypot(p.x - q.x, p.z - q.z) < q.r + r * 0.3)) this.damage(p, null, 'lava');
+    }
+  }
+  // sala escura: a luz apaga de tempos em tempos
+  updateDark(dt) {
+    this.darkT -= dt;
+    if (this.darkT <= 0) {
+      this.lightOn = !this.lightOn;
+      this.darkT = this.lightOn ? 7 : 4.5;
+      this.events.push({ type: this.lightOn ? 'light_on' : 'light_off' });
+    }
+  }
+  // furacão da floresta: puxa/gira quem estiver perto e no fim joga todo mundo longe
+  updateTornado(dt) {
+    this.hazardT -= dt;
+    if (!this.tornadoActive) {
+      if (this.hazardT <= 0) {
+        this.tornadoActive = true; this.hazardT = 6;
+        const m = 220;
+        this.tornado = { x: m + Math.random() * (this.W - 2 * m), z: m + Math.random() * (this.H - 2 * m) };
+        this.events.push({ type: 'tornado_start', x: this.tornado.x, z: this.tornado.z });
+      }
+      return;
+    }
+    const T = this.tornado, R = 260;
+    for (const p of this.players.values()) {
+      if (!p.alive) continue;
+      const dx = T.x - p.x, dz = T.z - p.z, d = Math.hypot(dx, dz);
+      if (d < R && d > 1) {
+        const ux = dx / d, uz = dz / d, tx = -uz, tz = ux;
+        p.vx += (ux * 220 + tx * 320) * dt; p.vz += (uz * 220 + tz * 320) * dt;
+        if (p.vy < 60) p.vy = 60; p.grounded = false;
+      }
+    }
+    if (this.hazardT <= 0) {
+      this.tornadoActive = false; this.hazardT = 16;
+      for (const p of this.players.values()) {
+        if (!p.alive) continue;
+        const dx = p.x - T.x, dz = p.z - T.z, d = Math.hypot(dx, dz) || 1;
+        if (d < R) { p.vx += dx / d * 480; p.vz += dz / d * 480; p.vy = 400; p.grounded = false; }
+      }
+      this.events.push({ type: 'tornado_end' });
+      this.tornado = null;
+    }
+  }
+  // tempestade de areia do deserto: reduz a visibilidade (cliente) e deixa mais devagar
+  updateSand(dt) {
+    this.hazardT -= dt;
+    if (this.hazardT <= 0) {
+      this.sandActive = !this.sandActive;
+      this.hazardT = this.sandActive ? 9 : 11;
+      this.events.push({ type: this.sandActive ? 'sand_start' : 'sand_end' });
+    }
+    this.sandK += ((this.sandActive ? 1 : 0) - this.sandK) * Math.min(1, dt * 1.2);
+  }
+  // portais (igual ao 2D): entrou num aberto, sai no par dele
+  updatePortals() {
+    // no navegador usa window.RC_GAME (carregado via <script>); no servidor quem cria o Sim3D passa opts.G
+    const Gm = this.G || (typeof window !== 'undefined' ? window.RC_GAME : null);
+    if (!Gm || !this.cfg) return;
+    for (const p of this.players.values()) {
+      if (!p.alive) continue;
+      const w = Gm.portalWrap(this.portalMap, this.cfg, p.x, p.z, this.radius(p), this.portalPairs);
+      if (!w) continue;
+      p.x = w.x; p.z = w.y;
+      const vx = p.vx * w.co - p.vz * w.si, vz = p.vx * w.si + p.vz * w.co;
+      p.vx = vx; p.vz = vz;
+      this.events.push({ type: 'portal', id: p.id, x: p.x, z: p.z });
     }
   }
   // granada / fumaça: joga para onde a mira aponta, quica no muro e no chão
@@ -292,9 +468,9 @@ export class Sim3D {
     if (smoke) p.smokes--; else p.nades--;
     p.fireReady = this.time + 0.6;
     const [dx, dy, dz] = this.aimDir(p);
-    const ox = p.x + dx * 20, oy = p.y + P.eye, oz = p.z + dz * 20;
+    const ox = p.x + dx * 20, oy = p.y + this.P.eye, oz = p.z + dz * 20;
     this.nades.push({ id: this.nextId++, owner: p.id, team: p.team, smoke, x: ox, y: oy, z: oz,
-      vx: dx * P.nadeSpeed + p.vx * 0.5, vy: dy * P.nadeSpeed + P.nadeUp + p.vy * 0.3, vz: dz * P.nadeSpeed + p.vz * 0.5, t0: this.time, spin: 0 });
+      vx: dx * this.P.nadeSpeed + p.vx * 0.5, vy: dy * this.P.nadeSpeed + this.P.nadeUp + p.vy * 0.3, vz: dz * this.P.nadeSpeed + p.vz * 0.5, t0: this.time, spin: 0 });
     this.events.push({ type: smoke ? 'smoke_throw' : 'nade_throw', id: p.id });
     p.weapon = p.lastWeapon || 'primary'; // volta para a arma que estava
   }
@@ -329,7 +505,11 @@ export class Sim3D {
       const sub = dt / n; let dead = false;
       for (let i = 0; i < n && !dead; i++) {
         b.vy -= b.grav * sub;
-        const hit = this.bounceStep(b, b.r, b.rest, sub);
+        let hit = this.bounceStep(b, b.r, b.rest, sub);
+        // teto que ricocheteia (folhas da floresta / vidro da nave)
+        if (!hit && this.ceilingY != null && b.y + b.r >= this.ceilingY && b.vy > 0) {
+          b.y = this.ceilingY - b.r; b.vy = -Math.abs(b.vy) * (b.rest || 0.7); hit = 'ceiling';
+        }
         if (hit) {
           b.bounces++;
           this.events.push({ type: 'bounce', x: b.x, y: b.y, z: b.z, left: b.max - b.bounces });
@@ -341,6 +521,13 @@ export class Sim3D {
           const cy = clamp(b.y, q.y + r * 0.5, q.y + h - r * 0.4);
           if ((b.x - q.x) ** 2 + (b.z - q.z) ** 2 + (b.y - cy) ** 2 < (r + b.r) ** 2) { this.damage(q, b.owner, b.kind); dead = true; break; }
         }
+        // cidade à noite: atirar no poste apaga a luz por um tempo
+        if (!dead) for (const L of this.lamps) {
+          if (this.time < L.offUntil) continue;
+          if (b.y > 15 && b.y < 90 && (b.x - L.x) ** 2 + (b.z - L.z) ** 2 < 20 ** 2) {
+            L.offUntil = this.time + 9; this.events.push({ type: 'lamp_off', i: L.i, x: L.x, z: L.z }); dead = true; break;
+          }
+        }
       }
       if (!dead && this.time - b.t0 < 8) keep.push(b);
     }
@@ -351,13 +538,13 @@ export class Sim3D {
     const keep = [];
     for (const g of this.nades) {
       const n = 4, sub = dt / n;
-      for (let i = 0; i < n; i++) { g.vy -= P.gravity * sub; this.bounceStep(g, P.nadeR, 0.45, sub); }
-      if (g.y <= P.nadeR + 0.5) { g.vx *= 0.9; g.vz *= 0.9; } // rolando no chão
+      for (let i = 0; i < n; i++) { g.vy -= this.P.gravity * sub; this.bounceStep(g, this.P.nadeR, 0.45, sub); }
+      if (g.y <= this.P.nadeR + 0.5) { g.vx *= 0.9; g.vz *= 0.9; } // rolando no chão
       g.spin += Math.hypot(g.vx, g.vz) * dt * 0.05;
       const age = this.time - g.t0;
-      if (g.smoke ? age >= P.smokeFuse : age >= P.nadeFuse) {
+      if (g.smoke ? age >= this.P.smokeFuse : age >= this.P.nadeFuse) {
         if (g.smoke) {
-          this.smokes.push({ id: g.id, x: g.x, z: g.z, t0: this.time, until: this.time + P.smokeTime });
+          this.smokes.push({ id: g.id, x: g.x, z: g.z, t0: this.time, until: this.time + this.P.smokeTime });
           this.events.push({ type: 'smoke', x: g.x, y: 0, z: g.z });
         } else this.explode(g);
         continue;
@@ -372,23 +559,28 @@ export class Sim3D {
       if (!q.alive || q.team === g.team || this.time < q.protectUntil) continue;
       const cy = clamp(g.y, q.y, q.y + this.heightOf(q));
       const d = Math.hypot(q.x - g.x, cy - g.y, q.z - g.z);
-      if (d > P.nadeRadius + this.radius(q)) continue;
-      if (this.segBlocked(g.x, g.y + 2, g.z, q.x, q.y + P.chest, q.z)) continue;
+      if (d > this.P.nadeRadius + this.radius(q)) continue;
+      if (this.segBlocked(g.x, g.y + 2, g.z, q.x, q.y + this.P.chest, q.z)) continue;
       this.damage(q, g.owner, 'nade');
     }
   }
 
   damage(v, by, weapon) {
     if (!v.alive || this.time < v.invulnUntil || this.time < v.protectUntil) return;
-    v.lives--; v.invulnUntil = this.time + P.invuln;
+    if (this.godMode) { // sala de teste: não morre, só mostra o marcador de acerto
+      v.invulnUntil = this.time + this.P.invuln;
+      this.events.push({ type: 'hit', by, victim: v.id, weapon });
+      return;
+    }
+    v.lives--; v.invulnUntil = this.time + this.P.invuln;
     if (by) v.lastHitBy[by] = this.time;
     const a = this.players.get(by);
     if (v.lives <= 0) {
-      v.alive = false; v.d++; v.respawnAt = this.time + P.respawn; v.deadAt = this.time; v.reloadUntil = 0; v.charge0 = 0;
+      v.alive = false; v.d++; v.respawnAt = this.time + this.P.respawn; v.deadAt = this.time; v.reloadUntil = 0; v.charge0 = 0;
       if (a) a.k++;
       for (const id in v.lastHitBy) if (id !== by && this.time - v.lastHitBy[id] < 10) { const h = this.players.get(id); if (h) h.a++; }
       // lápide com o nome no lugar da morte (o corpo some)
-      this.tombs.push({ id: this.nextId++, x: v.x, y: v.y, z: v.z, name: v.name, team: v.team, until: this.time + P.tombTime, t0: this.time });
+      this.tombs.push({ id: this.nextId++, x: v.x, y: v.y, z: v.z, name: v.name, team: v.team, until: this.time + this.P.tombTime, t0: this.time });
       this.events.push({ type: 'kill', killer: by, victim: v.id, weapon });
     } else this.events.push({ type: 'hit', by, victim: v.id, weapon });
   }
@@ -424,9 +616,9 @@ export class Sim3D {
       if (ai.aimT <= 0) { // mira com reação e erro
         ai.aimT = L.react;
         const tt = dist / 900;
-        const tx = target.x + target.vx * tt, tz = target.z + target.vz * tt, ty = target.y + P.chest;
+        const tx = target.x + target.vx * tt, tz = target.z + target.vz * tt, ty = target.y + this.P.chest;
         ai.yaw = Math.atan2(tz - p.z, tx - p.x) + (Math.random() - 0.5) * 2 * L.err;
-        ai.pitch = Math.atan2(ty - (p.y + P.eye), Math.hypot(tx - p.x, tz - p.z)) + (Math.random() - 0.5) * L.err;
+        ai.pitch = Math.atan2(ty - (p.y + this.P.eye), Math.hypot(tx - p.x, tz - p.z)) + (Math.random() - 0.5) * L.err;
       }
       p.yaw += Math.atan2(Math.sin(ai.yaw - p.yaw), Math.cos(ai.yaw - p.yaw)) * Math.min(1, dt * 14);
       p.pitch += (ai.pitch - p.pitch) * Math.min(1, dt * 14);

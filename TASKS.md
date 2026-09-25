@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 24/09/2026 — v0.12.0 — demos 3D (Three.js e Godot) com física 3D, armas, menu, mira e placar (próximo passo: demos 3D em Three.js e Godot) em https://point-ball.onrender.com
+Última atualização: 25/09/2026 — v0.16.0 — demo 3D Three.js **completa**: todos os 8 mapas do 2D portados, sala de teste, pulo/velocidade/armas ajustáveis, poção, reabastecimento, indicador de bomba, explosão melhorada, cruz na lápide, reskins de mapa, e agora **multiplayer completo** (salas, senha, times, dono da sala, igual ao 2D). Godot pausado por ora. Push pro GitHub pendente (ver observação abaixo). https://point-ball.onrender.com
 
 ---
 
@@ -285,7 +285,29 @@
   - [x] **Mira editável**: cor, contorno, tamanho, espessura, espaço, ponto, círculo de recarga, marcador de acerto em X (amarelo = acerto, vermelho = abate)
   - [x] **Tab** (segurar): placar com abates, mortes, assistências e K/D
 - [x] v0.12.0 (Godot): as mesmas mudanças (física com CharacterBody3D/RigidBody3D, menu com abas, mira editável, placar, lápide, 5 armas, fumaça macia)
-- [~] **Caique:** testar as duas e escolher
+- [x] v0.13.0 (Three.js — foco só nesta demo por enquanto pra economizar, Godot fica pausado): "bloco 1" de ajustes
+  - [x] **Sala de teste**: opção "Sala de teste" no mapa (arena aberta, sem bots, sem morrer) + aba **Sala de teste** no menu Esc pra ajustar velocidade, altura do pulo, cadência e recarga de cada arma ao vivo (sem precisar reiniciar)
+  - [x] Pulo normal mais alto (jumpV 330→400)
+  - [x] Velocidade e cadência/recarga de cada arma agora são valores por partida (`Sim3D` aceita overrides), ajustáveis pela sala de teste
+  - [x] Poção de vida na tecla **2**: pega, bebe (animação `Use_Item`) e recupera 1 vida — uma poção por vida
+  - [x] Áreas no mapa que reabastecem granada/fumaça (amarela) e poção (verde) sozinhas
+  - [x] Indicador de granada inimiga: seta de direção + distância em metros no topo da tela
+  - [x] Explosão da bomba com visual mais suave (textura de fogo em gradiente + anel de onda de choque + faíscas), sem mais o icosaedro de baixo poli serrilhado
+  - [x] Lápide ganhou uma cruz de madeira em cima
+- [x] v0.14.0 (Three.js): "bloco 2" — mais mapas e temas visuais
+  - [x] Mapa **Portais**: os 8 portais do 2D, 2 pares sorteados abertos (sem ciclo abre/fecha, pra simplificar) — atravessa um e sai no par dele
+  - [x] **Furacão da floresta**: nasce em um ponto aleatório a cada ~16s, puxa/gira quem estiver perto por 6s e no fim joga todo mundo longe
+  - [x] **Tempestade de areia do deserto**: liga/desliga sozinha, reduz a visão de verdade (fog mais perto) e deixa mais devagar enquanto ativa
+  - [x] Reskin **Floresta**: paredes viraram madeira (com veio) e cada ponta de parede ganhou uma árvore; tiros ricocheteiam na copa (teto invisível acima das árvores)
+  - [x] Reskin **Neve**: paredes de gelo semi-transparentes de verdade — dá pra ver uma, mas quanto mais empilhadas atrás menos dá pra ver (efeito natural da transparência em camadas)
+  - [x] Reskin **Deserto**: paredes viraram dunas de areia arredondadas + cactos espalhados aleatoriamente (a colisão continua sendo a caixa, só o visual mudou)
+  - [x] Reskin **Nave**: paredes de "tijolo" viraram painéis/computadores de nave; virou uma base na Lua com teto de vidro (dá pra ver as estrelas) e tiro ricocheteia nele
+- [x] v0.15.0 (Three.js): "bloco 3" — os últimos 3 mapas do 2D
+  - [x] Mapa **Vulcão**: poças de lava (sorteadas uma vez por partida, sempre espelhadas) que sobem e descem sozinhas — dói quando estão "ativas" (a troca de parede na erupção do 2D ficou de fora, pra simplificar)
+  - [x] Mapa **Sala escura**: a luz apaga e acende sozinha de tempos em tempos
+  - [x] Mapa **Cidade à noite**: escuro o tempo todo, só os postes iluminam — atirar num poste apaga ele por um tempo
+- [x] v0.16.0 (Three.js): **multiplayer completo, igual ao 2D** — salas com código e senha, lista de salas abertas, escolha de time (azul/vermelho), dono da sala controla mapa/bots/nível, "Iniciar partida", reconexão se cair a conexão. Servidor autoritativo (`server3d.js`) roda o `Sim3D` como o 2D roda o `Game`, manda o estado pela rede a cada tick; o cliente só desenha o que o servidor manda (sem prever localmente — só a mira/câmera do mouse é instantânea, a posição do corpo segue o servidor com uma leve suavização). Sem previsão do lado do cliente foi decisão consciente pra simplificar.
+- [~] **Caique:** testar os blocos 1, 2, 3 e o multiplayer (v0.16.0)
 
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
 - [ ] Sons (tiro, batida na parede, acerto, faca, pulo)
