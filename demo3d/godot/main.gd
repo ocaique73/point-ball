@@ -56,8 +56,8 @@ const BOT_LEVELS := {
 }
 const TEAM_COLOR := { "A": Color("#3b82f6"), "B": Color("#ef4444") }
 const TEAM_LIGHT := { "A": Color("#93c5fd"), "B": Color("#fca5a5") }
-const MAP_IDS := ["deserto", "neve", "floresta"]
-const MAP_NAMES := ["Deserto", "Neve", "Floresta"]
+const MAP_IDS := ["deserto", "neve", "floresta", "nave", "portal", "vulcao", "escuro", "cidade"]
+const MAP_NAMES := ["Deserto", "Neve", "Floresta", "Nave espacial", "Portais", "Vulcão", "Sala escura", "Cidade à noite"]
 const BOT_NAMES := ["Tonhão", "Pipoca", "Faísca", "Marreta", "Coxinha", "Paçoca", "Jacaré", "Canela", "Pitomba", "Quindim"]
 const UPPER := ["spine", "chest", "head", "upperarm.l", "upperarm.r", "lowerarm.l", "lowerarm.r", "wrist.l", "wrist.r", "hand.l", "hand.r", "handslot.l", "handslot.r", "elbowIK.l", "elbowIK.r", "handIK.l", "handIK.r"]
 const LOCO := ["Idle", "Running_A", "Walking_Backwards", "Running_Strafe_Left", "Running_Strafe_Right", "Jump_Start", "Jump_Idle", "Jump_Land", "Jump_Full_Short"]
@@ -365,6 +365,14 @@ func _new_game() -> void:
 			deco = Color.WHITE
 		elif th["deco"] == "tree":
 			deco = Color("#3f7d3a")
+		elif th["deco"] == "panels":
+			deco = Color("#9fb3d6")
+		elif th["deco"] == "tiles":
+			deco = Color(th["wall"]).lightened(0.35)
+		elif th["deco"] == "ash":
+			deco = Color("#6b5a52")
+		elif th["deco"] == "city":
+			deco = Color("#f2cf6e")
 		var rock := _mesh(_flat(sm), _mat(deco), Vector3(rng.randf_range(1.5, W - 1.5), 0, rng.randf_range(1.5, H - 1.5)))
 		rock.rotation = Vector3(rng.randf() * 3, rng.randf() * 3, 0)
 		map_root.add_child(rock)
@@ -1690,7 +1698,10 @@ func _build_menu(layer: CanvasLayer) -> void:
 	# --- Jogo
 	var g1 := _grid(tabs, "Jogo")
 	_opt(g1, "Câmera", [[1, "1ª pessoa"], [3, "3ª pessoa (por trás)"]], "cam", S, Callable())
-	_opt(g1, "Mapa", [[0, MAP_NAMES[0]], [1, MAP_NAMES[1]], [2, MAP_NAMES[2]]], "map", S, _new_game)
+	var map_opts := []
+	for i in MAP_IDS.size():
+		map_opts.append([i, MAP_NAMES[i]])
+	_opt(g1, "Mapa", map_opts, "map", S, _new_game)
 	_opt(g1, "Bots inimigos", [[0, "0"], [1, "1"], [2, "2"], [3, "3"], [5, "5"]], "bots", S, _new_game)
 	_opt(g1, "Nível dos bots", [["iniciante", "Iniciante"], ["amador", "Amador"], ["pro", "Profissional"]], "level", S, _apply_level)
 	_opt(g1, "Sombras", [[true, "Ligadas"], [false, "Desligadas"]], "shadow", S, func(): sun.shadow_enabled = S["shadow"])
