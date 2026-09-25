@@ -85,6 +85,9 @@ var player_torch: OmniLight3D
 var cur_map_id := "deserto"
 var hazard_light_on := true
 var hazard_next := 0.0
+var lava_pools: Array = []
+var lava_meshes: Array = []
+var lava_active := false
 var view_models := {}
 var time := 0.0
 var kick := 0.0
@@ -156,6 +159,7 @@ class Fighter extends CharacterBody3D:
 	var lower_once_until := 0.0
 	var loco_now := ""
 	var arms_now := ""
+	var lava_tick := 0.0
 	# bot
 	var ai := {}
 
@@ -344,6 +348,15 @@ func _new_game() -> void:
 	if world_env:
 		world_env.ambient_light_energy = 0.45
 	player_torch.visible = cur_map_id == "escuro"
+	lava_active = false
+	lava_meshes.clear()
+	if cur_map_id == "vulcao":
+		lava_pools = [
+			{"x": 0.20 * W, "z": 0.30 * H, "r": 1.8}, {"x": 0.20 * W, "z": 0.70 * H, "r": 1.8},
+			{"x": 0.80 * W, "z": 0.30 * H, "r": 1.8}, {"x": 0.80 * W, "z": 0.70 * H, "r": 1.8}
+		]
+	else:
+		lava_pools = []
 	var data: Dictionary = MapsData.MAPS[cur_map_id]
 	var th: Dictionary = data["theme"]
 	# chão (também é colisão)
@@ -370,6 +383,13 @@ func _new_game() -> void:
 		var x2: float = s[2] * W
 		var y2: float = s[3] * H
 		_wall(Rect2(minf(x1, x2) - T / 2, minf(y1, y2) - T / 2, absf(x2 - x1) + T, absf(y2 - y1) + T), Color(th["wall"]), WALL_H)
+	for pool in lava_pools:
+		var lm := CylinderMesh.new()
+		lm.top_radius = pool["r"]; lm.bottom_radius = pool["r"]; lm.height = 0.05
+		var lmat := _mat(Color("#4b1a10"), 0.6, 0.0)
+		var lava_mi := _mesh(lm, lmat, Vector3(pool["x"], 0.04, pool["z"]))
+		map_root.add_child(lava_mi)
+		lava_meshes.append(lava_mi)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(S["map"]) * 97 + 5
 	for n in 34:
@@ -712,7 +732,7 @@ func _damage(v: Fighter, by: Fighter, weapon: String) -> void:
 		if by == me:
 			hit_kind = "kill"
 			hit_t = time
-		var icon: String = {"knife": "faca", "nade": "granada"}.get(weapon, WEAPONS.get(weapon, {}).get("name", "tiro"))
+		var icon: String = {"knife": "faca", "nade": "granada", "lava": "lava"}.get(weapon, WEAPONS.get(weapon, {}).get("name", "tiro"))
 		_feed("[color=%s]%s[/color]  [%s]  [color=%s]%s[/color]" % [TEAM_LIGHT[by.team].to_html(false) if by else "#ffffff", by.nick if by else "?", icon, TEAM_LIGHT[v.team].to_html(false), v.nick])
 	else:
 		v.model.scale = Vector3.ONE * v.scale0 * SHRINK
@@ -1058,14 +1078,37 @@ func _physics_process(dt: float) -> void:
 
 
 func _update_hazard() -> void:
-	if cur_map_id != "escuro" or time < hazard_next:
-		return
-	hazard_light_on = not hazard_light_on
-	hazard_next = time + (randf_range(3.0, 6.0) if hazard_light_on else randf_range(2.0, 4.0))
-	sun.light_energy = 1.2 if hazard_light_on else 0.05
-	if world_env:
-		world_env.ambient_light_energy = 0.45 if hazard_light_on else 0.05
-	_feed("💡 A luz voltou" if hazard_light_on else "🕯️ A luz apagou...")
+	if cur_map_id == "escuro":
+		if time < hazard_next:
+			return
+		hazard_light_on = not hazard_light_on
+		hazard_next = time + (randf_range(3.0, 6.0) if hazard_light_on else randf_range(2.0, 4.0))
+		sun.light_energy = 1.2 if hazard_light_on else 0.05
+		if world_env:
+			world_env.ambient_light_energy = 0.45 if hazard_light_on else 0.05
+		_feed("💡 A luz voltou" if hazard_light_on else "🕯️ A luz apagou...")
+	elif cur_map_id == "vulcao":
+		if time >= hazard_next:
+			lava_active = not lava_active
+			hazard_next = time + (randf_range(4.0, 6.0) if lava_active else randf_range(5.0, 8.0))
+			var col := Color("#ff5a1f") if lava_active else Color("#4b1a10")
+			for mi in lava_meshes:
+				(mi.material_override as StandardMaterial3D).albedo_color = col
+				(mi.material_override as StandardMaterial3D).emission_enabled = lava_active
+				(mi.material_override as StandardMaterial3D).emission = Color("#ff8a3d")
+				(mi.material_override as StandardMaterial3D).emission_energy_multiplier = 1.6 if lava_active else 0.0
+			_feed("🌋 A lava subiu!" if lava_active else "🌋 A lava baixou")
+		if lava_active:
+			for f in fighters:
+				if not f.alive or time < f.lava_tick:
+					continue
+				for pool in lava_pools:
+					var dx: float = f.position.x - pool["x"]
+					var dz: float = f.position.z - pool["z"]
+					if dx * dx + dz * dz < pool["r"] * pool["r"]:
+						f.lava_tick = time + 0.6
+						_damage(f, null, "lava")
+						break
 
 
 func _update_fighter(f: Fighter, dt: float) -> void:
