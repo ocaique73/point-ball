@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 24/09/2026 — v0.5.0 na branch `dev` (aguardando teste) · no ar: v0.3.0 em https://point-ball.onrender.com
+Última atualização: 24/09/2026 — v0.7.0 na branch `dev` (aguardando teste; inclui v0.5.1 e v0.6.0) · no ar: v0.5.0 em https://point-ball.onrender.com
 
 ---
 
@@ -183,8 +183,7 @@
 - [x] Portal pisca antes de fechar; contador no topo ("Portais abrem em Xs" / "fecham em Xs")
 - [x] Anel de recarga do tiro: parte que falta agora é quase preta (#111827) — dá pra ver bem quanto falta para fechar
 - [x] Enviado para a branch `dev` (site não mudou)
-- [~] **Caique:** testar (`git fetch` + `git checkout dev` + `git pull`)
-- [ ] Juntar `dev` na `main` para publicar
+- [x] Publicada junto com a v0.5.0
 
 ## 8.11 v0.5.0 — modo Rei da colina
 - [x] Novo modo **Rei da colina** (times Azul x Vermelho)
@@ -196,6 +195,35 @@
   - HUD mostra quem domina a colina e quando ela muda; vitória mostra os pontos
   - bots vão para a colina e ficam rondando nela
   - ajustes no /teste (grupo "Rei da colina")
+- [x] v0.4.0 + v0.5.0 publicadas (PR #2 → `main` → Render)
+
+## 8.12 v0.5.1 — criar sala em modal
+- [x] Página inicial mais limpa: botão "➕ Criar sala" abre um modal com nome, senha, mapa, modo, tempo/pontos/abates/rounds e o preview do mapa
+- [x] Fecha com ✕, Cancelar, Esc ou clicando fora; Enter cria a sala
+- [x] Funciona no celular
+- [~] **Caique:** testar
+
+## 8.13 v0.6.0 — portais sorteados, colina equilibrada, 3 níveis de bot
+- [x] Mapa Portais: 8 aberturas (2 na esquerda, 2 na direita, 2 em cima, 2 em baixo)
+- [x] A cada abertura sorteia **4 portais = 2 pares** (cores ciano e rosa), nunca repete o sorteio anterior; entrar num sai no par da mesma cor, já andando para dentro do mapa (bala gira junto e não conta batida)
+- [x] Rei da colina: lugar sorteado **só quando a área atual acaba** (não mostra mais o próximo lugar)
+- [x] Sorteio equilibrado: perto do meio entre os times (1x1 = meio entre os dois; 2x2+ = meio entre o centro das duplas), puxado para o centro do mapa, sempre entre 32% e 68% da largura, escolhendo o candidato com distância parecida dos dois times e dos dois lados de nascimento; nunca repete o mesmo lugar
+- [x] Bots: só 3 níveis — **Iniciante** (bem mais fácil: mira tremida, demora ~1 s para reagir, fica parado às vezes, sem bomba), **Amador** (meio-termo, padrão) e **Profissional** (mais forte que o antigo)
+- [x] Simulação 1x1 (10 partidas de 2 min, abates): Pro 66 x 28 Amador · Amador 65 x 14 Iniciante · Pro 90 x 7 Iniciante
+- [x] Salas antigas com fácil/média/semi-pro viram iniciante/amador
+- [x] +40 nomes de bot (70 no total)
+- [x] Anel de carregamento: trilho **branco com contorno preto fino** (aparece no deserto, na neve e nos mapas escuros)
+- [~] **Caique:** testar; mandar a lista de nomes de bot que você criou para eu colocar
+
+## 8.14 v0.7.0 — fumaça, pulo guardado, novos valores
+- [x] Pulo carregado não reseta ao morrer (renascer no mata-mata e troca de round); se estava carregando, continua de onde parou
+- [x] Personagem raio 25 (era 22); ao perder 1 vida fica 35% menor (era 50%)
+- [x] Velocidade do tiro 660 (era 700) · raio da bomba 105 (era 95)
+- [x] **Fumaça** na rodinha do mouse: voa igual à bomba (mesmo alcance/tempo), ao cair abre uma cortina de 5 s, raio 150
+- [x] Miolo (55% do raio) totalmente fechado; daí até a borda vai clareando até sumir — só dá para se esconder no meio
+- [x] Não machuca ninguém; 1 fumaça por vida/round (igual bomba); HUD mostra 💨×1
+- [x] Bots não enxergam através do miolo da fumaça; você continua se vendo dentro dela
+- [x] Tudo ajustável no /teste (grupo "Fumaça"); cfgVersion 10 (valores antigos salvos no /teste são descartados)
 - [~] **Caique:** testar
 
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
@@ -224,6 +252,7 @@
 - Sala escura: no escuro nada aparece (nem você), só as balas com brilho fraco e rastro. O HUD continua visível.
 - Cada round começa **sem** pulo (conta 25 s). Dá para mudar em `/teste` → "Começa o round com pulo".
 - Invulnerável por 0,4 s depois de levar um acerto (evita perder 2 vidas com 1 rajada). Ajustável.
+- Rei da colina: quando um time empurra o outro, a colina tende a nascer mais perto do time que está recuado (que também renasce desse lado) — isso equilibra sozinho. O limite de 32%–68% da largura evita que caia perto de um nascimento.
 - Jogador desconectado no meio da partida fica parado no mapa até voltar (ou até 2 min).
 - Para testar vários jogadores no mesmo navegador: `/sala/CODIGO?p=2`, `?p=3`… (cada `p` vira um jogador diferente). Ou use janela anônima.
 

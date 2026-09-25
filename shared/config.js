@@ -6,7 +6,7 @@
   else root.RC_CONFIG = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   const DEFAULT_CONFIG = {
-    cfgVersion: 9,         // muda quando os padrões mudam (o /teste descarta valores salvos antigos)
+    cfgVersion: 10,         // muda quando os padrões mudam (o /teste descarta valores salvos antigos)
 
     // ---- Mapa ----
     mapWidth: 1600,        // largura do mapa (unidades do mundo)
@@ -15,16 +15,16 @@
     mapScreenScale: 0.96,  // quanto da tela o mapa ocupa (0.3 a 1)
 
     // ---- Personagem ----
-    playerRadius: 22,      // tamanho (raio) do personagem
+    playerRadius: 25,      // tamanho (raio) do personagem
     playerSpeed: 260,      // velocidade (unidades/segundo)
     lives: 2,              // vidas por round
-    hitShrink: 0.5,        // tamanho após perder 1 vida (0.5 = 50% menor)
+    hitShrink: 0.65,       // tamanho após perder 1 vida (0.65 = 35% menor)
     blinkDuration: 1.5,    // tempo piscando após ser atingido (s)
     invulnDuration: 0.4,   // invulnerável logo após ser atingido (s)
 
     // ---- Arma ----
     bulletRadius: 5,       // tamanho (raio) da bala
-    bulletSpeed: 700,      // velocidade da bala
+    bulletSpeed: 660,      // velocidade da bala
     maxBounces: 3,         // batidas na parede antes de sumir
     fireCooldown: 1.0,     // intervalo entre tiros (s)
     magSize: 20,           // balas por pente
@@ -47,7 +47,12 @@
     bombRange: 380,        // distância máxima do lançamento
     bombFlight: 0.6,       // tempo voando no alcance máximo (s)
     bombFuse: 0.6,         // tempo no chão até explodir (s)
-    bombRadius: 95,        // raio da explosão
+    bombRadius: 105,       // raio da explosão
+    // ---- Fumaça (rodinha do mouse) — voa igual à bomba ----
+    smokeCount: 1,         // fumaças por round / por vida
+    smokeRadius: 150,      // raio da cortina de fumaça
+    smokeTime: 5,          // quanto tempo a fumaça dura (s)
+    smokeCore: 0.55,       // parte do meio totalmente fechada (0.55 = 55% do raio); daí até a borda vai clareando
 
     // ---- Mata-mata ----
     respawnDelay: 2,       // tempo para renascer (s)
@@ -122,7 +127,7 @@
     tornadoSpeed: [50, 1000, 10], tornadoThrow: [80, 1000, 10], tornadoAirTime: [0.3, 3, 0.05],
     stormInterval: [5, 120, 1], stormWarn: [0, 5, 0.1], stormDuration: [0.5, 15, 0.1],
     stormBand: [0.05, 1, 0.05], bombCount: [0, 5, 1], bombRange: [80, 900, 10], bombFlight: [0.1, 2, 0.05],
-    bombFuse: [0, 3, 0.05], bombRadius: [20, 300, 5], respawnDelay: [0, 10, 0.5], hillRadius: [40, 400, 5], hillPointsPerSec: [0.1, 10, 0.1], hillMoveEvery: [5, 300, 1], portalFirstClosed: [0, 60, 1], portalOpen: [1, 60, 1], portalClosed: [1, 60, 1], spawnProtect: [0, 5, 0.1], freezeSlow: [0.1, 1, 0.05], freezeTime: [0.1, 6, 0.1]
+    bombFuse: [0, 3, 0.05], bombRadius: [20, 300, 5], smokeCount: [0, 5, 1], smokeRadius: [40, 400, 5], smokeTime: [0.5, 20, 0.5], smokeCore: [0.1, 1, 0.05], respawnDelay: [0, 10, 0.5], hillRadius: [40, 400, 5], hillPointsPerSec: [0.1, 10, 0.1], hillMoveEvery: [5, 300, 1], portalFirstClosed: [0, 60, 1], portalOpen: [1, 60, 1], portalClosed: [1, 60, 1], spawnProtect: [0, 5, 0.1], freezeSlow: [0.1, 1, 0.05], freezeTime: [0.1, 6, 0.1]
   };
 
   function mergeConfig(base, override) {

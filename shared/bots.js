@@ -5,7 +5,11 @@
 })(typeof self !== 'undefined' ? self : this, function (G) {
   const NAMES = ['Tonhão', 'Bigode', 'Faísca', 'Zé Borracha', 'Marreta', 'Pipoca', 'Trovão', 'Caçapa', 'Nhoque', 'Paçoca',
     'Biscoito', 'Tampinha', 'Ricochete', 'Mosquito', 'Coxinha', 'Ventania', 'Pé de Pano', 'Jacaré', 'Chiclete', 'Farofa',
-    'Tatu', 'Formiga', 'Rabanete', 'Canela', 'Sabugo', 'Boliche', 'Parafuso', 'Mandioca', 'Picolé', 'Tapioca'];
+    'Tatu', 'Formiga', 'Rabanete', 'Canela', 'Sabugo', 'Boliche', 'Parafuso', 'Mandioca', 'Picolé', 'Tapioca',
+    'Quindim', 'Pastel', 'Brigadeiro', 'Cuscuz', 'Pamonha', 'Torresmo', 'Jiló', 'Buchada', 'Rapadura', 'Goiabada',
+    'Carrapato', 'Lagartixa', 'Sucuri', 'Capivara', 'Tamanduá', 'Pernilongo', 'Siri', 'Mexerica', 'Pitomba', 'Caju',
+    'Bolacha', 'Mortadela', 'Zé Pipoco', 'Tio Chico', 'Dona Neide', 'Seu Boneco', 'Pé de Cabra', 'Maria Bala', 'Zé Ruela', 'Catapimba',
+    'Bumerangue', 'Estilingue', 'Pinball', 'Quicão', 'Rebote', 'Sacizinho', 'Curupira', 'Boitatá', 'Tarrafa', 'Arapuca'];
   const COLORS = ['#f97316', '#a855f7', '#06b6d4', '#84cc16', '#ec4899', '#eab308', '#14b8a6', '#f43f5e'];
 
   function randomNames(n, taken) {
@@ -17,21 +21,24 @@
   }
 
   // níveis: err = erro de mira (rad), react = tempo de reação da mira (s), fire = quanto do tempo atira quando vê,
-  // dodge = quanto desvia de lado, lead = quanto prevê o movimento do alvo, bomb = chance/s de jogar bomba, jump = chance/s de pular
+  // dodge = quanto desvia de lado, lead = quanto prevê o movimento do alvo, bomb = chance/s de jogar bomba, jump = chance/s de pular,
+  // notice = demora (s) para começar a atirar quando o alvo aparece, idle = chance de ficar parado/distraído,
+  // shaky = mira tremida (o erro muda a cada ajuste de mira)
   const LEVELS = {
-    facil:   { err: 0.8,  react: 0.4,  fire: 0.45, dodge: 0.3, lead: 0,   bomb: 0,    jump: 0.05 },
-    media:   { err: 0.5,  react: 0.22, fire: 0.75, dodge: 0.6, lead: 0.3, bomb: 0.05, jump: 0.15 },
-    semipro: { err: 0.26, react: 0.09, fire: 1,    dodge: 1,   lead: 0.6, bomb: 0.12, jump: 0.3 },
-    pro:     { err: 0.08, react: 0.04, fire: 1,    dodge: 1,   lead: 1,   bomb: 0.25, jump: 0.4 }
+    iniciante: { err: 1.1,  react: 0.6,  fire: 0.35, dodge: 0.1,  lead: 0,   bomb: 0,    jump: 0.03, notice: 0.9,  idle: 0.35, shaky: true },
+    amador:    { err: 0.5,  react: 0.2,  fire: 0.7,  dodge: 0.6,  lead: 0.3, bomb: 0.06, jump: 0.15, notice: 0.45, idle: 0.15, shaky: true },
+    pro:       { err: 0.04, react: 0.03, fire: 1,    dodge: 1,    lead: 1,   bomb: 0.3,  jump: 0.45, notice: 0.05, idle: 0 }
   };
-  const LEVEL_NAMES = { facil: 'Fácil', media: 'Média', semipro: 'Semi-pro', pro: 'Profissional' };
+  const LEVEL_NAMES = { iniciante: 'Iniciante', amador: 'Amador', pro: 'Profissional' };
+  const OLD_LEVELS = { facil: 'iniciante', media: 'amador', semipro: 'amador' }; // nomes antigos
+  function levelOf(v) { return LEVELS[v] ? v : OLD_LEVELS[v] || 'amador'; }
 
   // decide o que o bot faz neste tick
   function think(game, p, dt) {
     if (!p.alive) return;
-    const L = LEVELS[p.botLevel] || LEVELS.semipro;
+    const L = LEVELS[levelOf(p.botLevel)];
     const ai = p.ai || (p.ai = {});
-    if (!ai.seen) Object.assign(ai, { t: 0, mx: 0, my: 0, aimT: 0, lastX: p.x, lastY: p.y, stuckT: 0, err: 0, fireOn: true, fireT: 0, seen: {} });
+    if (!ai.seen) Object.assign(ai, { t: 0, mx: 0, my: 0, aimT: 0, lastX: p.x, lastY: p.y, stuckT: 0, err: 0, fireOn: true, fireT: 0, visT: 0, seen: {} });
     const c = game.cfg;
     const inp = { up: false, down: false, left: false, right: false, fire: false };
     if (p.jump) { game.setInput(p.id, inp); return; }
@@ -41,7 +48,7 @@
     for (const q of game.players.values()) {
       if (!game.isEnemy(p, q) || !q.alive || q.jump) continue;
       const d = Math.hypot(q.x - p.x, q.y - p.y);
-      const see = !G.lineBlocked(p.x, p.y, q.x, q.y, game.walls);
+      const see = !G.lineBlocked(p.x, p.y, q.x, q.y, game.walls) && !(game.smokeBlocks && game.smokeBlocks(p.x, p.y, q.x, q.y));
       const score = d + (see ? 0 : 600);
       if (score < best) { best = score; target = q; visible = see; }
     }
@@ -69,6 +76,7 @@
         else if (visible) { const s = Math.random() < 0.5 ? 1 : -1; mx = dx * 0.6 - dy * s * 0.6; my = dy * 0.6 + dx * s * 0.6; }
         else { mx = dx; my = dy; if (Math.random() < 0.35) { const a = Math.random() * Math.PI * 2; mx = Math.cos(a); my = Math.sin(a); } }
       } else if (Math.random() < 0.6) { const a = Math.random() * Math.PI * 2; mx = Math.cos(a); my = Math.sin(a); }
+      if (L.idle && Math.random() < L.idle) { mx = 0; my = 0; } // distraído: fica parado um pouco
       ai.mx = mx; ai.my = my;
       ai.err = (Math.random() - 0.5) * L.err; // erro de mira (pra dar pra ganhar)
     }
@@ -96,16 +104,18 @@
     ai.fireT -= dt;
     if (ai.fireT <= 0) { ai.fireT = 0.4 + Math.random() * 0.6; ai.fireOn = Math.random() < L.fire; }
 
+    ai.visT = target && visible ? ai.visT + dt : 0; // há quanto tempo está vendo o alvo
     if (target && visible) {
       // mira com reação e um pouco de erro
       if (ai.aimT <= 0) {
         ai.aimT = L.react;
+        if (L.shaky) ai.err = (Math.random() - 0.5) * L.err;
         const tt = dist / c.bulletSpeed * L.lead;
         const a = Math.atan2(target.y + tvy * tt - p.y, target.x + tvx * tt - p.x) + ai.err;
         game.setAim(p.id, Math.cos(a), Math.sin(a));
       }
-      if (p.weapon === 'gun') inp.fire = ai.fireOn;
-      else if (dist < game.radiusOf(p) + c.knifeRange + game.radiusOf(target) + 6) inp.fire = true;
+      if (p.weapon === 'gun') inp.fire = ai.fireOn && ai.visT >= L.notice;
+      else if (ai.visT >= L.notice && dist < game.radiusOf(p) + c.knifeRange + game.radiusOf(target) + 6) inp.fire = true;
     } else if (target) {
       const a = Math.atan2(ai.my || (target.y - p.y), ai.mx || (target.x - p.x));
       if (ai.aimT <= 0) { ai.aimT = 0.3; game.setAim(p.id, Math.cos(a), Math.sin(a)); }
@@ -125,5 +135,5 @@
     game.setInput(p.id, inp);
   }
 
-  return { think, randomNames, COLORS, LEVELS, LEVEL_NAMES };
+  return { think, randomNames, COLORS, LEVELS, LEVEL_NAMES, levelOf };
 });

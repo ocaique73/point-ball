@@ -35,7 +35,7 @@ window.PBHud = (function () {
           <div class="hud-cell-right"><div class="hud-feed" id="h-feed"></div></div>
         </div>
         <div class="hud-center" id="h-center"></div>
-        <div class="hud-help">WASD/Setas: andar · Mouse: mirar · Clique esquerdo: atirar/facada · Botão direito: bomba (segure para mirar) · Espaço: super pulo · 1: arma · 2: faca · R: recarregar</div>`;
+        <div class="hud-help">WASD/Setas: andar · Mouse: mirar · Clique esquerdo: atirar/facada · Botão direito: bomba (segure para mirar) · Rodinha: fumaça · Espaço: super pulo · 1: arma · 2: faca · R: recarregar</div>`;
       container.appendChild(this.el);
       this.$ = (id) => this.el.querySelector('#' + id);
       this.feed = [];
@@ -91,7 +91,7 @@ window.PBHud = (function () {
       if (lg) lt = lg.s === 2 ? '🌑 LUZ APAGADA' : lg.s === 1 ? '<span class="warn">⚠️ APAGANDO...</span>' : `💡 Luz apaga em <b>${Math.ceil(lg.n)}s</b>`;
       const hz = s.hz;
       if (hz && hz.t === 'tornado') lt = hz.s === 2 ? '🌪️ FURACÃO!' : hz.s === 1 ? '<span class="warn">🌪️ Furacão nascendo...</span>' : `🌪️ Furacão em <b>${Math.ceil(hz.n)}s</b>`;
-      if (s.pt) lt = s.pt.o ? (s.pt.n < 1.5 ? `<span class="warn">🌀 Portais fechando...</span>` : `🌀 Portais <b>ABERTOS</b> · fecham em <b>${Math.ceil(s.pt.n)}s</b>`) : `🌀 Portais abrem em <b>${Math.ceil(s.pt.n)}s</b>`;
+      if (s.pt) lt = s.pt.o ? (s.pt.n < 1.5 ? `<span class="warn">🌀 Portais fechando...</span>` : `🌀 2 pares <b>ABERTOS</b> · fecham em <b>${Math.ceil(s.pt.n)}s</b>`) : `🌀 Portais abrem em <b>${Math.ceil(s.pt.n)}s</b>`;
       if (hz && hz.t === 'sand') lt = hz.s === 2 ? '🏜️ TEMPESTADE DE AREIA!' : hz.s === 1 ? '<span class="warn">🏜️ Areia juntando no meio...</span>' : `🏜️ Tempestade de areia em <b>${Math.ceil(hz.n)}s</b>`;
       if (hz && hz.t === 'storm') lt = hz.s === 2 ? '❄️ TEMPESTADE FRIA!' : hz.s === 1 ? '<span class="warn">❄️ Tempestade chegando no centro...</span>' : `❄️ Tempestade em <b>${Math.ceil(hz.n)}s</b>`;
       if (s.hl && s.ph === 'playing') {
@@ -110,6 +110,7 @@ window.PBHud = (function () {
       let hearts = '';
       for (let i = 0; i < cfg.lives; i++) hearts += `<span class="${i < me.l ? '' : 'lost'}">❤️</span>`;
       if (cfg.bombCount > 0) hearts += ` <span class="hud-bombs ${me.bo > 0 ? '' : 'lost'}" title="Bomba (botão direito)">💣×${me.bo || 0}</span>`;
+      if (cfg.smokeCount > 0) hearts += ` <span class="hud-bombs ${me.so > 0 ? '' : 'lost'}" title="Fumaça (rodinha do mouse)">💨×${me.so || 0}</span>`;
       this.set('h-hearts', hearts);
       this.$('h-w1').classList.toggle('on', me.w === 1);
       this.$('h-w2').classList.toggle('on', me.w === 2);
@@ -161,6 +162,15 @@ window.PBHud = (function () {
         if (e.button === 0 && keys.fire) { keys.fire = false; h.onChange(Object.assign({}, keys)); }
         if (e.button === 2 && h.onBomb) h.onBomb(false);
       });
+      // rodinha do mouse: joga a fumaça (uma por giro, com uma pausa para não gastar sem querer)
+      let wheelT = 0;
+      h.mouseEl.addEventListener('wheel', (e) => {
+        if (!h.enabled() || !h.onSmoke) return;
+        e.preventDefault();
+        const now = performance.now();
+        if (now - wheelT < 400) return;
+        wheelT = now; h.onSmoke();
+      }, { passive: false });
     }
     function isTyping(e) {
       const t = e.target;
