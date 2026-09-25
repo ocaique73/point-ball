@@ -42,7 +42,8 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 resize();
-scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.3));
+const hemi = new THREE.HemisphereLight(0xffffff, 0x445566, 1.3);
+scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xffffff, 2.3);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -55,6 +56,7 @@ function seeded(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 10
 
 // ---------- mapa ----------
 let mapGroup = null, mapWalls = [];
+let lampLights = [], lavaGlow = [];
 function groundTexture(th, seed) {
   const cv = document.createElement('canvas'); cv.width = 2048; cv.height = 1280;
   const g = cv.getContext('2d'), rnd = seeded(seed);
@@ -126,8 +128,9 @@ function buildMap(mapId) {
   if (mapId === 'teste') return buildTestRoom();
   const map = MAPS[mapId], th = map.theme, W = CFG.mapWidth, H = CFG.mapHeight;
   mapGroup = new THREE.Group();
-  scene.background = new THREE.Color(map.space ? 0x03040b : 0x9cc7ee);
-  scene.fog = map.space ? null : new THREE.Fog(0x9cc7ee, 1400, 4200);
+  const nightMap = mapId === 'cidade' || mapId === 'escuro';
+  scene.background = new THREE.Color(map.space ? 0x03040b : nightMap ? 0x05060a : 0x9cc7ee);
+  scene.fog = map.space ? null : new THREE.Fog(nightMap ? 0x05060a : 0x9cc7ee, nightMap ? 250 : 1400, nightMap ? 1400 : 4200);
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshStandardMaterial({ map: groundTexture(th, mapId.length * 97), roughness: 0.95 }));
   ground.rotation.x = -Math.PI / 2; ground.position.set(W / 2, 0, H / 2); ground.receiveShadow = true;
   mapGroup.add(ground);
@@ -224,6 +227,49 @@ function buildMap(mapId) {
       mapGroup.add(frame);
     }
   }
+  // vulcão: poças de lava (sorteadas uma vez por partida, sempre espelhadas)
+  for (const l of lavaGlow) { mapGroup && scene.remove(l.mesh); } lavaGlow = [];
+  window.__lavaPools = null;
+  if (mapId === 'vulcao') {
+    const pools = [], rnd2 = seeded(mapId.length * 53 + 3);
+    for (let i = 0; i < 3; i++) {
+      for (let tries = 0; tries < 30; tries++) {
+        const r = 55 + rnd2() * 25;
+        const x = W * 0.16 + rnd2() * (W * 0.28), z = 70 + rnd2() * (H - 140);
+        if (!G.circleFree(x, z, r + 15, mapWalls, CFG)) continue;
+        pools.push({ x, z, r }, { x: W - x, z, r });
+        break;
+      }
+    }
+    window.__lavaPools = pools;
+    for (const q of pools) {
+      const glow = new THREE.Mesh(new THREE.CircleGeometry(q.r, 20), new THREE.MeshBasicMaterial({ color: 0xff5a1f, transparent: true, opacity: 0.85 }));
+      glow.rotation.x = -Math.PI / 2; glow.position.set(q.x, 1.2, q.z);
+      mapGroup.add(glow);
+      const light = new THREE.PointLight(0xff5a1f, 3, 260, 2); light.position.set(q.x, 30, q.z);
+      mapGroup.add(light);
+      lavaGlow.push({ mesh: glow, light });
+    }
+  }
+  // cidade à noite: postes que iluminam (atirar apaga por um tempo) e ambiente escuro
+  for (const l of lampLights) { mapGroup && scene.remove(l.bulb); } lampLights = [];
+  window.__lampPositions = null;
+  if (mapId === 'cidade') {
+    const lampPts = MAPS.cidade.lamps.map(([nx, nz]) => [nx * W, nz * H]);
+    window.__lampPositions = lampPts;
+    for (const [x, z] of lampPts) {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.4, 60, 6), mat(0x1f2430)); pole.position.set(x, 30, z);
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(6, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffe9a8 })); bulb.position.set(x, 60, z);
+      pole.castShadow = pole.receiveShadow = true;
+      mapGroup.add(pole, bulb);
+      const light = new THREE.PointLight(0xffe9a8, 2.4, 260, 2); light.position.set(x, 58, z);
+      mapGroup.add(light);
+      lampLights.push({ bulb, light });
+    }
+  }
+  // luz do ambiente: escura em "cidade" (só os postes iluminam); "escuro" começa normal e o frame() liga/desliga
+  if (mapId === 'cidade') { hemi.intensity = 0.12; sun.intensity = 0.05; }
+  else { hemi.intensity = 1.3; sun.intensity = 2.3; }
   if (map.space) {
     const pts = [], rs = seeded(9);
     for (let i = 0; i < 2500; i++) { const a = rs() * Math.PI * 2, b = rs() * Math.PI - Math.PI / 2, r = 3500; pts.push(W / 2 + Math.cos(a) * Math.cos(b) * r, Math.sin(b) * r, H / 2 + Math.sin(a) * Math.cos(b) * r); }
@@ -750,7 +796,9 @@ function newGame() {
     portalMap: (map && map.portals) ? S.map : null,
     cfg: CFG,
     portalPairs: window.__portalPairs || null,
-    ceilingY: CEILING_Y[S.map] || null
+    ceilingY: CEILING_Y[S.map] || null,
+    lavaPools: window.__lavaPools || null,
+    lamps: window.__lampPositions || null
   });
   sim.addPlayer({ id: 'me', name: 'Você', team: 'A', primary: S.weapon });
   const n = isTestRoom ? 0 : Number(S.bots), names = BOTS.randomNames(n);
@@ -782,6 +830,24 @@ function frame(now) {
     const sk = sim.sandK || 0;
     scene.fog.color.set(0xd8b878);
     scene.fog.near = lerp(1400, 120, sk); scene.fog.far = lerp(4200, 700, sk);
+  }
+  // sala escura: a luz apaga e acende sozinha
+  if (sim.hazard === 'dark') { hemi.intensity = sim.lightOn ? 1.3 : 0.04; sun.intensity = sim.lightOn ? 2.3 : 0.01; }
+  // cidade à noite: cada poste liga/desliga conforme foi atirado ou não
+  if (sim.lamps && sim.lamps.length === lampLights.length) {
+    for (let i = 0; i < lampLights.length; i++) {
+      const on = sim.time >= sim.lamps[i].offUntil;
+      lampLights[i].light.intensity = on ? 2.4 : 0;
+      lampLights[i].bulb.material.color.set(on ? 0xffe9a8 : 0x33302a);
+    }
+  }
+  // vulcão: a lava pulsa e machuca quando está "ativa"
+  if (lavaGlow.length) {
+    const on = sim.lavaActive;
+    for (const l of lavaGlow) {
+      l.mesh.material.opacity = on ? 0.75 + Math.sin(now / 140) * 0.15 : 0.25;
+      l.light.intensity = on ? 3 : 0.4;
+    }
   }
 
   // bonecos (o corpo some quando morre; fica a lápide)
@@ -933,6 +999,11 @@ function handleEvent(e, now) {
   if (e.type === 'tornado_end') feed('🌪️ O furacão jogou todo mundo longe');
   if (e.type === 'sand_start') feed('🏜️ Tempestade de areia — visibilidade caindo');
   if (e.type === 'sand_end') feed('🏜️ A tempestade passou');
+  if (e.type === 'lava_on') feed('🌋 A lava subiu!');
+  if (e.type === 'lava_off') feed('🌋 A lava baixou');
+  if (e.type === 'light_off') feed('🕯️ A luz apagou...');
+  if (e.type === 'light_on') feed('💡 A luz voltou');
+  if (e.type === 'lamp_off') feed('💡 Um poste apagou');
   if (e.type === 'jump' && a) a.legsOnce('Jump_Start', 1.6, now);
   if (e.type === 'djump' && a) a.legsOnce('Jump_Full_Short', 1.6, now);
   if (e.type === 'land' && a) a.legsOnce('Jump_Land', 1.8, now);

@@ -54,6 +54,11 @@ export class Sim3D {
     this.portalMap = opts.portalMap || null; this.cfg = opts.cfg || null; this.portalPairs = opts.portalPairs || null;
     // teto que ricocheteia tiro (folhas da floresta / vidro da nave), null = sem teto
     this.ceilingY = opts.ceilingY != null ? opts.ceilingY : null;
+    // vulcão: poças de lava (sorteadas uma vez no início, sem trocar de layout, pra simplificar)
+    this.lavaPools = opts.lavaPools || null; this.lavaActive = false; this.lavaT = 5;
+    // cidade à noite / sala escura: postes de luz e ciclo de escuridão
+    this.lamps = (opts.lamps || []).map((p, i) => ({ x: p[0], z: p[1], i, offUntil: 0 }));
+    this.lightOn = true; this.darkT = 6;
   }
   // sala de teste: muda um valor de física ao vivo (ex: 'speed', 'jumpV')
   setParam(key, val) { if (key in this.P) this.P[key] = val; }
@@ -346,7 +351,34 @@ export class Sim3D {
   updateHazard(dt) {
     if (this.hazard === 'tornado') this.updateTornado(dt);
     else if (this.hazard === 'sand') this.updateSand(dt);
+    else if (this.hazard === 'lava') this.updateLava(dt);
+    else if (this.hazard === 'dark') this.updateDark(dt);
     if (this.portalMap) this.updatePortals();
+  }
+  // vulcão: a lava sobe (machuca) e desce de tempos em tempos
+  updateLava(dt) {
+    if (!this.lavaPools) return;
+    this.lavaT -= dt;
+    if (this.lavaT <= 0) {
+      this.lavaActive = !this.lavaActive;
+      this.lavaT = this.lavaActive ? 6 : 8;
+      this.events.push({ type: this.lavaActive ? 'lava_on' : 'lava_off' });
+    }
+    if (!this.lavaActive) return;
+    for (const p of this.players.values()) {
+      if (!p.alive) continue;
+      const r = this.radius(p);
+      if (this.lavaPools.some((q) => Math.hypot(p.x - q.x, p.z - q.z) < q.r + r * 0.3)) this.damage(p, null, 'lava');
+    }
+  }
+  // sala escura: a luz apaga de tempos em tempos
+  updateDark(dt) {
+    this.darkT -= dt;
+    if (this.darkT <= 0) {
+      this.lightOn = !this.lightOn;
+      this.darkT = this.lightOn ? 7 : 4.5;
+      this.events.push({ type: this.lightOn ? 'light_on' : 'light_off' });
+    }
   }
   // furacão da floresta: puxa/gira quem estiver perto e no fim joga todo mundo longe
   updateTornado(dt) {
@@ -463,6 +495,13 @@ export class Sim3D {
           const r = this.radius(q), h = this.heightOf(q);
           const cy = clamp(b.y, q.y + r * 0.5, q.y + h - r * 0.4);
           if ((b.x - q.x) ** 2 + (b.z - q.z) ** 2 + (b.y - cy) ** 2 < (r + b.r) ** 2) { this.damage(q, b.owner, b.kind); dead = true; break; }
+        }
+        // cidade à noite: atirar no poste apaga a luz por um tempo
+        if (!dead) for (const L of this.lamps) {
+          if (this.time < L.offUntil) continue;
+          if (b.y > 15 && b.y < 90 && (b.x - L.x) ** 2 + (b.z - L.z) ** 2 < 20 ** 2) {
+            L.offUntil = this.time + 9; this.events.push({ type: 'lamp_off', i: L.i, x: L.x, z: L.z }); dead = true; break;
+          }
         }
       }
       if (!dead && this.time - b.t0 < 8) keep.push(b);

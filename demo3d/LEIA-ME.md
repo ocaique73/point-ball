@@ -18,7 +18,8 @@ inimiga lançada mostra a distância e a direção no topo da tela pra você cor
 Mapas: Deserto (dunas + cactos + tempestade de areia), Neve (paredes de gelo semi-transparentes), Floresta (paredes de
 madeira com árvore em cada ponta + furacão + ricochete na copa das árvores), Nave espacial (agora é uma base na Lua,
 com painéis de nave e teto de vidro que também ricocheteia tiro), Portais (atravesse um portal aberto e saia no par
-dele) e **Sala de teste**.
+dele), Vulcão (poças de lava que sobem e descem sozinhas), Sala escura (a luz apaga e acende sozinha), Cidade à noite
+(só os postes iluminam — atirar num poste apaga ele) e **Sala de teste**.
 
 Menu do **Esc**: câmera, mapa (inclui **Sala de teste**, um mapa aberto sem bots e sem morrer, feito pra treinar),
 bots, nível, sombras, FOV, arma principal (lançador, estilingue, bolinha na mão, arco, disco), sensibilidade do mouse,

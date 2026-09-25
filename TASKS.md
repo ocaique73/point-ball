@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 25/09/2026 — v0.14.0 — demo 3D Three.js: mapa Portais, furacão da floresta, tempestade de areia, reskins (madeira/gelo/dunas/base lunar) — além do v0.13.0 (sala de teste, pulo mais alto, poção, reabastecimento, indicador de bomba, explosão melhorada, cruz na lápide). Godot pausado por ora. Push pro GitHub pendente (ver observação abaixo). https://point-ball.onrender.com
+Última atualização: 25/09/2026 — v0.15.0 — demo 3D Three.js: todos os 7 mapas do 2D portados (deserto/neve/floresta/nave/portal/vulcão/escuro/cidade — 8 na verdade), sala de teste, pulo/velocidade/armas ajustáveis, poção, reabastecimento, indicador de bomba, explosão melhorada, cruz na lápide, reskins de mapa. Falta só o multiplayer (salas). Godot pausado por ora. Push pro GitHub pendente (ver observação abaixo). https://point-ball.onrender.com
 
 ---
 
@@ -302,9 +302,12 @@
   - [x] Reskin **Neve**: paredes de gelo semi-transparentes de verdade — dá pra ver uma, mas quanto mais empilhadas atrás menos dá pra ver (efeito natural da transparência em camadas)
   - [x] Reskin **Deserto**: paredes viraram dunas de areia arredondadas + cactos espalhados aleatoriamente (a colisão continua sendo a caixa, só o visual mudou)
   - [x] Reskin **Nave**: paredes de "tijolo" viraram painéis/computadores de nave; virou uma base na Lua com teto de vidro (dá pra ver as estrelas) e tiro ricocheteia nele
-  - [ ] Mapas Vulcão, Sala escura e Cidade à noite: adiados por enquanto (não foram citados explicitamente pelo Caique e o pacote já ficou grande — fica pra um próximo bloco se ele quiser)
-  - [ ] Multiplayer (salas, senha, times) na demo 3D: ainda não começado — é o próximo bloco grande
-- [~] **Caique:** testar os blocos 1 e 2
+- [x] v0.15.0 (Three.js): "bloco 3" — os últimos 3 mapas do 2D
+  - [x] Mapa **Vulcão**: poças de lava (sorteadas uma vez por partida, sempre espelhadas) que sobem e descem sozinhas — dói quando estão "ativas" (a troca de parede na erupção do 2D ficou de fora, pra simplificar)
+  - [x] Mapa **Sala escura**: a luz apaga e acende sozinha de tempos em tempos
+  - [x] Mapa **Cidade à noite**: escuro o tempo todo, só os postes iluminam — atirar num poste apaga ele por um tempo
+- [ ] Multiplayer (salas, senha, times) na demo 3D: ainda não começado — é o próximo bloco grande
+- [~] **Caique:** testar os blocos 1, 2 e 3
 
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
 - [ ] Sons (tiro, batida na parede, acerto, faca, pulo)
