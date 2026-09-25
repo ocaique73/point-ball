@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 24/09/2026 — v0.11.0 — demo 3D Three.js com física 3D própria (Godot em seguida) (próximo passo: demos 3D em Three.js e Godot) em https://point-ball.onrender.com
+Última atualização: 24/09/2026 — v0.12.0 — demos 3D (Three.js e Godot) com física 3D, armas, menu, mira e placar (próximo passo: demos 3D em Three.js e Godot) em https://point-ball.onrender.com
 
 ---
 
@@ -284,8 +284,8 @@
   - [x] Menu no **Esc**: câmera, mapa, bots, nível, sombras, FOV, arma, sensibilidade, inverter Y
   - [x] **Mira editável**: cor, contorno, tamanho, espessura, espaço, ponto, círculo de recarga, marcador de acerto em X (amarelo = acerto, vermelho = abate)
   - [x] **Tab** (segurar): placar com abates, mortes, assistências e K/D
-- [ ] Godot: levar as mesmas mudanças
-- [~] **Caique:** testar a Three.js
+- [x] v0.12.0 (Godot): as mesmas mudanças (física com CharacterBody3D/RigidBody3D, menu com abas, mira editável, placar, lápide, 5 armas, fumaça macia)
+- [~] **Caique:** testar as duas e escolher
 
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
 - [ ] Sons (tiro, batida na parede, acerto, faca, pulo)
