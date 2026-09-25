@@ -48,7 +48,7 @@
     for (const q of game.players.values()) {
       if (!game.isEnemy(p, q) || !q.alive || q.jump) continue;
       const d = Math.hypot(q.x - p.x, q.y - p.y);
-      const see = !G.lineBlocked(p.x, p.y, q.x, q.y, game.walls) && !(game.smokeBlocks && game.smokeBlocks(p.x, p.y, q.x, q.y));
+      const see = !G.lineBlocked(p.x, p.y, q.x, q.y, game.walls) && (!game.canSee || game.canSee(p, q));
       const score = d + (see ? 0 : 600);
       if (score < best) { best = score; target = q; visible = see; }
     }
@@ -91,6 +91,21 @@
       ai.lastX = p.x; ai.lastY = p.y; ai.stuckT = 0;
     }
 
+    // foge de lava e de buraco (olha um pouco à frente)
+    if (game.dangerAt) {
+      const r = game.radiusOf(p);
+      const here = game.dangerAt(p.x, p.y, r * 0.5);
+      if (here) {
+        const dx = p.x - here.x, dy = p.y - here.y, d = Math.hypot(dx, dy) || 1;
+        ai.mx = dx / d; ai.my = dy / d; ai.t = Math.max(ai.t, 0.3);
+      } else if ((ai.mx || ai.my) && game.dangerAt(p.x + ai.mx * 70, p.y + ai.my * 70, r)) {
+        const opts = [[-ai.my, ai.mx], [ai.my, -ai.mx], [-ai.mx, -ai.my], [0, 0]];
+        for (const [ox, oy] of opts) {
+          if (!ox && !oy) { ai.mx = 0; ai.my = 0; break; }
+          if (!game.dangerAt(p.x + ox * 70, p.y + oy * 70, r)) { ai.mx = ox; ai.my = oy; break; }
+        }
+      }
+    }
     inp.right = ai.mx > 0.38; inp.left = ai.mx < -0.38; inp.down = ai.my > 0.38; inp.up = ai.my < -0.38;
 
     // velocidade do alvo (para prever onde ele vai estar)

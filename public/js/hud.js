@@ -93,6 +93,9 @@ window.PBHud = (function () {
       if (hz && hz.t === 'tornado') lt = hz.s === 2 ? '🌪️ FURACÃO!' : hz.s === 1 ? '<span class="warn">🌪️ Furacão nascendo...</span>' : `🌪️ Furacão em <b>${Math.ceil(hz.n)}s</b>`;
       if (s.pt) lt = s.pt.o ? (s.pt.n < 1.5 ? `<span class="warn">🌀 Portais fechando...</span>` : `🌀 2 pares <b>ABERTOS</b> · fecham em <b>${Math.ceil(s.pt.n)}s</b>`) : `🌀 Portais abrem em <b>${Math.ceil(s.pt.n)}s</b>`;
       if (hz && hz.t === 'sand') lt = hz.s === 2 ? '🏜️ TEMPESTADE DE AREIA!' : hz.s === 1 ? '<span class="warn">🏜️ Areia juntando no meio...</span>' : `🏜️ Tempestade de areia em <b>${Math.ceil(hz.n)}s</b>`;
+      if (hz && hz.t === 'city') { const off = (hz.lo || []).filter((x) => x > 0).length; lt = off ? `💡 <b>${off}</b> poste${off > 1 ? 's' : ''} apagado${off > 1 ? 's' : ''}` : '💡 Atire nos postes para apagar a luz'; }
+      if (hz && hz.t === 'lava') lt = hz.s === 2 ? '🌋 LAVA! Paredes do meio mudaram' : hz.s === 1 ? '<span class="warn">🌋 O chão está rachando...</span>' : `🌋 Lava em <b>${Math.ceil(hz.n)}s</b>`;
+      if (hz && hz.t === 'meteor') lt = hz.s === 1 ? '<span class="warn">☄️ METEOROS CHEGANDO!</span>' : `☄️ Meteoros em <b>${Math.ceil(hz.n)}s</b>${hz.h && hz.h.length ? ' · 🕳️ cuidado com os buracos' : ''}`;
       if (hz && hz.t === 'storm') lt = hz.s === 2 ? '❄️ TEMPESTADE FRIA!' : hz.s === 1 ? '<span class="warn">❄️ Tempestade chegando no centro...</span>' : `❄️ Tempestade em <b>${Math.ceil(hz.n)}s</b>`;
       if (s.hl && s.ph === 'playing') {
         const o = s.hl.o;

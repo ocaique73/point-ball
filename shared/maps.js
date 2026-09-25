@@ -100,6 +100,64 @@
     ], [[0.46, 0.5, 0.54, 0.5], [0.5, 0.1, 0.5, 0.26], [0.5, 0.74, 0.5, 0.9]])
   };
 
+  // Cidade à noite: escuro o tempo todo, só os postes iluminam. Atirar no poste apaga a luz por um tempo
+  MAPS.cidade = {
+    id: 'cidade',
+    name: 'Cidade à noite',
+    hazard: 'city',
+    lamps: mirrorPts([[0.085, 0.5], [0.22, 0.1], [0.22, 0.9], [0.3, 0.5], [0.44, 0.34], [0.44, 0.66]]).concat([[0.5, 0.2], [0.5, 0.8]]),
+    theme: { ground: '#2a2d35', ground2: '#30343d', wall: '#3b3f4a', wallEdge: '#5b6170', deco: 'city', border: '#16181d' },
+    walls: mirror([
+      [0.14, 0.2, 0.3, 0.2],
+      [0.14, 0.2, 0.14, 0.32],
+      [0.14, 0.8, 0.3, 0.8],
+      [0.14, 0.68, 0.14, 0.8],
+      [0.24, 0.4, 0.24, 0.6],
+      [0.36, 0.28, 0.36, 0.42],
+      [0.36, 0.58, 0.36, 0.72],
+      [0.42, 0.1, 0.42, 0.2],
+      [0.42, 0.8, 0.42, 0.9]
+    ], [[0.46, 0.5, 0.54, 0.5]])
+  };
+
+  // Vulcão: poças de lava nascem em lugares sorteados (sempre espelhadas) e as paredes do meio mudam de lugar
+  MAPS.vulcao = {
+    id: 'vulcao',
+    name: 'Vulcão',
+    hazard: 'lava',
+    theme: { ground: '#3a2a26', ground2: '#46322c', wall: '#5a4038', wallEdge: '#2b1d18', deco: 'ash', border: '#1f1411' },
+    walls: mirror([
+      [0.14, 0.24, 0.14, 0.4],
+      [0.14, 0.6, 0.14, 0.76],
+      [0.28, 0.12, 0.28, 0.26],
+      [0.28, 0.74, 0.28, 0.88]
+    ]),
+    // paredes que mudam: alterna entre os dois desenhos a cada erupção
+    layouts: [
+      mirror([[0.36, 0.3, 0.36, 0.46], [0.36, 0.54, 0.36, 0.7], [0.22, 0.5, 0.3, 0.5]], [[0.46, 0.5, 0.54, 0.5]]),
+      mirror([[0.33, 0.38, 0.43, 0.38], [0.33, 0.62, 0.43, 0.62], [0.22, 0.44, 0.22, 0.56]], [[0.5, 0.26, 0.5, 0.4], [0.5, 0.6, 0.5, 0.74]])
+    ]
+  };
+
+  // Nave espacial: a cada 25 s caem 2 meteoros (um de cada lado, sempre espelhados) e abrem buracos para o espaço
+  MAPS.nave = {
+    id: 'nave',
+    name: 'Nave espacial',
+    hazard: 'meteor',
+    space: true,
+    // cantos "cortados" (casco da nave) — é espaço, ninguém passa
+    blocks: [[0, 0, 0.1, 0.07], [0, 0.07, 0.035, 0.05], [0.9, 0, 0.1, 0.07], [0.965, 0.07, 0.035, 0.05],
+      [0, 0.93, 0.1, 0.07], [0, 0.88, 0.035, 0.05], [0.9, 0.93, 0.1, 0.07], [0.965, 0.88, 0.035, 0.05]],
+    theme: { ground: '#2b3340', ground2: '#323b4a', wall: '#56627a', wallEdge: '#8a9bb8', deco: 'panels', border: '#39435a' },
+    walls: mirror([
+      [0.16, 0.32, 0.16, 0.68],
+      [0.3, 0.14, 0.3, 0.3],
+      [0.3, 0.7, 0.3, 0.86],
+      [0.4, 0.42, 0.4, 0.58],
+      [0.34, 0.5, 0.4, 0.5]
+    ], [[0.5, 0.12, 0.5, 0.28], [0.5, 0.72, 0.5, 0.88]])
+  };
+
   // posições de nascimento (normalizadas) - time A à esquerda, time B à direita
   const SPAWNS_Y = [0.5, 0.3, 0.7, 0.12, 0.88];
   const SPAWN_X = 0.055;

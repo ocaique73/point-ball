@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 24/09/2026 — v0.7.0 na branch `dev` (aguardando teste; inclui v0.5.1 e v0.6.0) · no ar: v0.5.0 em https://point-ball.onrender.com
+Última atualização: 24/09/2026 — v0.8.0 na branch `dev` (3 mapas novos para teste) · no ar: v0.7.0 em https://point-ball.onrender.com
 
 ---
 
@@ -225,6 +225,18 @@
 - [x] Bots não enxergam através do miolo da fumaça; você continua se vendo dentro dela
 - [x] Tudo ajustável no /teste (grupo "Fumaça"); cfgVersion 10 (valores antigos salvos no /teste são descartados)
 - [~] **Caique:** testar
+
+## 8.15 v0.8.0 — 3 mapas novos (em teste — o Caique decide se ficam)
+- [x] **Cidade à noite:** escuro o tempo todo; inimigo só aparece na luz dos 14 postes, perto de você (110) ou no clarão do tiro; aliados aparecem apagadinhos
+- [x] Tiro no poste apaga a luz por 8 s (anel mostra quanto falta para acender); bots também não enxergam no escuro
+- [x] **Vulcão:** a cada 25 s o chão racha (2 s de aviso) e sobem 3 pares de poças de lava espelhadas em lugares sorteados, por 7 s; encostar tira 1 vida
+- [x] Paredes do meio trocam entre 2 desenhos a cada erupção (o aviso mostra onde vão aparecer); quem fica dentro é empurrado para fora
+- [x] **Nave espacial:** espaço estrelado em volta e cantos do casco cortados; a cada 25 s caem 2 meteoros, um de cada lado em pontos espelhados e sorteados (2 s de aviso com o meteoro chegando)
+- [x] O meteoro abre um buraco para o espaço (dá para ver as estrelas) que dura 18 s e depois é consertado
+- [x] Cair no buraco: a beira segura por ~1,1 s e puxa devagar (dá tempo de sair); no meio cai em ~0,4 s. Tiro que passa por cima é sugado, com qualquer número de batidas
+- [x] Bots desviam de lava e buracos; nascimento evita lava/buraco
+- [x] Tudo ajustável no /teste (grupos Cidade à noite, Vulcão, Nave espacial); cfgVersion 11
+- [~] **Caique:** testar e decidir quais mapas ficam
 
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
 - [ ] Sons (tiro, batida na parede, acerto, faca, pulo)
