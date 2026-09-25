@@ -46,6 +46,14 @@ export class Sim3D {
       { id: 1, type: 'nade', x: this.W * 0.5, y: 0, z: this.H * 0.28, r: 55, cdUntil: 0 },
       { id: 2, type: 'potion', x: this.W * 0.5, y: 0, z: this.H * 0.72, r: 55, cdUntil: 0 }
     ];
+    // eventos especiais de mapa (furacão/tempestade de areia) e portais (igual ao 2D)
+    this.hazard = opts.hazard || null;
+    this.hazardT = this.hazard === 'tornado' ? 8 : 6;
+    this.tornadoActive = false; this.tornado = null;
+    this.sandActive = false; this.sandK = 0;
+    this.portalMap = opts.portalMap || null; this.cfg = opts.cfg || null; this.portalPairs = opts.portalPairs || null;
+    // teto que ricocheteia tiro (folhas da floresta / vidro da nave), null = sem teto
+    this.ceilingY = opts.ceilingY != null ? opts.ceilingY : null;
   }
   // sala de teste: muda um valor de física ao vivo (ex: 'speed', 'jumpV')
   setParam(key, val) { if (key in this.P) this.P[key] = val; }
@@ -202,6 +210,7 @@ export class Sim3D {
     this.updateBullets(dt);
     this.updateNades(dt);
     this.updatePickups();
+    this.updateHazard(dt);
     this.smokes = this.smokes.filter((s) => this.time < s.until);
     this.tombs = this.tombs.filter((t) => this.time < t.until);
     const ev = this.events; this.events = [];
@@ -218,7 +227,8 @@ export class Sim3D {
     const fx = Math.cos(p.yaw), fz = Math.sin(p.yaw), rx = -fz, rz = fx;
     let wx = fx * p.input.fwd + rx * p.input.side, wz = fz * p.input.fwd + rz * p.input.side;
     const wl = Math.hypot(wx, wz); if (wl > 1) { wx /= wl; wz /= wl; }
-    wx *= this.P.speed; wz *= this.P.speed;
+    const spdK = (this.hazard === 'sand' && this.sandActive) ? 0.72 : 1; // tempestade de areia atrapalha andar
+    wx *= this.P.speed * spdK; wz *= this.P.speed * spdK;
     if (p.grounded) { p.vx = wx; p.vz = wz; }
     else { // no ar: mantém o impulso, com um pouco de controle
       const k = Math.min(1, this.P.airControl * dt * 6);
@@ -332,6 +342,69 @@ export class Sim3D {
       }
     }
   }
+  // ---------- eventos especiais de mapa ----------
+  updateHazard(dt) {
+    if (this.hazard === 'tornado') this.updateTornado(dt);
+    else if (this.hazard === 'sand') this.updateSand(dt);
+    if (this.portalMap) this.updatePortals();
+  }
+  // furacão da floresta: puxa/gira quem estiver perto e no fim joga todo mundo longe
+  updateTornado(dt) {
+    this.hazardT -= dt;
+    if (!this.tornadoActive) {
+      if (this.hazardT <= 0) {
+        this.tornadoActive = true; this.hazardT = 6;
+        const m = 220;
+        this.tornado = { x: m + Math.random() * (this.W - 2 * m), z: m + Math.random() * (this.H - 2 * m) };
+        this.events.push({ type: 'tornado_start', x: this.tornado.x, z: this.tornado.z });
+      }
+      return;
+    }
+    const T = this.tornado, R = 260;
+    for (const p of this.players.values()) {
+      if (!p.alive) continue;
+      const dx = T.x - p.x, dz = T.z - p.z, d = Math.hypot(dx, dz);
+      if (d < R && d > 1) {
+        const ux = dx / d, uz = dz / d, tx = -uz, tz = ux;
+        p.vx += (ux * 220 + tx * 320) * dt; p.vz += (uz * 220 + tz * 320) * dt;
+        if (p.vy < 60) p.vy = 60; p.grounded = false;
+      }
+    }
+    if (this.hazardT <= 0) {
+      this.tornadoActive = false; this.hazardT = 16;
+      for (const p of this.players.values()) {
+        if (!p.alive) continue;
+        const dx = p.x - T.x, dz = p.z - T.z, d = Math.hypot(dx, dz) || 1;
+        if (d < R) { p.vx += dx / d * 480; p.vz += dz / d * 480; p.vy = 400; p.grounded = false; }
+      }
+      this.events.push({ type: 'tornado_end' });
+      this.tornado = null;
+    }
+  }
+  // tempestade de areia do deserto: reduz a visibilidade (cliente) e deixa mais devagar
+  updateSand(dt) {
+    this.hazardT -= dt;
+    if (this.hazardT <= 0) {
+      this.sandActive = !this.sandActive;
+      this.hazardT = this.sandActive ? 9 : 11;
+      this.events.push({ type: this.sandActive ? 'sand_start' : 'sand_end' });
+    }
+    this.sandK += ((this.sandActive ? 1 : 0) - this.sandK) * Math.min(1, dt * 1.2);
+  }
+  // portais (igual ao 2D): entrou num aberto, sai no par dele
+  updatePortals() {
+    const Gm = (typeof window !== 'undefined') ? window.RC_GAME : null;
+    if (!Gm || !this.cfg) return;
+    for (const p of this.players.values()) {
+      if (!p.alive) continue;
+      const w = Gm.portalWrap(this.portalMap, this.cfg, p.x, p.z, this.radius(p), this.portalPairs);
+      if (!w) continue;
+      p.x = w.x; p.z = w.y;
+      const vx = p.vx * w.co - p.vz * w.si, vz = p.vx * w.si + p.vz * w.co;
+      p.vx = vx; p.vz = vz;
+      this.events.push({ type: 'portal', id: p.id, x: p.x, z: p.z });
+    }
+  }
   // granada / fumaça: joga para onde a mira aponta, quica no muro e no chão
   throwNade(p, smoke) {
     if (smoke ? p.smokes < 1 : p.nades < 1) { p.weapon = p.lastWeapon; return; }
@@ -375,7 +448,11 @@ export class Sim3D {
       const sub = dt / n; let dead = false;
       for (let i = 0; i < n && !dead; i++) {
         b.vy -= b.grav * sub;
-        const hit = this.bounceStep(b, b.r, b.rest, sub);
+        let hit = this.bounceStep(b, b.r, b.rest, sub);
+        // teto que ricocheteia (folhas da floresta / vidro da nave)
+        if (!hit && this.ceilingY != null && b.y + b.r >= this.ceilingY && b.vy > 0) {
+          b.y = this.ceilingY - b.r; b.vy = -Math.abs(b.vy) * (b.rest || 0.7); hit = 'ceiling';
+        }
         if (hit) {
           b.bounces++;
           this.events.push({ type: 'bounce', x: b.x, y: b.y, z: b.z, left: b.max - b.bounces });

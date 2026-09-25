@@ -69,16 +69,36 @@ function groundTexture(th, seed) {
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
   return tex;
 }
-function wallTexture(color) {
+function wallTexture(color, style) {
   const cv = document.createElement('canvas'); cv.width = 128; cv.height = 128;
   const g = cv.getContext('2d');
   g.fillStyle = color; g.fillRect(0, 0, 128, 128);
-  g.strokeStyle = 'rgba(0,0,0,.18)'; g.lineWidth = 3;
-  for (let y = 0; y <= 128; y += 32) { g.beginPath(); g.moveTo(0, y); g.lineTo(128, y); g.stroke(); }
-  for (let y = 0; y < 128; y += 32) for (let x = (y / 32) % 2 ? 32 : 0; x <= 128; x += 64) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + 32); g.stroke(); }
+  if (style === 'wood') { // tábuas de madeira na vertical, com veio
+    g.strokeStyle = 'rgba(0,0,0,.22)'; g.lineWidth = 2;
+    for (let x = 0; x <= 128; x += 21) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 128); g.stroke(); }
+    const rnd = seeded(7);
+    g.strokeStyle = 'rgba(0,0,0,.12)'; g.lineWidth = 1;
+    for (let i = 0; i < 40; i++) { const x = rnd() * 128, y = rnd() * 128, len = 6 + rnd() * 14; g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + len); g.stroke(); }
+  } else if (style === 'panel') { // painel/computador de nave
+    g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 3;
+    for (let x = 0; x <= 128; x += 32) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 128); g.stroke(); }
+    for (let y = 0; y <= 128; y += 32) { g.beginPath(); g.moveTo(0, y); g.lineTo(128, y); g.stroke(); }
+    const rnd = seeded(11);
+    for (let i = 0; i < 10; i++) {
+      const x = Math.floor(rnd() * 4) * 32 + 6, y = Math.floor(rnd() * 4) * 32 + 6;
+      g.fillStyle = rnd() < 0.5 ? 'rgba(56,189,248,.85)' : 'rgba(52,211,153,.7)'; g.fillRect(x, y, 20, 6);
+    }
+  } else { // tijolo (padrão)
+    g.strokeStyle = 'rgba(0,0,0,.18)'; g.lineWidth = 3;
+    for (let y = 0; y <= 128; y += 32) { g.beginPath(); g.moveTo(0, y); g.lineTo(128, y); g.stroke(); }
+    for (let y = 0; y < 128; y += 32) for (let x = (y / 32) % 2 ? 32 : 0; x <= 128; x += 64) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + 32); g.stroke(); }
+  }
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   return tex;
 }
+const WALL_STYLE = { deserto: 'dune', neve: 'ice', floresta: 'wood', nave: 'panel' };
+// teto que ricocheteia tiro (folhas da floresta / vidro da nave)
+const CEILING_Y = { floresta: 340, nave: 360 };
 function buildTestRoom() {
   const W = CFG.mapWidth, H = CFG.mapHeight;
   mapGroup = new THREE.Group();
@@ -111,17 +131,55 @@ function buildMap(mapId) {
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshStandardMaterial({ map: groundTexture(th, mapId.length * 97), roughness: 0.95 }));
   ground.rotation.x = -Math.PI / 2; ground.position.set(W / 2, 0, H / 2); ground.receiveShadow = true;
   mapGroup.add(ground);
-  const wtex = wallTexture(th.wall), btex = wallTexture(th.border);
+  const style = WALL_STYLE[mapId] || 'brick';
+  const wtex = wallTexture(th.wall, style), btex = wallTexture(th.border, style);
   mapWalls = G.buildWalls(mapId, CFG, 0);
+  // portais abertos (sorteados uma vez por partida — sem ciclo abre/fecha, pra simplificar)
+  let openPr = null;
+  if (map.portals) {
+    const list = G.portalList(map);
+    openPr = G.pickPortalPairs(list, null);
+    mapWalls = G.openWalls(mapWalls, openPr);
+  }
+  window.__portalPairs = openPr;
+  const treeSpots = []; // pontas das paredes de madeira (floresta) — uma árvore em cada
   for (const R of mapWalls) {
-    if (R.space) continue;
+    if (R.space || R.door) continue;
     const hgt = R.border ? P.borderH : P.wallH;
-    const t = (R.border ? btex : wtex).clone(); t.needsUpdate = true; t.repeat.set(Math.max(R.w, R.h) / 64, hgt / 64);
-    const side = new THREE.MeshStandardMaterial({ map: t, roughness: 0.9 }), top = mat(th.wallEdge);
-    const box = new THREE.Mesh(new THREE.BoxGeometry(R.w, hgt, R.h), [side, side, top, top, side, side]);
-    box.position.set(R.x + R.w / 2, hgt / 2, R.y + R.h / 2);
-    box.castShadow = true; box.receiveShadow = true;
-    mapGroup.add(box);
+    if (style === 'dune') { // deserto: montante de areia arredondado (a colisão continua sendo a caixa)
+      const dune = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), new THREE.MeshStandardMaterial({ color: th.wall, roughness: 1 }));
+      dune.scale.set(R.w / 2 + 8, hgt * 0.85, R.h / 2 + 8);
+      dune.position.set(R.x + R.w / 2, 2, R.y + R.h / 2);
+      dune.castShadow = dune.receiveShadow = true;
+      mapGroup.add(dune);
+    } else if (style === 'ice') { // neve: gelo quase transparente (empilhar paredes reduz a visibilidade de verdade)
+      const iceMat = new THREE.MeshPhysicalMaterial({ color: 0xbfe3ff, transparent: true, opacity: 0.4, roughness: 0.15, metalness: 0, transmission: 0.15 });
+      const box = new THREE.Mesh(new THREE.BoxGeometry(R.w, hgt, R.h), iceMat);
+      box.position.set(R.x + R.w / 2, hgt / 2, R.y + R.h / 2);
+      box.castShadow = false; box.receiveShadow = true;
+      mapGroup.add(box);
+    } else {
+      const t = (R.border ? btex : wtex).clone(); t.needsUpdate = true; t.repeat.set(Math.max(R.w, R.h) / 64, hgt / 64);
+      const side = new THREE.MeshStandardMaterial({ map: t, roughness: 0.9 }), top = mat(th.wallEdge);
+      const box = new THREE.Mesh(new THREE.BoxGeometry(R.w, hgt, R.h), [side, side, top, top, side, side]);
+      box.position.set(R.x + R.w / 2, hgt / 2, R.y + R.h / 2);
+      box.castShadow = true; box.receiveShadow = true;
+      mapGroup.add(box);
+      if (style === 'wood' && !R.border) {
+        if (R.w > R.h) { treeSpots.push([R.x, R.y + R.h / 2]); treeSpots.push([R.x + R.w, R.y + R.h / 2]); }
+        else { treeSpots.push([R.x + R.w / 2, R.y]); treeSpots.push([R.x + R.w / 2, R.y + R.h]); }
+      }
+    }
+  }
+  // uma árvore na ponta de cada parede de madeira (floresta)
+  for (const [x, z] of treeSpots) {
+    const k = 1.1 + Math.random() * 0.3;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(4 * k, 5 * k, 40 * k, 7), mat(0x4a3220));
+    trunk.position.set(x, 20 * k, z);
+    const top = new THREE.Mesh(new THREE.IcosahedronGeometry(22 * k, 0), mat(0x3f7d3a));
+    top.position.set(x, 52 * k, z);
+    trunk.castShadow = top.castShadow = trunk.receiveShadow = top.receiveShadow = true;
+    mapGroup.add(trunk, top);
   }
   const rnd = seeded(mapId.length * 31 + 5);
   for (let i = 0; i < 40; i++) {
@@ -133,6 +191,38 @@ function buildMap(mapId) {
     else if (th.deco === 'tree') { const k = 0.7 + rnd() * 0.5; obj = new THREE.Mesh(new THREE.IcosahedronGeometry(16 * k, 0), mat(0x3f7d3a)); obj.position.set(x, 10 * k, z); }
     else if (th.deco === 'panels') { obj = new THREE.Mesh(new THREE.BoxGeometry(16, 3, 16), mat(0x475569, { emissive: 0x0ea5e9, emissiveIntensity: 0.3 })); obj.position.set(x, 1.5, z); }
     if (obj) { obj.castShadow = obj.receiveShadow = true; mapGroup.add(obj); }
+    if (mapId === 'deserto' && rnd() < 0.35) { // alguns cactos aleatórios no deserto
+      const cx = 40 + rnd() * (W - 80), cz = 40 + rnd() * (H - 80);
+      if (G.circleFree(cx, cz, 20, mapWalls, CFG)) {
+        const cg = new THREE.Group(), cactusMat = mat(0x2f7d4f);
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(5, 6, 26 + rnd() * 14, 8), cactusMat); body.position.y = 13;
+        const arm = new THREE.Mesh(new THREE.CylinderGeometry(3, 3.5, 14, 6), cactusMat); arm.position.set(6, 16, 0); arm.rotation.z = -0.9;
+        cg.add(body, arm); cg.position.set(cx, 0, cz);
+        cg.traverse((o) => { if (o.isMesh) o.castShadow = o.receiveShadow = true; });
+        mapGroup.add(cg);
+      }
+    }
+  }
+  // teto que ricocheteia tiro (folhas da floresta acima das copas / vidro da nave)
+  const ceilY = CEILING_Y[mapId];
+  if (ceilY) {
+    const roofColor = mapId === 'nave' ? 0xbfe3ff : 0x2f6b34;
+    const roofOpacity = mapId === 'nave' ? 0.16 : 0.28;
+    const roof = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshBasicMaterial({ color: roofColor, transparent: true, opacity: roofOpacity, side: THREE.DoubleSide, depthWrite: false }));
+    roof.rotation.x = -Math.PI / 2; roof.position.set(W / 2, ceilY, H / 2);
+    mapGroup.add(roof);
+  }
+  // portais: um quadro brilhante em cada abertura aberta
+  if (map.portals && openPr) {
+    const list = G.portalList(map), opened = new Set(); for (const [i, j] of openPr) { opened.add(i); opened.add(j); }
+    for (const q of list) {
+      if (!opened.has(q.i)) continue;
+      const geom = G.portalGeom(q, CFG);
+      const frame = new THREE.Mesh(new THREE.PlaneGeometry(geom.half * 2, P.borderH), new THREE.MeshBasicMaterial({ color: 0x8b7cf6, transparent: true, opacity: 0.55, side: THREE.DoubleSide }));
+      frame.position.set(geom.cx + geom.nx * 2, P.borderH / 2, geom.cy + geom.ny * 2);
+      frame.rotation.y = Math.atan2(geom.nx, geom.ny);
+      mapGroup.add(frame);
+    }
   }
   if (map.space) {
     const pts = [], rs = seeded(9);
@@ -651,11 +741,16 @@ function newGame() {
   for (const a of avatars.values()) a.remove(); avatars.clear();
   for (const pool of [bulletMeshes, nadeMeshes, smokeMeshes, tombMeshes, pickupMeshes]) { for (const m of pool.values()) scene.remove(m); pool.clear(); }
   buildMap(S.map);
-  const isTestRoom = S.map === 'teste';
+  const isTestRoom = S.map === 'teste', map = MAPS[S.map];
   sim = new Sim3D(mapWalls, CFG.mapWidth, CFG.mapHeight, {
     godMode: isTestRoom || S.test === '1',
     params: { speed: S.speed, jumpV: S.jumpv },
-    weapons: S.wtune
+    weapons: S.wtune,
+    hazard: map ? map.hazard : null,
+    portalMap: (map && map.portals) ? S.map : null,
+    cfg: CFG,
+    portalPairs: window.__portalPairs || null,
+    ceilingY: CEILING_Y[S.map] || null
   });
   sim.addPlayer({ id: 'me', name: 'Você', team: 'A', primary: S.weapon });
   const n = isTestRoom ? 0 : Number(S.bots), names = BOTS.randomNames(n);
@@ -682,6 +777,12 @@ function frame(now) {
   const k = acc / STEP;
   const ip = (id, o) => { const p0 = prevPos.get(id); return p0 ? [lerp(p0[0], o.x, k), lerp(p0[1], o.y, k), lerp(p0[2], o.z, k)] : [o.x, o.y, o.z]; };
   const firstPerson = S.cam === '1';
+  // tempestade de areia (deserto): fecha o fog pra reduzir a visibilidade de verdade
+  if (sim.hazard === 'sand' && scene.fog) {
+    const sk = sim.sandK || 0;
+    scene.fog.color.set(0xd8b878);
+    scene.fog.near = lerp(1400, 120, sk); scene.fog.far = lerp(4200, 700, sk);
+  }
 
   // bonecos (o corpo some quando morre; fica a lápide)
   for (const p of sim.players.values()) {
@@ -828,6 +929,10 @@ function handleEvent(e, now) {
   if ((e.type === 'nade_throw' || e.type === 'smoke_throw') && a) { a.trigger('Throw', 1.7, now); if (e.id === 'me') swing = 1; }
   if (e.type === 'drink' && a) { a.trigger('Use_Item', 1.1, now); if (e.id === 'me') swing = 1; }
   if (e.type === 'pickup' && e.id === 'me') feed(e.kind === 'potion' ? '🧪 Poção reabastecida' : '💣 Granada/fumaça reabastecida');
+  if (e.type === 'tornado_start') feed('🌪️ Furacão! Segura ou foge do centro dele');
+  if (e.type === 'tornado_end') feed('🌪️ O furacão jogou todo mundo longe');
+  if (e.type === 'sand_start') feed('🏜️ Tempestade de areia — visibilidade caindo');
+  if (e.type === 'sand_end') feed('🏜️ A tempestade passou');
   if (e.type === 'jump' && a) a.legsOnce('Jump_Start', 1.6, now);
   if (e.type === 'djump' && a) a.legsOnce('Jump_Full_Short', 1.6, now);
   if (e.type === 'land' && a) a.legsOnce('Jump_Land', 1.8, now);

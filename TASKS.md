@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 25/09/2026 — v0.13.0 — demo 3D Three.js: sala de teste, pulo mais alto, velocidade/armas ajustáveis, poção de vida, áreas de reabastecimento, indicador de bomba, explosão melhorada, cruz na lápide (Godot pausado por ora) em https://point-ball.onrender.com
+Última atualização: 25/09/2026 — v0.14.0 — demo 3D Three.js: mapa Portais, furacão da floresta, tempestade de areia, reskins (madeira/gelo/dunas/base lunar) — além do v0.13.0 (sala de teste, pulo mais alto, poção, reabastecimento, indicador de bomba, explosão melhorada, cruz na lápide). Godot pausado por ora. Push pro GitHub pendente (ver observação abaixo). https://point-ball.onrender.com
 
 ---
 
@@ -294,7 +294,17 @@
   - [x] Indicador de granada inimiga: seta de direção + distância em metros no topo da tela
   - [x] Explosão da bomba com visual mais suave (textura de fogo em gradiente + anel de onda de choque + faíscas), sem mais o icosaedro de baixo poli serrilhado
   - [x] Lápide ganhou uma cruz de madeira em cima
-- [~] **Caique:** testar o bloco 1
+- [x] v0.14.0 (Three.js): "bloco 2" — mais mapas e temas visuais
+  - [x] Mapa **Portais**: os 8 portais do 2D, 2 pares sorteados abertos (sem ciclo abre/fecha, pra simplificar) — atravessa um e sai no par dele
+  - [x] **Furacão da floresta**: nasce em um ponto aleatório a cada ~16s, puxa/gira quem estiver perto por 6s e no fim joga todo mundo longe
+  - [x] **Tempestade de areia do deserto**: liga/desliga sozinha, reduz a visão de verdade (fog mais perto) e deixa mais devagar enquanto ativa
+  - [x] Reskin **Floresta**: paredes viraram madeira (com veio) e cada ponta de parede ganhou uma árvore; tiros ricocheteiam na copa (teto invisível acima das árvores)
+  - [x] Reskin **Neve**: paredes de gelo semi-transparentes de verdade — dá pra ver uma, mas quanto mais empilhadas atrás menos dá pra ver (efeito natural da transparência em camadas)
+  - [x] Reskin **Deserto**: paredes viraram dunas de areia arredondadas + cactos espalhados aleatoriamente (a colisão continua sendo a caixa, só o visual mudou)
+  - [x] Reskin **Nave**: paredes de "tijolo" viraram painéis/computadores de nave; virou uma base na Lua com teto de vidro (dá pra ver as estrelas) e tiro ricocheteia nele
+  - [ ] Mapas Vulcão, Sala escura e Cidade à noite: adiados por enquanto (não foram citados explicitamente pelo Caique e o pacote já ficou grande — fica pra um próximo bloco se ele quiser)
+  - [ ] Multiplayer (salas, senha, times) na demo 3D: ainda não começado — é o próximo bloco grande
+- [~] **Caique:** testar os blocos 1 e 2
 
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
 - [ ] Sons (tiro, batida na parede, acerto, faca, pulo)
