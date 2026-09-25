@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 24/09/2026 — v0.8.2 no ar — 2D finalizado por enquanto (próximo passo: pesquisar o 3D) em https://point-ball.onrender.com
+Última atualização: 24/09/2026 — v0.8.3 no ar — 2D finalizado (próximo passo: demos 3D em Three.js e Godot) em https://point-ball.onrender.com
 
 ---
 
@@ -253,6 +253,16 @@
 - [x] Portais: abertura inicial nas paredes verticais (esquerda ↔ direita na mesma altura)
 - [x] Fumaça dura 6 s (era 5)
 - [~] **Caique:** testar
+
+## 8.18 v0.8.3 — queda no buraco animada
+- [x] Nave: quem cai no buraco é puxado girando até o meio, encolhe e escurece até sumir no espaço (0,9 s); não deixa marca de morto
+- [x] Durante a queda não controla nem leva tiro
+- [~] **Caique:** testar
+
+## 10. 3D (demos para comparar)
+- [ ] Demo A: Three.js + Electron (roda no PC e na web) com modelos low-poly (Kenney)
+- [ ] Demo B: Godot 4 (exporta para Windows) com os mesmos modelos
+- [ ] Caique compara e escolhe
 
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
 - [ ] Sons (tiro, batida na parede, acerto, faca, pulo)

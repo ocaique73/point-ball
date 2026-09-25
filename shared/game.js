@@ -534,9 +534,11 @@
         const r = this.radiusOf(p);
         const hole = this.holes.find((h) => Math.hypot(p.x - h.x, p.y - h.y) < h.r * this.holeK(h) - r * 0.35);
         if (!hole) continue;
-        p.lives = 1; p.invulnUntil = 0; p.protectUntil = 0;
-        this.damage(p, null, 'fall');
-        this.events.push({ type: 'fall', id: p.id, x: p.x, y: p.y });
+        // começa a cair: é puxado girando para o meio do buraco e some (sem volta)
+        const dx = p.x - hole.x, dy = p.y - hole.y;
+        p.jump = { fall: true, t0: this.time, dur: 0.9, cx: hole.x, cy: hole.y, ang: Math.atan2(dy, dx), r0: Math.hypot(dx, dy) };
+        p.input = { up: false, down: false, left: false, right: false, fire: false };
+        this.events.push({ type: 'fall', id: p.id, x: hole.x, y: hole.y });
       }
     }
     holeK(h) { return Math.min(1, (this.time - h.t0) / 0.25); } // abre rápido depois do impacto
@@ -667,7 +669,7 @@
       p.reloadUntil = 0; p.fireReady = 0; p.knifeReady = 0; p.knifeAnimUntil = 0;
       p.jumps = c.jumpStartReady ? 1 : 0;
       p.jumpReadyAt = this.time + (this.mode === 'match' ? c.roundStartDelay : 0) + c.jumpCooldown;
-      p.jump = null; p.respawnAt = 0;
+      p.jump = null; p.respawnAt = 0; p.fell = false;
       p.slowUntil = 0; p.slowF = 1; p.slowKind = 0;
       p.bombs = c.bombCount; p.smokes = c.smokeCount; p.protectUntil = 0;
       // morrer não perde o pulo: se estava carregado continua carregado; se estava carregando, continua de onde parou
@@ -900,6 +902,19 @@
         this.events.push({ type: 'reloaded', id: p.id });
       }
       if (!p.alive) return;
+      if (p.jump && p.jump.fall) {
+        // caindo no buraco da nave: espiral até o meio, depois morre
+        const j = p.jump, t = Math.min(1, (this.time - j.t0) / j.dur);
+        j.ang += dt * (5 + t * 14);
+        const rr = j.r0 * (1 - t) * (1 - t);
+        p.x = j.cx + Math.cos(j.ang) * rr; p.y = j.cy + Math.sin(j.ang) * rr;
+        if (t >= 1) {
+          p.jump = null; p.x = j.cx; p.y = j.cy;
+          p.lives = 1; p.invulnUntil = 0; p.protectUntil = 0; p.fell = true;
+          this.damage(p, null, 'fall');
+        }
+        return;
+      }
       if (p.jump && p.jump.spin) {
         // girando dentro do furacão antes de ser jogado
         const j = p.jump, t = (this.time - j.t0) / j.dur;
@@ -1149,13 +1164,13 @@
           bl: t < p.blinkUntil ? 1 : 0, w: p.weapon === 'gun' ? 1 : 2, am: p.ammo, mg: p.mags,
           rl: p.reloadUntil ? r1(p.reloadUntil - t) : 0,
           j: p.jumps, jc: p.jumps ? 0 : r1(Math.max(0, p.jumpReadyAt - t)),
-          jz: p.jump ? (p.jump.spin ? 0.12 : Math.min(1, (t - p.jump.t0) / p.jump.dur)) : -1,
+          jz: p.jump && p.jump.fall ? -1 : p.jump ? (p.jump.spin ? 0.12 : Math.min(1, (t - p.jump.t0) / p.jump.dur)) : -1,
           ka: t < p.knifeAnimUntil ? 1 : 0, kd: t < p.knifeAnimUntil ? Math.round(p.knifeAng * 100) / 100 : 0,
           fc: Math.round(Math.max(0, p.fireReady - t) * 100) / 100,
           bo: p.bombs, so: p.smokes, sp: this.protectedNow(p) ? 1 : 0,
           rs: !p.alive && p.respawnAt ? r1(Math.max(0, p.respawnAt - t)) : 0,
           sl: t < p.slowUntil ? p.slowF : 1, sk: t < p.slowUntil ? p.slowKind : 0,
-          ts: p.jump && p.jump.toss ? 1 : 0, 
+          ts: p.jump && p.jump.toss ? 1 : 0, fl: p.jump && p.jump.fall ? Math.round(Math.min(1, (t - p.jump.t0) / p.jump.dur) * 100) / 100 : 0, fd: !p.alive && p.fell ? 1 : 0, 
           st: [p.stats.k, p.stats.d, p.stats.a]
         });
       }

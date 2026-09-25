@@ -375,7 +375,7 @@
     const mine = latest.p.find((p) => p.id === you);
     if (mine) {
       // predição local do próprio personagem (resposta imediata ao teclado)
-      const canPredict = mine.al && mine.jz < 0 && latest.ph === 'playing';
+      const canPredict = mine.al && mine.jz < 0 && !mine.fl && latest.ph === 'playing';
       let mx = (keys.right ? 1 : 0) - (keys.left ? 1 : 0), my = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
       const moving = !!(mx || my);
       if (!canPredict || !pred.init) {

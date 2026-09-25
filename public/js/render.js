@@ -215,7 +215,6 @@ window.PBRenderer = (function () {
       else if (ev.type === 'hit') this.effects.push({ k: 'hit', x: ev.x, y: ev.y, t0: now, d: 700 });
       else if (ev.type === 'kill') this.effects.push({ k: 'kill', x: ev.x, y: ev.y, t0: now, d: 900 });
       else if (ev.type === 'explode') this.effects.push({ k: 'boom', x: ev.x, y: ev.y, t0: now, d: 550 });
-      else if (ev.type === 'fall') this.effects.push({ k: 'fall', x: ev.x, y: ev.y, t0: now, d: 900 });
       else if (ev.type === 'sucked') this.effects.push({ k: 'sucked', x: ev.x, y: ev.y, t0: now, d: 350 });
       else if (ev.type === 'lamp_off') this.effects.push({ k: 'lamp', x: ev.x, y: ev.y, t0: now, d: 500 });
     }
@@ -316,9 +315,11 @@ window.PBRenderer = (function () {
       if (view.hl) this.drawHill(view.hl, now);
       if (hz && hz.t === 'storm') this.drawStorm(hz, now);
       for (const p of ps) {
-        if (p.fa > 0 && p.al) { // caindo no buraco: treme e encolhe
-          const k = 1 - p.fa * 0.35, jx = (Math.random() - 0.5) * 4 * p.fa, jy = (Math.random() - 0.5) * 4 * p.fa;
-          g.save(); g.translate(p.x + jx, p.y + jy); g.scale(k, k); g.translate(-p.x, -p.y);
+        if (p.fd) continue; // caiu no buraco: não deixa marca
+        if (p.fl > 0 && p.al) { // caindo no buraco: gira, encolhe e escurece até sumir no espaço
+          const k = Math.max(0.02, (1 - p.fl) * (1 - p.fl * 0.4));
+          g.save(); g.globalAlpha = Math.max(0, 1 - p.fl * 0.7);
+          g.translate(p.x, p.y); g.rotate(p.fl * p.fl * 9); g.scale(k, k); g.translate(-p.x, -p.y);
           this.drawPlayer(p, p.id === view.meId, now); g.restore();
         } else this.drawPlayer(p, p.id === view.meId, now);
       }
