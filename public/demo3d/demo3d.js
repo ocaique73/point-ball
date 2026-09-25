@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { Sim3D, WEAPONS, WEAPON_IDS, P, PORTAL, HOLE, DuneField, portalLayout, makeLavaHoles } from '/demo3d/sim3d.js';
+import { Sim3D, WEAPONS, WEAPON_IDS, P, PORTAL, HOLE, DuneField, portalLayout, forestTrees, CEILING_Y, BORDER_H, LAMP, TREE, TORNADO } from '/demo3d/sim3d.js';
 
 const $ = (id) => document.getElementById(id);
 const G = window.RC_GAME, BOTS = window.RC_BOTS, MAPS = window.RC_MAPS.MAPS, CFG = window.RC_CONFIG.DEFAULT_CONFIG;
@@ -136,13 +136,12 @@ let lampLights = [], lavaFx = [], portalViews = [];
 let mapInfo = { mapId: null, portalPairs: null, portals: [], holes: null, dunes: null };
 // cores só da versão 3D (o 2D continua com as dele)
 const THEME3D = {
+  escuro: { wall: '#3a3d45', wallEdge: '#5b606b', border: '#2a2c32' },
   portal: { ground: '#3a3f47', ground2: '#343941', wall: '#dfe3e8', wallEdge: '#8a929c', border: '#c3c9d1' },
   nave: { ground: '#3b4250', ground2: '#353c49', wall: '#c7ccd4', wallEdge: '#5b6472', border: '#aeb5bf' },
   deserto: { ground: '#e6c68c', ground2: '#dcb877', border: '#b98552' }
 };
 const WALL_STYLE = { deserto: 'sandstone', neve: 'ice', floresta: 'wood', nave: 'corridor', portal: 'lab' };
-// teto que ricocheteia tiro (folhas da floresta / vidro da nave)
-const CEILING_Y = { floresta: 340, nave: 360 };
 const groundY = (x, z) => (mapInfo.dunes ? mapInfo.dunes.at(x, z) : 0);
 
 function canvasTex(w, h, draw, repeat) {
@@ -335,7 +334,8 @@ function buildDesertOutside(W, H) {
   }
 }
 
-// ---------- vulcão: chão com buracos, lava lá embaixo ----------
+// ---------- vulcão: o mapa é uma laje de pedra flutuando em cima de um vulcão gigante ----------
+// a erupção fura a laje (buraco); quem cai, cai dentro do vulcão lá embaixo
 function holeEdgeR(h, a) {
   const aa = h.m ? Math.PI - a : a, s = (h.seed % 1000) / 159;
   return h.r * (1.0 + 0.035 * Math.sin(3 * aa + s) + 0.025 * Math.sin(5 * aa + s * 2.3) + 0.015 * Math.sin(9 * aa + s * 4.1));
@@ -346,9 +346,9 @@ float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(h21(i), h21(i + vec2(1.0, 0.0)), f.x), mix(h21(i + vec2(0.0, 1.0)), h21(i + vec2(1.0, 1.0)), f.x), f.y); }
 float fbm(vec2 p){ float v = 0.0, a = 0.5; for (int k = 0; k < 5; k++) { v += a * vn(p); p = p * 2.03 + 11.7; a *= 0.5; } return v; }`;
-const LAVA_FRAG = `uniform float uTime; varying vec2 vP; ${NOISE_GLSL}
+const LAVA_FRAG = `uniform float uTime; uniform float uScale; varying vec2 vP; ${NOISE_GLSL}
 void main(){
-  vec2 p = vP * 0.018;
+  vec2 p = vP * uScale;
   float n = fbm(p + vec2(uTime * 0.05, uTime * 0.03));
   float m = fbm(p * 2.2 - vec2(uTime * 0.08, -uTime * 0.04) + n * 1.6);
   float heat = smoothstep(0.35, 0.8, m);
@@ -358,68 +358,218 @@ void main(){
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`;
-function buildHoleGround(th, holes, W, H) {
-  const shape = new THREE.Shape(); // coordenadas (x, -z) pra face virar pra cima depois de girar
-  shape.moveTo(0, 0); shape.lineTo(W, 0); shape.lineTo(W, -H); shape.lineTo(0, -H); shape.lineTo(0, 0);
-  const N = 48;
+let volcano = null;
+// forma do chão (retângulo do mapa com os buracos); flip = vira a face pra baixo (parte de baixo da laje)
+function slabShape(holes, W, H, flip) {
+  const sz = flip ? 1 : -1, shape = new THREE.Shape(), N = 48;
+  shape.moveTo(0, 0); shape.lineTo(W, 0); shape.lineTo(W, sz * H); shape.lineTo(0, sz * H); shape.lineTo(0, 0);
   for (const h of holes) {
     const path = new THREE.Path();
-    for (let k = 0; k <= N; k++) { const a = k / N * Math.PI * 2, r = holeEdgeR(h, a); const x = h.x + Math.cos(a) * r, z = h.z + Math.sin(a) * r; if (k === 0) path.moveTo(x, -z); else path.lineTo(x, -z); }
+    for (let k = 0; k <= N; k++) { const a = k / N * Math.PI * 2, r = holeEdgeR(h, a), x = h.x + Math.cos(a) * r, z = h.z + Math.sin(a) * r; if (k === 0) path.moveTo(x, sz * z); else path.lineTo(x, sz * z); }
     shape.holes.push(path);
   }
-  const geo = new THREE.ShapeGeometry(shape, 1); geo.rotateX(-Math.PI / 2);
+  const geo = new THREE.ShapeGeometry(shape, 1); geo.rotateX(flip ? Math.PI / 2 : -Math.PI / 2);
   const pos = geo.attributes.position, uv = geo.attributes.uv;
   for (let i = 0; i < pos.count; i++) uv.setXY(i, pos.getX(i) / W, 1 - pos.getZ(i) / H);
-  const ground = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: groundTexture(th, 71, 'ash'), roughness: 0.95 }));
-  ground.receiveShadow = true;
-  mapGroup.add(ground);
-  // paredes de rocha de cada buraco (brilham laranja lá embaixo) + lava viva + brasas subindo
-  const shaftEmis = canvasTex(8, 128, (g) => { const grd = g.createLinearGradient(0, 0, 0, 128); grd.addColorStop(0, '#0a0200'); grd.addColorStop(0.3, '#2a0800'); grd.addColorStop(0.7, '#8a2200'); grd.addColorStop(1, '#ff7a20'); g.fillStyle = grd; g.fillRect(0, 0, 8, 128); });
-  const lavaMat = new THREE.ShaderMaterial({ uniforms: { uTime: { value: 0 } }, vertexShader: LAVA_VERT, fragmentShader: LAVA_FRAG });
+  return geo;
+}
+function buildVolcanoWorld(th, W, H) {
+  const T = HOLE.depth, rock = new THREE.MeshStandardMaterial({ color: 0x3a2822, roughness: 1, flatShading: true });
+  volcano = { th, W, H, holeCount: -1, holeGroup: null, groundTex: groundTexture(th, 71, 'ash'), warn: [],
+    lakeMat: new THREE.ShaderMaterial({ uniforms: { uTime: { value: 0 }, uScale: { value: 0.0035 } }, vertexShader: LAVA_VERT, fragmentShader: LAVA_FRAG, fog: false }) };
+  // lateral da laje
+  for (const [x, z, w, d] of [[W / 2, -4, W + 16, 16], [W / 2, H + 4, W + 16, 16], [-4, H / 2, 16, H], [W + 4, H / 2, 16, H]]) {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, T, d), rock); b.position.set(x, -T / 2, z); mapGroup.add(b);
+  }
+  // pedras penduradas embaixo (ilha flutuando)
+  const rnd = seeded(931);
+  for (let i = 0; i < 46; i++) { // só perto da beirada (no meio ficaria na frente do buraco e tamparia a lava)
+    const side = i % 4, u = rnd(), e = 20 + rnd() * 90;
+    const x = side === 0 ? e : side === 1 ? W - e : u * W, z = side === 2 ? e : side === 3 ? H - e : u * H;
+    const h = 90 + rnd() * 380, r = 50 + rnd() * 90;
+    const c = new THREE.Mesh(new THREE.ConeGeometry(r, h, 6), rock); c.rotation.x = Math.PI; c.position.set(x, -T - h / 2 + 4, z); mapGroup.add(c);
+  }
+  // o vulcão gigante lá embaixo, com o lago de lava na boca
+  const cone = new THREE.Mesh(new THREE.CylinderGeometry(2600, 9500, 3600, 28, 1, true), new THREE.MeshStandardMaterial({ color: 0x2b1d18, roughness: 1, flatShading: true, emissive: 0x3a0e04, emissiveIntensity: 0.6 }));
+  cone.position.set(W / 2, -1500 - 1800, H / 2); mapGroup.add(cone);
+  const lake = new THREE.Mesh(new THREE.CircleGeometry(2600, 64), volcano.lakeMat); lake.rotation.x = -Math.PI / 2; lake.position.set(W / 2, -1460, H / 2); mapGroup.add(lake);
+  // luz laranja vindo de baixo (a lava ilumina a laje e quem cai)
+  const under = new THREE.DirectionalLight(0xff6a2a, 1.6); under.position.set(W / 2 + 300, -2200, H / 2 + 200); under.target.position.set(W / 2, 0, H / 2); mapGroup.add(under, under.target);
+  // fumaça subindo do vulcão
+  for (let i = 0; i < 14; i++) {
+    const a = rnd() * Math.PI * 2, d = 1200 + rnd() * 2400;
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: SMOKE_TEX, color: 0x2a1a16, transparent: true, opacity: 0.55, depthWrite: false, fog: false }));
+    s.scale.set(1200 + rnd() * 900, 1200 + rnd() * 900, 1); s.position.set(W / 2 + Math.cos(a) * d, -900 + rnd() * 900, H / 2 + Math.sin(a) * d); mapGroup.add(s);
+  }
+  rebuildVolcanoHoles([]);
+}
+function rebuildVolcanoHoles(holes) {
+  const V = volcano; if (!V) return;
+  if (V.holeGroup) { mapGroup.remove(V.holeGroup); V.holeGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
+  const g = new THREE.Group(), T = HOLE.depth, W = V.W, H = V.H;
+  const top = new THREE.Mesh(slabShape(holes, W, H, false), new THREE.MeshStandardMaterial({ map: V.groundTex, roughness: 0.95 }));
+  top.receiveShadow = true; g.add(top);
+  const bottom = new THREE.Mesh(slabShape(holes, W, H, true), new THREE.MeshStandardMaterial({ color: 0x3a2822, roughness: 1 }));
+  bottom.position.y = -T; g.add(bottom);
+  lavaFx = [];
+  const shaftEmis = canvasTex(8, 128, (c) => { const grd = c.createLinearGradient(0, 0, 0, 128); grd.addColorStop(0, '#120300'); grd.addColorStop(0.6, '#5a1400'); grd.addColorStop(1, '#ff6a18'); c.fillStyle = grd; c.fillRect(0, 0, 8, 128); });
+  const N = 48;
   for (const h of holes) {
-    const M = 5, verts = [], uvs = [], idx = [];
+    const M = 3, verts = [], uvs = [], idx = [];
     for (let j = 0; j <= M; j++) for (let k = 0; k <= N; k++) {
-      const a = k / N * Math.PI * 2, t = j / M, r = holeEdgeR(h, a) * (1 - 0.1 * t + 0.03 * Math.sin(a * 7 + j * 2.1));
-      verts.push(h.x + Math.cos(a) * r, -HOLE.depth * t - 0.5 * (1 - t) * 0, h.z + Math.sin(a) * r); uvs.push(k / N, 1 - t);
+      const a = k / N * Math.PI * 2, t = j / M, r = holeEdgeR(h, a) * (1 + 0.04 * Math.sin(a * 7 + j * 2.1) * t);
+      verts.push(h.x + Math.cos(a) * r, -T * t, h.z + Math.sin(a) * r); uvs.push(k / N, 1 - t);
     }
     for (let j = 0; j < M; j++) for (let k = 0; k < N; k++) { const a = j * (N + 1) + k, b = a + N + 1; idx.push(a, a + 1, b, a + 1, b + 1, b); }
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); g.setIndex(idx); g.computeVertexNormals();
-    const shaft = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x5a3a2c, roughness: 1, side: THREE.DoubleSide, emissive: 0xffffff, emissiveMap: shaftEmis, emissiveIntensity: 1.7, flatShading: true }));
-    shaft.receiveShadow = true; mapGroup.add(shaft);
-    const lava = new THREE.Mesh(new THREE.CircleGeometry(h.r * 1.02, 40), lavaMat);
-    lava.rotation.x = -Math.PI / 2; lava.position.set(h.x, -HOLE.depth + 10, h.z); mapGroup.add(lava);
-    // brilho quente no chão em volta da boca do buraco
-    const glow = new THREE.Mesh(new THREE.RingGeometry(h.r * 0.98, h.r * 1.6, 40), new THREE.MeshBasicMaterial({ color: 0xff5a1f, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }));
-    glow.rotation.x = -Math.PI / 2; glow.position.set(h.x, 0.8, h.z); mapGroup.add(glow);
-    const light = new THREE.PointLight(0xff6a1f, 26000, 380, 2); light.position.set(h.x, -30, h.z); mapGroup.add(light);
-    // calor saindo do buraco (dá pra ver de longe onde ele está)
-    const heat = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW_TEX, color: 0xff5a1f, transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending }));
-    heat.scale.set(h.r * 2.6, h.r * 1.3, 1); heat.position.set(h.x, 14, h.z); mapGroup.add(heat);
-    // pedrinhas na beira
-    const rnd = seeded(h.seed + 3), rock = mat(0x3a2a24);
-    for (let i = 0; i < 9; i++) { const a = rnd() * Math.PI * 2, r = holeEdgeR(h, a) + 6 + rnd() * 16; const s = new THREE.Mesh(new THREE.DodecahedronGeometry(4 + rnd() * 7, 0), rock); s.position.set(h.x + Math.cos(a) * r, 2, h.z + Math.sin(a) * r); s.rotation.set(rnd() * 3, rnd() * 3, 0); s.castShadow = s.receiveShadow = true; mapGroup.add(s); }
-    // brasas subindo
-    const NE = 26, ep = new Float32Array(NE * 3), eSeed = [];
-    for (let i = 0; i < NE; i++) eSeed.push([rnd() * Math.PI * 2, Math.sqrt(rnd()) * h.r * 0.8, rnd(), 0.5 + rnd()]);
+    const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3)); sg.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); sg.setIndex(idx); sg.computeVertexNormals();
+    g.add(new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ color: 0x5a3a2c, roughness: 1, side: THREE.DoubleSide, emissive: 0xffffff, emissiveMap: shaftEmis, emissiveIntensity: 1.4, flatShading: true })));
+    // borda queimada brilhando em volta do buraco
+    const glow = new THREE.Mesh(new THREE.RingGeometry(h.r * 0.98, h.r * 1.55, 40), new THREE.MeshBasicMaterial({ color: 0xff5a1f, transparent: true, opacity: 0.32, depthWrite: false, blending: THREE.AdditiveBlending }));
+    glow.rotation.x = -Math.PI / 2; glow.position.set(h.x, 0.8, h.z); g.add(glow);
+    const light = new THREE.PointLight(0xff6a1f, 22000, 360, 2); light.position.set(h.x, -40, h.z); g.add(light);
+    const heat = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW_TEX, color: 0xff5a1f, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending }));
+    heat.scale.set(h.r * 2.6, h.r * 1.3, 1); heat.position.set(h.x, 14, h.z); g.add(heat);
+    const rnd = seeded((h.seed || 1) + h.m * 7 + 3), rk = mat(0x3a2a24);
+    for (let i = 0; i < 9; i++) { const a = rnd() * Math.PI * 2, r = holeEdgeR(h, a) + 6 + rnd() * 16; const s = new THREE.Mesh(new THREE.DodecahedronGeometry(4 + rnd() * 7, 0), rk); s.position.set(h.x + Math.cos(a) * r, 2, h.z + Math.sin(a) * r); s.rotation.set(rnd() * 3, rnd() * 3, 0); s.castShadow = s.receiveShadow = true; g.add(s); }
+    const NE = 30, ep = new Float32Array(NE * 3), eSeed = [];
+    for (let i = 0; i < NE; i++) eSeed.push([rnd() * Math.PI * 2, Math.sqrt(rnd()) * h.r * 0.85, rnd(), 0.5 + rnd()]);
     const eg = new THREE.BufferGeometry(); eg.setAttribute('position', new THREE.BufferAttribute(ep, 3));
     const embers = new THREE.Points(eg, new THREE.PointsMaterial({ map: GLOW_TEX, color: 0xffa040, size: 7, transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending }));
-    embers.frustumCulled = false; mapGroup.add(embers);
-    lavaFx.push({ h, light, glow, embers, eSeed, mat: lavaMat });
+    embers.frustumCulled = false; g.add(embers);
+    lavaFx.push({ h, light, glow, embers, eSeed });
   }
+  mapGroup.add(g); V.holeGroup = g; V.holeCount = holes.length;
 }
-function buildVolcanoOutside(W, H) {
-  // chão de fora em 4 pedaços em volta da arena (um plano inteiro tamparia os buracos de lava)
-  const farMat = new THREE.MeshStandardMaterial({ color: 0x2a1f1b, roughness: 1 }), E = 8000;
-  for (const [x0, z0, x1, z1] of [[-E, -E, W + E, 0], [-E, H, W + E, H + E], [-E, 0, 0, H], [W, 0, W + E, H]]) {
-    const far = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), farMat);
-    far.rotation.x = -Math.PI / 2; far.position.set((x0 + x1) / 2, -0.6, (z0 + z1) / 2); mapGroup.add(far);
+// aviso de erupção: o chão racha e brilha nos 2 lugares antes do fogo furar
+const CRACK_TEX = canvasTex(256, 256, (g) => {
+  const rnd = seeded(61); g.strokeStyle = 'rgba(255,170,60,1)'; g.lineCap = 'round';
+  for (let i = 0; i < 16; i++) { let x = 128, y = 128, a = rnd() * Math.PI * 2; g.lineWidth = 5 - i * 0.2; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 7; k++) { a += (rnd() - 0.5) * 1.1; x += Math.cos(a) * 18; y += Math.sin(a) * 18; g.lineTo(x, y); } g.stroke(); }
+  const grd = g.createRadialGradient(128, 128, 0, 128, 128, 128); grd.addColorStop(0, 'rgba(255,120,30,.55)'); grd.addColorStop(1, 'rgba(255,60,10,0)'); g.fillStyle = grd; g.fillRect(0, 0, 256, 256);
+});
+function updateEruptWarn(E, now) {
+  const V = volcano; if (!V) return;
+  if (!E) { for (const m of V.warn) mapGroup.remove(m); V.warn = []; return; }
+  if (!V.warn.length) for (const [x, z] of E.pts) {
+    const m = new THREE.Mesh(new THREE.CircleGeometry(E.r * 1.25, 32), new THREE.MeshBasicMaterial({ map: CRACK_TEX, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    m.rotation.x = -Math.PI / 2; m.position.set(x, 1.2, z); mapGroup.add(m); V.warn.push(m);
   }
-  const cone = new THREE.Mesh(new THREE.ConeGeometry(1500, 1300, 9, 1, true), mat(0x2f2420));
-  cone.position.set(W / 2 + 900, 640, H / 2 - 4200); mapGroup.add(cone);
-  const crater = new THREE.Mesh(new THREE.CircleGeometry(260, 16), new THREE.MeshBasicMaterial({ color: 0xff6a1f, fog: false }));
-  crater.rotation.x = -Math.PI / 2; crater.position.set(W / 2 + 900, 1240, H / 2 - 4200); mapGroup.add(crater);
-  const plume = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW_TEX, color: 0xff5a1f, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
-  plume.scale.set(1400, 900, 1); plume.position.set(W / 2 + 900, 1350, H / 2 - 4200); mapGroup.add(plume);
+  for (const m of V.warn) { m.material.opacity = 0.55 + Math.sin(now / 70) * 0.45; m.rotation.z += 0.01; }
+}
+// fogo do vulcão subindo pelo buraco novo
+const FLAME_TEX = canvasTex(64, 256, (g) => { const grd = g.createLinearGradient(0, 256, 0, 0); grd.addColorStop(0, 'rgba(255,240,180,1)'); grd.addColorStop(0.35, 'rgba(255,140,40,.95)'); grd.addColorStop(0.75, 'rgba(255,60,10,.5)'); grd.addColorStop(1, 'rgba(120,20,0,0)'); g.fillStyle = grd; g.fillRect(0, 0, 64, 256); });
+function eruptFx(x, z, r, now) {
+  const col = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.8, r * 1.05, 1400, 24, 1, true), new THREE.MeshBasicMaterial({ map: FLAME_TEX, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+  col.position.set(x, -500, z); scene.add(col);
+  const light = new THREE.PointLight(0xff7a2a, 90000, 900, 2); light.position.set(x, 60, z); scene.add(light);
+  const balls = [];
+  for (let i = 0; i < 10; i++) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: FIRE_TEX, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    s.userData.v = [(Math.random() - 0.5) * 300, 500 + Math.random() * 500, (Math.random() - 0.5) * 300]; s.position.set(x, 0, z); s.scale.setScalar(40 + Math.random() * 40); scene.add(s); balls.push(s);
+  }
+  effects.push({ t0: now, d: 1300, objs: [col, light, ...balls], upd: (t, dt) => {
+    col.scale.set(1, 0.3 + t * 1.2, 1); col.material.opacity = 1 - t; light.intensity = 90000 * (1 - t);
+    for (const s of balls) { const v = s.userData.v; v[1] -= 900 * dt; s.position.x += v[0] * dt; s.position.y += v[1] * dt; s.position.z += v[2] * dt; s.material.opacity = 1 - t; }
+  } });
+}
+
+// ---------- furacão da floresta ----------
+const TWIST_TEX = canvasTex(128, 256, (g) => {
+  const rnd = seeded(17); g.clearRect(0, 0, 128, 256);
+  for (let i = 0; i < 90; i++) { const x = rnd() * 128, w = 2 + rnd() * 10; g.fillStyle = `rgba(${150 + rnd() * 60 | 0},${135 + rnd() * 50 | 0},${110 + rnd() * 40 | 0},${0.15 + rnd() * 0.45})`; g.fillRect(x, 0, w, 256); }
+}, true);
+let tornadoFx = null;
+function makeTornadoFx() {
+  const g = new THREE.Group(), layers = [];
+  for (let i = 0; i < 7; i++) {
+    const y0 = i * 62, rb = 22 + i * 18, rt = 30 + (i + 1) * 20;
+    const t = TWIST_TEX.clone(); t.needsUpdate = true; t.repeat.set(2, 1);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, 66, 24, 1, true), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide, color: 0xb9a78a }));
+    m.position.y = y0 + 33; g.add(m); layers.push(m);
+  }
+  const N = 260, pos = new Float32Array(N * 3), seeds = [];
+  for (let i = 0; i < N; i++) seeds.push([Math.random() * Math.PI * 2, Math.random(), 0.6 + Math.random()]);
+  const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const dust = new THREE.Points(pg, new THREE.PointsMaterial({ map: SMOKE_TEX, color: 0xa08a6a, size: 22, transparent: true, opacity: 0.6, depthWrite: false }));
+  dust.frustumCulled = false; g.add(dust);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(40, TORNADO.r * 1.1, 32), new THREE.MeshBasicMaterial({ map: SMOKE_TEX, color: 0x9c8466, transparent: true, opacity: 0.45, depthWrite: false }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 1.5; g.add(ring);
+  scene.add(g);
+  return { g, layers, dust, seeds, ring };
+}
+function updateTornadoFx(T, now, dt) {
+  if (!T) { if (tornadoFx) { scene.remove(tornadoFx.g); tornadoFx = null; } return; }
+  if (!tornadoFx) tornadoFx = makeTornadoFx();
+  const F = tornadoFx, grow = T.s === 2 ? 1 : 0.15 + 0.85 * T.k, ts = now / 1000;
+  F.g.position.set(T.x, 0, T.z); F.g.scale.set(grow, grow, grow);
+  F.layers.forEach((m, i) => { m.rotation.y += dt * (5 - i * 0.35); m.material.map.offset.x -= dt * 0.8; m.position.x = Math.sin(ts * 3 + i * 0.7) * i * 3; m.position.z = Math.cos(ts * 2.4 + i) * i * 3; });
+  const pos = F.dust.geometry.attributes.position.array;
+  for (let i = 0; i < F.seeds.length; i++) {
+    const [a, h, sp] = F.seeds[i], y = ((h + ts * 0.25 * sp) % 1) * 430, ang = a + ts * 4 * sp, rr = 25 + y * 0.42;
+    pos[i * 3] = Math.cos(ang) * rr; pos[i * 3 + 1] = y; pos[i * 3 + 2] = Math.sin(ang) * rr;
+  }
+  F.dust.geometry.attributes.position.needsUpdate = true;
+  F.ring.rotation.z += dt * 3;
+}
+
+// ---------- neve: chuva congelante (sombra da nuvem no chão avisa antes) ----------
+let stormFx = null;
+function makeStormFx(r) {
+  const g = new THREE.Group();
+  const shade = new THREE.Mesh(new THREE.CircleGeometry(r, 48), new THREE.MeshBasicMaterial({ map: GLOW_TEX, color: 0x0b1a2e, transparent: true, opacity: 0, depthWrite: false }));
+  shade.rotation.x = -Math.PI / 2; shade.position.y = 1.5; g.add(shade);
+  const edge = new THREE.Mesh(new THREE.RingGeometry(r * 0.97, r, 64), new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0, depthWrite: false }));
+  edge.rotation.x = -Math.PI / 2; edge.position.y = 1.8; g.add(edge);
+  const clouds = [];
+  for (let i = 0; i < 12; i++) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: SMOKE_TEX, color: 0x5d6b7c, transparent: true, opacity: 0, depthWrite: false }));
+    const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * r * 0.8;
+    s.position.set(Math.cos(a) * d, 330 + Math.random() * 60, Math.sin(a) * d); s.scale.setScalar(r * 0.7); g.add(s); clouds.push(s);
+  }
+  const N = 900, pos = new Float32Array(N * 6), seeds = [];
+  for (let i = 0; i < N; i++) { const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * r; seeds.push([Math.cos(a) * d, Math.sin(a) * d, Math.random()]); }
+  const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const rain = new THREE.LineSegments(rg, new THREE.LineBasicMaterial({ color: 0xcfeeff, transparent: true, opacity: 0, depthWrite: false }));
+  rain.frustumCulled = false; g.add(rain);
+  scene.add(g);
+  return { g, shade, edge, clouds, rain, seeds, r };
+}
+function updateStormFx(S, now) {
+  if (!S) { if (stormFx) { scene.remove(stormFx.g); stormFx = null; } return; }
+  if (!stormFx) stormFx = makeStormFx(S.r);
+  const F = stormFx, warn = S.s === 1, k = warn ? S.k : 1, ts = now / 1000;
+  F.g.position.set(S.x, 0, S.z);
+  F.shade.material.opacity = 0.55 * k;
+  F.edge.material.opacity = warn ? 0.35 + Math.sin(now / 90) * 0.3 : 0.25;
+  for (const c of F.clouds) c.material.opacity = 0.75 * k;
+  const pos = F.rain.geometry.attributes.position.array;
+  F.rain.material.opacity = warn ? 0 : 0.75;
+  if (!warn) for (let i = 0; i < F.seeds.length; i++) {
+    const [x, z, ph] = F.seeds[i], y = 340 - ((ph + ts * 1.6) % 1) * 340;
+    pos[i * 6] = x; pos[i * 6 + 1] = y; pos[i * 6 + 2] = z; pos[i * 6 + 3] = x + 2; pos[i * 6 + 4] = y - 16; pos[i * 6 + 5] = z;
+  }
+  F.rain.geometry.attributes.position.needsUpdate = true;
+}
+
+// ---------- deserto: areia voando em volta de você na tempestade ----------
+let sandFx = null;
+const SKY_DESERT = new THREE.Color(0xb9d3e8), SAND_COLOR = new THREE.Color(0xd8b878);
+function updateSandFx(k, now, dt) {
+  if (!(k > 0.02)) { if (sandFx) sandFx.visible = false; return; }
+  if (!sandFx) {
+    const N = 1600, pos = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) { pos[i * 3] = (Math.random() - 0.5) * 1400; pos[i * 3 + 1] = Math.random() * 260; pos[i * 3 + 2] = (Math.random() - 0.5) * 1400; }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    sandFx = new THREE.Points(g, new THREE.PointsMaterial({ map: SMOKE_TEX, color: 0xd9b477, size: 16, transparent: true, opacity: 0, depthWrite: false }));
+    sandFx.frustumCulled = false; scene.add(sandFx);
+  }
+  sandFx.visible = true; sandFx.material.opacity = 0.55 * k;
+  const pos = sandFx.geometry.attributes.position.array, cx = camera.position.x, cz = camera.position.z;
+  for (let i = 0; i < pos.length; i += 3) {
+    pos[i] += 520 * dt; pos[i + 2] += 140 * dt;
+    if (pos[i] - cx > 700) pos[i] -= 1400; if (pos[i] - cx < -700) pos[i] += 1400;
+    if (pos[i + 2] - cz > 700) pos[i + 2] -= 1400; if (pos[i + 2] - cz < -700) pos[i + 2] += 1400;
+  }
+  sandFx.geometry.attributes.position.needsUpdate = true;
 }
 
 // ---------- base na Lua (mapa "nave") ----------
@@ -480,29 +630,30 @@ function buildMoonOutside(W, H) {
 }
 
 // ---------- floresta: árvores grandes (nas pontas das paredes e em volta do mapa) ----------
+// árvore alta: tronco comprido e a copa lá em cima (não tampa a visão de quem está no chão)
 function addTree(x, z, k, group) {
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(4.5 * k, 7 * k, 52 * k, 8), mat(0x4a3220));
-  trunk.position.set(x, 26 * k, z);
-  const leafA = mat(0x3f7d3a), leafB = mat(0x356b31);
-  const c1 = new THREE.Mesh(new THREE.IcosahedronGeometry(27 * k, 1), leafA); c1.position.set(x, 58 * k, z);
-  const c2 = new THREE.Mesh(new THREE.IcosahedronGeometry(21 * k, 1), leafB); c2.position.set(x + 9 * k, 76 * k, z - 5 * k);
-  const c3 = new THREE.Mesh(new THREE.IcosahedronGeometry(14 * k, 0), leafA); c3.position.set(x - 5 * k, 90 * k, z + 4 * k);
+  const h = TREE.top + 20, trunk = new THREE.Mesh(new THREE.CylinderGeometry(7 * k, 12 * k, h * k, 9), mat(0x4a3220));
+  trunk.position.set(x, h * k / 2, z);
+  const leafA = mat(0x3f7d3a), leafB = mat(0x356b31), y0 = (h - 5) * k;
+  const c1 = new THREE.Mesh(new THREE.IcosahedronGeometry(58 * k, 1), leafA); c1.position.set(x, y0 + 40 * k, z);
+  const c2 = new THREE.Mesh(new THREE.IcosahedronGeometry(46 * k, 1), leafB); c2.position.set(x + 30 * k, y0 + 58 * k, z - 18 * k);
+  const c3 = new THREE.Mesh(new THREE.IcosahedronGeometry(40 * k, 1), leafA); c3.position.set(x - 28 * k, y0 + 66 * k, z + 16 * k);
   for (const m of [trunk, c1, c2, c3]) { m.castShadow = m.receiveShadow = true; group.add(m); }
 }
 function buildForestOutside(W, H) {
   const far = new THREE.Mesh(new THREE.PlaneGeometry(16000, 16000), new THREE.MeshStandardMaterial({ color: 0x5f8f4e, roughness: 1 }));
   far.rotation.x = -Math.PI / 2; far.position.set(W / 2, -0.6, H / 2); far.receiveShadow = true; mapGroup.add(far);
   const rnd = seeded(612);
-  for (let i = 0; i < 90; i++) {
-    const side = Math.floor(rnd() * 4), d = 60 + rnd() * 700, u = rnd();
+  for (let i = 0; i < 70; i++) {
+    const side = Math.floor(rnd() * 4), d = 90 + rnd() * 700, u = rnd();
     const x = side === 0 ? -d : side === 1 ? W + d : -300 + u * (W + 600);
     const z = side === 2 ? -d : side === 3 ? H + d : -300 + u * (H + 600);
-    addTree(x, z, 1.9 + rnd() * 1.3, mapGroup);
+    addTree(x, z, 0.9 + rnd() * 0.5, mapGroup);
   }
 }
 
 // ---------- portais (oval brilhante, dá pra ver o outro lado) ----------
-const PORTAL_COLORS = [[0x2f9bff, 0xff8a1f], [0xa45cff, 0x6be36b]];
+const PORTAL_COLORS = [[0x00e5ff, 0x00e5ff], [0xff40c8, 0xff40c8]]; // igual ao 2D: azul com azul, rosa com rosa
 const PORTAL_VERT = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
 const PORTAL_FRAG = `uniform sampler2D uTex; uniform vec2 uRes; uniform vec3 uColor; uniform float uTime; uniform float uLive; varying vec2 vUv; ${NOISE_GLSL}
 void main(){
@@ -536,14 +687,14 @@ function disposePortals() {
   for (const v of portalViews) { v.rt.dispose(); v.mat.dispose(); v.rimMat.dispose(); }
   portalViews = [];
 }
-function buildPortalViews(portals, frameTex) {
+function buildPortalViews(portals, frameTex, wallH) {
   const res = portalRTSize();
   const { rx, ry, cy } = PORTAL, UP = new THREE.Vector3(0, 1, 0);
   for (const d of portals) {
     const basis = new THREE.Matrix4().makeBasis(new THREE.Vector3(d.tx, 0, d.tz), UP, new THREE.Vector3(d.nx, 0, d.nz)).setPosition(d.cx, 0, d.cz);
     const grp = new THREE.Group(); grp.matrixAutoUpdate = false; grp.matrix.copy(basis);
     // moldura: o pedaço de parede da abertura com um furo oval
-    const shape = new THREE.Shape(); shape.moveTo(-d.half, 0); shape.lineTo(d.half, 0); shape.lineTo(d.half, P.borderH); shape.lineTo(-d.half, P.borderH); shape.lineTo(-d.half, 0);
+    const shape = new THREE.Shape(); shape.moveTo(-d.half, 0); shape.lineTo(d.half, 0); shape.lineTo(d.half, wallH); shape.lineTo(-d.half, wallH); shape.lineTo(-d.half, 0);
     const hole = new THREE.Path(); hole.absellipse(0, cy, rx, ry, 0, Math.PI * 2, true); shape.holes.push(hole);
     const t = frameTex.clone(); t.needsUpdate = true; t.repeat.set(1 / 128, 1 / 128);
     const frame = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: d.t, bevelEnabled: false, curveSegments: 48 }), new THREE.MeshStandardMaterial({ map: t, roughness: 0.8 }));
@@ -611,26 +762,45 @@ function renderPortals(me, now) {
 }
 
 // ---------- cidade à noite: poste de rua ----------
+const LAMP_LIGHT = 42000;
 function addLamp(x, z) {
   const metal = mat(0x1f2430, { metalness: 0.5, roughness: 0.5 });
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 3.2, 86, 8), metal); pole.position.set(x, 43, z);
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(6, 7, 6, 8), metal); base.position.set(x, 3, z);
-  const arm = new THREE.Mesh(new THREE.BoxGeometry(22, 2.4, 2.4), metal); arm.position.set(x + 9, 86, z);
-  const head = new THREE.Mesh(new THREE.CylinderGeometry(4, 9, 7, 10), metal); head.position.set(x + 18, 83, z);
-  const bulb = new THREE.Mesh(new THREE.SphereGeometry(4.5, 10, 6), new THREE.MeshBasicMaterial({ color: 0xffe2a0 })); bulb.position.set(x + 18, 79, z); bulb.scale.y = 0.6;
+  const Hh = LAMP.h, O = LAMP.off;
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.8, Hh + 8, 8), metal); pole.position.set(x, (Hh + 8) / 2, z);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(7, 8, 8, 8), metal); base.position.set(x, 4, z);
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(O + 6, 3, 3), metal); arm.position.set(x + O / 2, Hh + 8, z);
+  const head = new THREE.Mesh(new THREE.CylinderGeometry(6, 13, 9, 10), metal); head.position.set(x + O, Hh + 5, z);
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(8, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffe2a0 })); bulb.position.set(x + O, Hh, z); bulb.scale.y = 0.65;
   for (const m of [pole, base, arm, head]) { m.castShadow = m.receiveShadow = true; mapGroup.add(m); }
   mapGroup.add(bulb);
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW_TEX, color: 0xffd58a, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending }));
-  halo.scale.set(60, 60, 1); halo.position.set(x + 18, 79, z); mapGroup.add(halo);
-  const pool = new THREE.Mesh(new THREE.CircleGeometry(170, 32), new THREE.MeshBasicMaterial({ map: GLOW_TEX, color: 0xffc56a, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending }));
-  pool.rotation.x = -Math.PI / 2; pool.position.set(x + 12, 0.7, z); mapGroup.add(pool);
-  const light = new THREE.PointLight(0xffd59a, 38000, 650, 2); light.position.set(x + 16, 74, z); mapGroup.add(light);
+  halo.scale.set(75, 75, 1); halo.position.set(x + O, Hh, z); mapGroup.add(halo);
+  const pool = new THREE.Mesh(new THREE.CircleGeometry(190, 32), new THREE.MeshBasicMaterial({ map: GLOW_TEX, color: 0xffc56a, transparent: true, opacity: 0.17, depthWrite: false, blending: THREE.AdditiveBlending }));
+  pool.rotation.x = -Math.PI / 2; pool.position.set(x + O, 0.7, z); mapGroup.add(pool);
+  const light = new THREE.PointLight(0xffd59a, LAMP_LIGHT, 720, 2); light.position.set(x + O, Hh - 6, z); mapGroup.add(light);
   lampLights.push({ bulb, light, halo, pool });
 }
 
+// teto das salas fechadas: placas com luminárias (na sala escura elas apagam junto com a luz)
+let ceilLights = [];
+function buildCeiling(mapId, y, W, H) {
+  const dark = mapId === 'escuro';
+  const tex = canvasTex(256, 256, (g) => { g.fillStyle = dark ? '#1b1d22' : '#c9ced6'; g.fillRect(0, 0, 256, 256); g.strokeStyle = dark ? 'rgba(0,0,0,.5)' : 'rgba(60,65,75,.5)'; g.lineWidth = 4; for (let k = 0; k <= 256; k += 128) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k, 256); g.stroke(); g.beginPath(); g.moveTo(0, k); g.lineTo(256, k); g.stroke(); } }, true);
+  tex.repeat.set(W / 256, H / 256);
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, side: THREE.DoubleSide }));
+  ceil.rotation.x = Math.PI / 2; ceil.position.set(W / 2, y, H / 2); ceil.receiveShadow = true;
+  mapGroup.add(ceil);
+  const lampMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: dark ? 0xfff1d0 : 0xeef4ff, emissiveIntensity: 1.6 });
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(140, 4, 34), lampMat); m.position.set(W * (i + 0.5) / 4, y - 2, H * (j + 0.5) / 3); mapGroup.add(m);
+  }
+  ceilLights.push(lampMat);
+}
 function buildMap(mapId, info) {
   if (mapGroup) scene.remove(mapGroup);
-  disposePortals(); lampLights = []; lavaFx = [];
+  disposePortals(); lampLights = []; lavaFx = []; volcano = null; ceilLights = [];
+  for (const fx of [tornadoFx, stormFx]) if (fx) scene.remove(fx.g);
+  tornadoFx = null; stormFx = null;
   if (mapId === 'teste') return buildTestRoom();
   info = info || {};
   const map = MAPS[mapId], th = Object.assign({}, map.theme, THEME3D[mapId] || {}), W = CFG.mapWidth, H = CFG.mapHeight, T = CFG.wallThickness;
@@ -641,7 +811,7 @@ function buildMap(mapId, info) {
   scene.background = new THREE.Color(sky);
   scene.fog = map.space ? null
     : mapId === 'deserto' ? new THREE.Fog(0xdcc9a2, 1600, 6200)
-    : mapId === 'vulcao' ? new THREE.Fog(0x2a1712, 1100, 5200)
+    : mapId === 'vulcao' ? new THREE.Fog(0x2a1712, 1400, 7000)
     : mapId === 'cidade' ? new THREE.Fog(0x05060a, 600, 2200)
     : new THREE.Fog(nightMap ? 0x05060a : sky, nightMap ? 250 : 1400, nightMap ? 1400 : 4200);
   // paredes + sorteios da partida (no multiplayer vêm do servidor)
@@ -653,12 +823,14 @@ function buildMap(mapId, info) {
     const lay = portalLayout(mapWalls, list, pairs, W, H, T);
     mapWalls = lay.walls; portals = lay.portals;
   }
-  const holes = mapId === 'vulcao' ? (info.holes || makeLavaHoles(W, H, mapWalls)) : null;
+  if (mapId === 'floresta') mapWalls = mapWalls.concat(forestTrees(W, H, mapWalls)); // árvores (o tronco bate)
+  const holes = mapId === 'vulcao' ? [] : null; // os buracos do vulcão abrem durante a partida (erupção)
   const dunes = mapId === 'deserto' ? new DuneField(mapWalls, W, H) : null;
-  mapInfo = { mapId, portalPairs: pairs, portals, holes, dunes };
+  const borderH = BORDER_H[mapId] || P.borderH, closed = !!BORDER_H[mapId];
+  mapInfo = { mapId, portalPairs: pairs, portals, holes, dunes, borderH };
   // chão
   if (dunes) mapGroup.add(buildDuneGround(th, dunes, W, H));
-  else if (holes) buildHoleGround(th, holes, W, H);
+  else if (holes) buildVolcanoWorld(th, W, H);
   else {
     const gstyle = mapId === 'nave' ? 'deck' : mapId === 'portal' ? 'lab' : null;
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshStandardMaterial({ map: groundTexture(th, mapId.length * 97, gstyle), roughness: mapId === 'nave' ? 0.6 : 0.95, metalness: mapId === 'nave' ? 0.35 : 0 }));
@@ -668,13 +840,13 @@ function buildMap(mapId, info) {
   // muros
   const style = WALL_STYLE[mapId] || 'brick';
   const wtex = wallTexture(th.wall, style), btex = wallTexture(th.border, style);
-  const treeSpots = []; // pontas das paredes de madeira (floresta) — uma árvore em cada
   let iceMat = null;
   for (const R of mapWalls) {
     if (R.pframe != null) continue; // moldura do portal é desenhada separada
+    if (R.tree) { addTree(R.x + R.w / 2, R.y + R.h / 2, 1, mapGroup); continue; } // árvore da floresta
     if (dunes && DuneField.isDune(R)) continue; // virou montanha de areia
     if (R.space && !map.space) continue;
-    const hgt = R.border || R.space ? P.borderH : P.wallH;
+    const hgt = R.border || R.space ? borderH : P.wallH;
     if (style === 'ice' && !R.border) {
       // gelo: dá pra ver o que está atrás de UMA parede, mas duas já escurecem (não dá pra ver o mapa todo)
       if (!iceMat) iceMat = new THREE.MeshPhysicalMaterial({ map: wtex, color: 0x86b8df, transparent: true, opacity: 0.76, roughness: 0.14, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.06, envMap: iceEnvMap(), envMapIntensity: 1.2, emissive: 0x123a5c, emissiveIntensity: 0.12 });
@@ -692,7 +864,8 @@ function buildMap(mapId, info) {
     const hull = style === 'corridor' && (R.border || R.space);
     const base = hull ? HULL_TEX : R.border || R.space ? btex : wtex;
     const t = base.clone(); t.needsUpdate = true;
-    if (style === 'corridor') t.repeat.set(Math.max(R.w, R.h) / 150, 1);
+    if (hull) t.repeat.set(Math.max(R.w, R.h) / 150, hgt / 180); // 2 fileiras de janela na parede alta
+    else if (style === 'corridor') t.repeat.set(Math.max(R.w, R.h) / 150, 1);
     else if (style === 'lab' || style === 'sandstone') t.repeat.set(Math.max(R.w, R.h) / 128, hgt / 128);
     else t.repeat.set(Math.max(R.w, R.h) / 64, hgt / 64);
     const sideOpts = { map: t, roughness: style === 'corridor' ? 0.45 : 0.9, metalness: style === 'corridor' ? 0.35 : 0 };
@@ -701,16 +874,9 @@ function buildMap(mapId, info) {
     const side = new THREE.MeshStandardMaterial(sideOpts), top = mat(th.wallEdge, style === 'corridor' ? { metalness: 0.5, roughness: 0.45 } : {});
     const box = new THREE.Mesh(new THREE.BoxGeometry(R.w, hgt, R.h), [side, side, top, top, side, side]);
     box.position.set(R.x + R.w / 2, hgt / 2, R.y + R.h / 2);
-    box.castShadow = true; box.receiveShadow = true;
+    box.castShadow = !(closed && (R.border || R.space)); box.receiveShadow = true; // mapa fechado: a borda alta não faz sombra dentro
     mapGroup.add(box);
-    if (style === 'wood' && !R.border) {
-      if (R.w > R.h) { treeSpots.push([R.x, R.y + R.h / 2]); treeSpots.push([R.x + R.w, R.y + R.h / 2]); }
-      else { treeSpots.push([R.x + R.w / 2, R.y]); treeSpots.push([R.x + R.w / 2, R.y + R.h]); }
-    }
   }
-  // uma árvore grande na ponta de cada parede de madeira (floresta)
-  const trnd = seeded(77);
-  for (const [x, z] of treeSpots) addTree(x, z, 2.0 + trnd() * 0.6, mapGroup);
   // enfeites espalhados pelo chão
   const rnd = seeded(mapId.length * 31 + 5);
   for (let i = 0; i < 40; i++) {
@@ -737,9 +903,10 @@ function buildMap(mapId, info) {
       }
     }
   }
-  // teto que ricocheteia tiro (folhas da floresta acima das copas / vidro da nave)
+  // teto que ricocheteia tiro (folhas da floresta / vidro da nave / teto da sala escura e dos portais)
   const ceilY = CEILING_Y[mapId];
-  if (ceilY) {
+  if (ceilY && (mapId === 'escuro' || mapId === 'portal')) buildCeiling(mapId, ceilY, W, H);
+  else if (ceilY) {
     const roofColor = mapId === 'nave' ? 0xbfe3ff : 0x2f6b34;
     const roofOpacity = mapId === 'nave' ? 0.12 : 0.28;
     const roof = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshBasicMaterial({ color: roofColor, transparent: true, opacity: roofOpacity, side: THREE.DoubleSide, depthWrite: false }));
@@ -749,9 +916,8 @@ function buildMap(mapId, info) {
   // o que fica em volta de cada mapa
   if (mapId === 'deserto') buildDesertOutside(W, H);
   else if (mapId === 'floresta') buildForestOutside(W, H);
-  else if (mapId === 'vulcao') buildVolcanoOutside(W, H);
   else if (map.space) buildMoonOutside(W, H);
-  if (portals.length) buildPortalViews(portals, btex);
+  if (portals.length) buildPortalViews(portals, btex, borderH);
   // cidade à noite: postes que iluminam de verdade (atirar apaga por um tempo)
   window.__lampPositions = null;
   if (mapId === 'cidade') {
@@ -882,6 +1048,11 @@ class Avatar {
       else this.play('upper', this.curName.lower || 'Idle', 0.15, false, this.cur.lower ? this.cur.lower.getEffectiveTimeScale() : 1);
     }
     this.mixer.update(dt);
+  }
+  // congelado pela chuva da neve: fica azulado
+  setFrozen(v) {
+    if (this.frozen === v) return; this.frozen = v;
+    this.model.traverse((o) => { if (o.isMesh && o.material.emissive) { o.material.emissive.set(v ? 0x3aa0ff : 0x000000); o.material.emissiveIntensity = v ? 0.55 : 1; } });
   }
   remove() { scene.remove(this.root); }
 }
@@ -1403,7 +1574,17 @@ function renderBoard() {
 
 // ---------- HUD ----------
 const SLOT_NAMES = { primary: '1', potion: '2', knife: '3', nade: '4', smoke: '5' };
+// contador do evento do mapa no topo (igual ao 2D): "Furacão em 12s"
+const HZ_TXT = { sand: ['🏜️ Tempestade de areia', 'chegando!', 'agora!'], tornado: ['🌪️ Furacão', 'nascendo!', 'solto!'], storm: ['🌨️ Chuva congelante', 'olha a sombra!', 'caindo!'], dark: ['💡 Luz apaga', 'piscando!', 'apagou!'], lava: ['🌋 Erupção', 'o chão rachou!', 'agora!'] };
+function hazardText() {
+  const k = sim.hazard, T = HZ_TXT[k];
+  if (!T || !sim.hz || !sim.hz[k]) return '';
+  if (k === 'lava' && (sim.holes || []).length >= 4) return '';
+  const cy = sim.cycle(k);
+  return cy.s === 0 ? `${T[0]} em ${Math.ceil(cy.n)}s` : `${T[0]} — ${cy.s === 1 ? T[1] : T[2]}`;
+}
 function hud(me) {
+  $('h-hz').textContent = hazardText();
   let h = ''; for (let i = 0; i < P.lives; i++) h += `<span class="${i < me.lives && me.alive ? '' : 'lost'}">❤️</span>`;
   $('h-lives').innerHTML = h;
   if (netMode && netRoundTime > 0) {
@@ -1462,7 +1643,7 @@ function newGame() {
     hazard: map ? map.hazard : null,
     cfg: CFG,
     portals: mapInfo.portals, holes: mapInfo.holes, terrain: mapInfo.dunes ? 'dunes' : null,
-    ceilingY: CEILING_Y[S.map] || null,
+    ceilingY: CEILING_Y[S.map] || null, borderH: mapInfo.borderH || null,
     lamps: window.__lampPositions || null
   });
   sim.addPlayer({ id: 'me', name: 'Você', team: 'A', primary: S.weapon });
@@ -1477,7 +1658,7 @@ function enterNetMatch(info) {
   for (const a of avatars.values()) a.remove(); avatars.clear();
   for (const pool of [bulletMeshes, nadeMeshes, smokeMeshes, tombMeshes, pickupMeshes]) { for (const m of pool.values()) scene.remove(m); pool.clear(); }
   buildMap(info.map, info); // portais e buracos vêm sorteados do servidor
-  sim = new Sim3D(mapWalls, CFG.mapWidth, CFG.mapHeight, { cfg: CFG, portals: mapInfo.portals, holes: mapInfo.holes, terrain: mapInfo.dunes ? 'dunes' : null, ceilingY: CEILING_Y[info.map] || null });
+  sim = new Sim3D(mapWalls, CFG.mapWidth, CFG.mapHeight, { cfg: CFG, hazard: MAPS[info.map] ? MAPS[info.map].hazard : null, portals: mapInfo.portals, holes: mapInfo.holes, terrain: mapInfo.dunes ? 'dunes' : null, ceilingY: CEILING_Y[info.map] || null, borderH: mapInfo.borderH || null });
   prevPos = new Map();
   netYaw = 0; netPitch = 0; netFireHeld = false;
   netRecvT = 0; netInterval = 130;
@@ -1513,6 +1694,7 @@ function applySnapshot(snap, evs) {
       reloadUntil: sp.reloadUntil, nades: sp.nades, smokes: sp.smokes, potions: sp.potions,
       djReadyAt: sp.djReadyAt, k: sp.k, d: sp.d, a: sp.a, charge0: sp.charge0, fireReady: sp.fireReady,
       protectUntil: sp.protectUntil, respawnAt: sp.respawnAt, deadAt: sp.deadAt, lastHitBy: sp.lastHitBy || {},
+      slowUntil: sp.slowUntil || 0, spin: sp.spin,
       input: { fwd: 0, side: 0, fire: false }
     };
     if (id === 'me') { p.yaw = netYaw; p.pitch = netPitch; }
@@ -1524,13 +1706,39 @@ function applySnapshot(snap, evs) {
   sim.smokes = snap.smokes;
   sim.tombs = snap.tombs;
   sim.pickups = snap.pickups;
-  sim.hazard = snap.hazard; sim.sandK = snap.sandK; sim.lightOn = snap.lightOn;
-  sim.lamps = snap.lamps;
+  sim.hazard = snap.hazard; sim.sandK = snap.sandK; sim.lightOn = snap.lightOn; sim.lightS = snap.lightS || 0;
+  sim.lamps = snap.lamps; sim.tornado = snap.tornado; sim.storm = snap.storm; sim.erupt = snap.erupt;
+  if (snap.holes) sim.holes = snap.holes;
   const prevRecvT = netRecvT; netRecvT = now;
   if (prevRecvT) netInterval = Math.max(60, Math.min(400, now - prevRecvT));
   for (const e of evs || []) handleEvent(netRemapEvent(e), now);
 }
 
+// quem está debaixo da mira (pra mostrar o nome nos mapas escuros)
+const _cdir = new THREE.Vector3();
+function aimedPlayer() {
+  camera.getWorldDirection(_cdir);
+  const o = camera.position, dx = _cdir.x, dy = _cdir.y, dz = _cdir.z;
+  const best = sim.raycast(o.x, o.y, o.z, dx, dy, dz, 4000, 'me');
+  let id = null;
+  for (const q of sim.players.values()) {
+    if (q.id === 'me' || !q.alive) continue;
+    const r = sim.radius(q), h = sim.heightOf(q), fx = o.x - q.x, fz = o.z - q.z;
+    const a = dx * dx + dz * dz, b = 2 * (fx * dx + fz * dz), c = fx * fx + fz * fz - r * r, disc = b * b - 4 * a * c;
+    if (a < 1e-9 || disc < 0) continue;
+    const t = (-b - Math.sqrt(disc)) / (2 * a), y = o.y + dy * t;
+    if (t > 0 && Math.abs(t - best) < 3 && y >= q.y && y <= q.y + h) id = q.id;
+  }
+  return id;
+}
+// está na luz? (sala escura com a luz acesa; cidade: perto de um poste aceso ou bem perto de você)
+function litAt(p) {
+  if (mapInfo.mapId === 'escuro') return sim.lightS === 0;
+  const me = sim.players.get('me');
+  if (me && Math.hypot(me.x - p.x, me.z - p.z) < 110) return true;
+  for (const L of sim.lamps || []) if (sim.time >= L.offUntil && Math.hypot(L.x + LAMP.off - p.x, L.z - p.z) < 230) return true;
+  return false;
+}
 function frame(now) {
   const dtR = Math.min(0.1, (now - last) / 1000);
   acc += dtR; last = now;
@@ -1563,15 +1771,30 @@ function frame(now) {
   if (sim.hazard === 'sand' && scene.fog) {
     const sk = sim.sandK || 0;
     scene.fog.color.set(0xd8b878);
-    scene.fog.near = lerp(1400, 120, sk); scene.fog.far = lerp(4200, 700, sk);
+    scene.fog.near = lerp(1600, 40, sk); scene.fog.far = lerp(6200, 380, sk); // quase o mapa todo some na areia
+    if (scene.background && scene.background.isColor) scene.background.lerpColors(SKY_DESERT, SAND_COLOR, Math.min(1, sk * 1.2));
   }
-  // sala escura: a luz apaga e acende sozinha
-  if (sim.hazard === 'dark') { hemi.intensity = sim.lightOn ? 1.3 : 0.04; sun.intensity = sim.lightOn ? 2.3 : 0.01; }
+  updateSandFx(sim.hazard === 'sand' ? sim.sandK || 0 : 0, now, dtR);
+  // sala escura: igual ao 2D — pisca 1 s e apaga
+  if (sim.hazard === 'dark') {
+    const on = sim.lightS === 1 ? Math.random() < 0.45 : sim.lightS !== 2;
+    hemi.intensity = on ? 1.3 : 0.04; sun.intensity = on ? 2.3 : 0.01;
+    for (const m of ceilLights) m.emissiveIntensity = on ? 1.6 : 0;
+  }
+  // furacão (floresta) e chuva congelante (neve)
+  updateTornadoFx(sim.tornado, now, dtR);
+  updateStormFx(sim.storm, now);
+  // vulcão: quando a erupção abre um buraco novo, refaz o chão
+  if (volcano) {
+    if (sim.holes && sim.holes.length !== volcano.holeCount) rebuildVolcanoHoles(sim.holes);
+    updateEruptWarn(sim.erupt, now);
+    volcano.lakeMat.uniforms.uTime.value = now / 1000;
+  }
   // cidade à noite: cada poste liga/desliga conforme foi atirado ou não
   if (sim.lamps && sim.lamps.length === lampLights.length) {
     for (let i = 0; i < lampLights.length; i++) {
       const on = sim.time >= sim.lamps[i].offUntil, L = lampLights[i];
-      L.light.intensity = on ? 38000 : 0;
+      L.light.intensity = on ? LAMP_LIGHT : 0;
       L.bulb.material.color.set(on ? 0xffe2a0 : 0x33302a);
       L.halo.visible = on; L.pool.visible = on;
     }
@@ -1579,19 +1802,22 @@ function frame(now) {
   // vulcão: lava viva lá embaixo, brasas subindo e a luz tremendo
   if (lavaFx.length) {
     const ts = now / 1000;
-    lavaFx[0].mat.uniforms.uTime.value = ts;
     for (const L of lavaFx) {
-      L.light.intensity = 26000 * (0.85 + Math.sin(ts * 3.1 + L.h.x) * 0.1 + Math.sin(ts * 7.3 + L.h.z) * 0.05);
+      L.light.intensity = 22000 * (0.85 + Math.sin(ts * 3.1 + L.h.x) * 0.1 + Math.sin(ts * 7.3 + L.h.z) * 0.05);
       L.glow.material.opacity = 0.3 + Math.sin(ts * 2.2 + L.h.z) * 0.06;
       const pos = L.embers.geometry.attributes.position.array;
       for (let i = 0; i < L.eSeed.length; i++) {
         const [a, d, ph, sp] = L.eSeed[i], t = (ts * 0.35 * sp + ph) % 1;
-        pos[i * 3] = L.h.x + Math.cos(a + t * 2) * d; pos[i * 3 + 1] = -HOLE.depth + 10 + t * (HOLE.depth + 90); pos[i * 3 + 2] = L.h.z + Math.sin(a + t * 2) * d;
+        pos[i * 3] = L.h.x + Math.cos(a + t * 2) * d; pos[i * 3 + 1] = -HOLE.depth - 160 + t * (HOLE.depth + 250); pos[i * 3 + 2] = L.h.z + Math.sin(a + t * 2) * d;
       }
       L.embers.geometry.attributes.position.needsUpdate = true;
     }
   }
 
+  // mapas escuros: sem nome e sem círculo no chão (entregavam onde o inimigo estava);
+  // o nome só aparece com a mira em cima do inimigo e se ele estiver na luz
+  const darkMap = mapInfo.mapId === 'cidade' || mapInfo.mapId === 'escuro';
+  const aimed = darkMap ? aimedPlayer() : null;
   // bonecos (o corpo some quando morre; fica a lápide)
   for (const p of sim.players.values()) {
     let a = avatars.get(p.id);
@@ -1602,6 +1828,9 @@ function frame(now) {
     const sc = sim.radius(p) / P.radius;
     a.model.scale.setScalar(a.baseScale * sc); a.ring.scale.setScalar(sc);
     a.root.visible = p.alive && !(p.id === 'me' && firstPerson) && !(sim.time < p.protectUntil && Math.floor(now / 100) % 2 === 0);
+    a.ring.visible = !darkMap;
+    if (a.label) a.label.visible = !darkMap || (aimed === p.id && litAt(p));
+    a.setFrozen(sim.time < (p.slowUntil || 0));
     a.update(p, sim, dtR, now);
   }
   // áreas de reabastecimento (granada/fumaça e poção)
@@ -1649,6 +1878,7 @@ function frame(now) {
   for (const [id, m] of smokeMeshes) if (!sseen.has(id)) { scene.remove(m); smokeMeshes.delete(id); }
   for (let i = effects.length - 1; i >= 0; i--) {
     const e = effects[i], t = (now - e.t0) / e.d;
+    if (e.upd) { if (t >= 1) { for (const o of e.objs) scene.remove(o); effects.splice(i, 1); } else e.upd(t, dtR); continue; }
     if (t >= 1) {
       scene.remove(e.m); scene.remove(e.light);
       if (e.ring) scene.remove(e.ring); if (e.sparks) scene.remove(e.sparks);
@@ -1741,8 +1971,13 @@ function handleEvent(e, now) {
   if (e.type === 'explode' && Number.isFinite(e.x)) sfxAt('explode', e.x, e.z);
   if (e.type === 'jump' && e.id === 'me') sfxAt('jump', p ? p.x : 0, p ? p.z : 0);
   if (e.type === 'land' && pos) sfxAt('land', pos[0], pos[1]);
-  if (e.type === 'tornado_start') feed('🌪️ Furacão! Segura ou foge do centro dele');
-  if (e.type === 'tornado_end') feed('🌪️ O furacão jogou todo mundo longe');
+  if (e.type === 'tornado_start') feed('🌪️ Um furacão está nascendo — foge dele!');
+  if (e.type === 'caught' && e.id === 'me') feed('🌪️ O furacão te pegou!');
+  if (e.type === 'storm_warn') feed('🌨️ Nuvem de chuva congelante chegando (sombra no chão)');
+  if (e.type === 'frozen' && e.id === 'me') feed('🥶 Congelado! Você ficou devagar');
+  if (e.type === 'erupt_warn') { feed('🌋 O chão está rachando — o vulcão vai furar ali!'); SFX.play('splash', 0.6); }
+  if (e.type === 'erupt') { eruptFx(e.x, e.z, e.r, now); sfxAt('explode', e.x, e.z); }
+  if (e.type === 'light_flicker') feed('💡 A luz está piscando...');
   if (e.type === 'sand_start') feed('🏜️ Tempestade de areia — visibilidade caindo');
   if (e.type === 'sand_end') feed('🏜️ A tempestade passou');
   if (e.type === 'lava_fall') { sfxAt('splash', e.x, e.z); if (e.id === 'me' && e.saved) feed('🌋 Caiu na lava! (modo teste: voltou pro início)'); }

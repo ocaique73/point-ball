@@ -13,15 +13,13 @@ const MAX_PER_TEAM = 5;
 const ROOM_NAME_RE = /^[A-Za-z0-9]{1,5}$/;
 const VALID_LEVELS = ['iniciante', 'amador', 'pro'];
 const VALID_ROUND_TIMES = [0, 120, 180, 300, 600];
-// teto que ricocheteia tiro (mesmo valor do cliente em demo3d.js)
-const CEILING_Y = { floresta: 340, nave: 360 };
 
 function pidOf(clientId) { return crypto.createHash('sha256').update(String(clientId)).digest('hex').slice(0, 12); }
 
 function cleanName(n) { return String(n || '').trim().slice(0, 20) || 'Jogador'; }
 
 async function setup3D(io, CFG) {
-  const { Sim3D, portalLayout, makeLavaHoles } = await import('./public/demo3d/sim3d.js');
+  const { Sim3D, portalLayout, forestTrees, CEILING_Y, BORDER_H } = await import('./public/demo3d/sim3d.js');
   const rooms = new Map();
   const key = (code) => '3d:' + code;
 
@@ -106,15 +104,16 @@ async function setup3D(io, CFG) {
       const lay = portalLayout(walls, list, portalPairs, W, H, CFG.wallThickness);
       walls = lay.walls; portals = lay.portals;
     }
-    const holes = room.map === 'vulcao' ? makeLavaHoles(W, H, walls) : null;
+    if (room.map === 'floresta') walls = walls.concat(forestTrees(W, H, walls)); // árvores (tronco bate)
+    const holes = room.map === 'vulcao' ? [] : null; // a erupção abre os buracos durante a partida
     const sim = new Sim3D(walls, W, H, {
       hazard: map ? map.hazard : null,
-      cfg: CFG, portals, holes,
+      cfg: CFG, portals, holes, borderH: BORDER_H[room.map] || null,
       terrain: room.map === 'deserto' ? 'dunes' : null,
       ceilingY: CEILING_Y[room.map] || null,
       lamps: lampsFor(room.map, W, H)
     });
-    room.matchInfo = { map: room.map, roundTime: room.roundTime, portalPairs, holes };
+    room.matchInfo = { map: room.map, roundTime: room.roundTime, portalPairs };
     for (const m of room.members.values()) {
       if (m.status === 'team' && m.connected) { sim.addPlayer({ id: m.pid, name: m.name, team: m.team }); m.inMatch = true; }
     }
