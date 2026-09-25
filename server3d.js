@@ -21,7 +21,7 @@ function pidOf(clientId) { return crypto.createHash('sha256').update(String(clie
 function cleanName(n) { return String(n || '').trim().slice(0, 20) || 'Jogador'; }
 
 async function setup3D(io, CFG) {
-  const { Sim3D } = await import('./public/demo3d/sim3d.js');
+  const { Sim3D, portalLayout, makeLavaHoles } = await import('./public/demo3d/sim3d.js');
   const rooms = new Map();
   const key = (code) => '3d:' + code;
 
@@ -87,21 +87,7 @@ async function setup3D(io, CFG) {
     broadcastState(room);
   }
 
-  // poças de lava (vulcão) e postes (cidade), igual à lógica do cliente em demo3d.js buildMap()
-  function lavaPoolsFor(mapId, walls, W, H) {
-    if (mapId !== 'vulcao') return null;
-    const pools = [];
-    for (let i = 0; i < 3; i++) {
-      for (let tries = 0; tries < 30; tries++) {
-        const r = 55 + Math.random() * 25;
-        const x = W * 0.16 + Math.random() * (W * 0.28), z = 70 + Math.random() * (H - 140);
-        if (!G.circleFree(x, z, r + 15, walls, CFG)) continue;
-        pools.push({ x, z, r }, { x: W - x, z, r });
-        break;
-      }
-    }
-    return pools;
-  }
+  // postes (cidade), igual à lógica do cliente em demo3d.js buildMap()
   function lampsFor(mapId, W, H) {
     if (mapId !== 'cidade') return null;
     return MAPS.cidade.lamps.map(([nx, nz]) => [nx * W, nz * H]);
@@ -110,21 +96,25 @@ async function setup3D(io, CFG) {
   function startMatch(room) {
     const map = MAPS[room.map];
     const W = CFG.mapWidth, H = CFG.mapHeight;
+    // sorteios da partida (portais abertos, buracos de lava) são feitos aqui e mandados pros clientes,
+    // pra todo mundo ver exatamente o mesmo mapa que o servidor está simulando
     let walls = G.buildWalls(room.map, CFG, 0);
-    let portalPairs = null;
+    let portalPairs = null, portals = [];
     if (map && map.portals) {
       const list = G.portalList(map);
       portalPairs = G.pickPortalPairs(list, null);
-      walls = G.openWalls(walls, portalPairs);
+      const lay = portalLayout(walls, list, portalPairs, W, H, CFG.wallThickness);
+      walls = lay.walls; portals = lay.portals;
     }
+    const holes = room.map === 'vulcao' ? makeLavaHoles(W, H, walls) : null;
     const sim = new Sim3D(walls, W, H, {
       hazard: map ? map.hazard : null,
-      portalMap: (map && map.portals) ? room.map : null,
-      cfg: CFG, portalPairs, G,
+      cfg: CFG, portals, holes,
+      terrain: room.map === 'deserto' ? 'dunes' : null,
       ceilingY: CEILING_Y[room.map] || null,
-      lavaPools: lavaPoolsFor(room.map, walls, W, H),
       lamps: lampsFor(room.map, W, H)
     });
+    room.matchInfo = { map: room.map, roundTime: room.roundTime, portalPairs, holes };
     for (const m of room.members.values()) {
       if (m.status === 'team' && m.connected) { sim.addPlayer({ id: m.pid, name: m.name, team: m.team }); m.inMatch = true; }
     }
@@ -143,7 +133,7 @@ async function setup3D(io, CFG) {
         pending = [];
       }
     }, 1000 / CFG.tickRate);
-    io.to(key(room.code)).emit('3d_match_start', { map: room.map, roundTime: room.roundTime });
+    io.to(key(room.code)).emit('3d_match_start', room.matchInfo);
     broadcastState(room);
   }
 
@@ -155,7 +145,7 @@ async function setup3D(io, CFG) {
       result = { reason, killsA: kA, killsB: kB, winner: kA > kB ? 'A' : kB > kA ? 'B' : null };
     }
     if (room.loop) clearInterval(room.loop);
-    room.loop = null; room.sim = null; room.phase = 'lobby';
+    room.loop = null; room.sim = null; room.phase = 'lobby'; room.matchInfo = null;
     for (const m of room.members.values()) m.inMatch = false;
     io.to(key(room.code)).emit('3d_match_end', result);
     broadcastState(room);
@@ -224,7 +214,7 @@ async function setup3D(io, CFG) {
       if (!room.hostId || (room.creatorPid === m.pid && !room.members.has(room.hostId))) pickHost(room);
       if (!room.hostId) room.hostId = m.pid;
       scheduleCloseIfEmpty(room);
-      ack({ ok: true, you: m.pid, state: publicState(room), match: room.phase === 'match' ? { map: room.map } : null });
+      ack({ ok: true, you: m.pid, state: publicState(room), match: room.phase === 'match' ? room.matchInfo : null });
       broadcastState(room);
     });
 
@@ -255,6 +245,11 @@ async function setup3D(io, CFG) {
       startMatch(room);
     });
 
+    // dono encerra a partida pra todo mundo (volta todos pra sala de espera)
+    socket.on('3d_end_match', () => {
+      const { room, m } = ctx(); if (!m || room.hostId !== m.pid || room.phase !== 'match') return;
+      endMatch(room);
+    });
     socket.on('3d_leave_match', () => {
       const { room, m } = ctx(); if (!m || !m.inMatch) return;
       m.inMatch = false;
