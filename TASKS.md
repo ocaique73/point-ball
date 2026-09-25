@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 24/09/2026 — v0.8.4 no ar — 2D finalizado (próximo passo: demos 3D em Three.js e Godot) em https://point-ball.onrender.com
+Última atualização: 24/09/2026 — v0.9.0 — 2D finalizado + demos 3D para comparar (próximo passo: demos 3D em Three.js e Godot) em https://point-ball.onrender.com
 
 ---
 
@@ -266,9 +266,11 @@
 - [~] **Caique:** testar
 
 ## 10. 3D (demos para comparar)
-- [ ] Demo A: Three.js + Electron (roda no PC e na web) com modelos low-poly (Kenney)
-- [ ] Demo B: Godot 4 (exporta para Windows) com os mesmos modelos
-- [ ] Caique compara e escolhe
+- [x] Demo A: Three.js — `/demo3d/` (web) e `demo3d/threejs-pc` (Electron, PC). Reaproveita shared/game.js e bots.js: bomba, fumaça, faca, bots, 4 mapas
+- [x] Demo B: Godot 4.7 — `demo3d/godot` (abrir project.godot e F5). Refeito em GDScript: arena, tiro com 3 ricochetes, 2 vidas, pulo, 2 bots, 3 mapas, V-Sync liga/desliga, física interpolada
+- [x] Modelos low-poly feitos com formas simples (dá para trocar por modelos do Kenney depois)
+- [x] Como rodar: `demo3d/LEIA-ME.md`
+- [~] **Caique:** comparar as duas e escolher
 
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
 - [ ] Sons (tiro, batida na parede, acerto, faca, pulo)
