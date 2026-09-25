@@ -69,7 +69,7 @@
 <canvas id="cross" width="240" height="240"></canvas>
 <div id="dead"></div>
 <div class="panel" id="bombwarn"></div>
-<div class="panel" id="top">POINT BALL 3D · THREE.JS · FPS <b id="fps">--</b> <span>(segue o Hz do monitor)</span></div>
+<div class="panel" id="top">POINT BALL 3D · THREE.JS · FPS <b id="fps">--</b> <span>(segue o Hz do monitor)</span> <b id="h-clock" style="display:none;margin-left:10px;color:var(--acc)"></b></div>
 <div class="panel" id="hud">
   <div class="row"><span id="h-lives"></span></div>
   <div class="row"><span class="big" id="h-ammo">20</span><span id="h-mags"></span></div>
@@ -125,6 +125,7 @@
   <div class="pane" id="p-keys">
     <label class="field"><span>Sensibilidade do mouse</span><input type="range" id="o-sens" min="0.2" max="6" step="0.05"><span class="v" id="v-sens"></span></label>
     <label class="field"><span>Inverter mouse (Y)</span><select id="o-invert"><option value="0">Não</option><option value="1">Sim</option></select><span></span></label>
+    <label class="field"><span>Som</span><select id="o-mute"><option value="0">Ligado</option><option value="1">Mudo</option></select><span></span></label>
     <div class="keys">
       <kbd>WASD</kbd> andar · <kbd>Mouse</kbd> olhar e mirar · <kbd>Clique</kbd> atirar / usar<br>
       <kbd>Espaço</kbd> pular (sem limite) · <kbd>Espaço</kbd> de novo no ar = <b>pulo duplo</b> (carrega a cada 15 s, passa por cima dos muros)<br>

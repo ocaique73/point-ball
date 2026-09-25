@@ -12,6 +12,7 @@ const MEMBER_GRACE = 2 * 60 * 1000;
 const MAX_PER_TEAM = 5;
 const ROOM_NAME_RE = /^[A-Za-z0-9]{1,5}$/;
 const VALID_LEVELS = ['iniciante', 'amador', 'pro'];
+const VALID_ROUND_TIMES = [0, 120, 180, 300, 600];
 // teto que ricocheteia tiro (mesmo valor do cliente em demo3d.js)
 const CEILING_Y = { floresta: 340, nave: 360 };
 
@@ -48,7 +49,7 @@ async function setup3D(io, CFG) {
   function publicState(room) {
     return {
       code: room.code, hasPassword: !!room.password, map: room.map, hostId: room.hostId, phase: room.phase,
-      botLevel: room.botLevel, bots: { team: room.bots.team, list: room.bots.list.map((b) => ({ id: b.id, name: b.name, team: room.bots.team, bot: true })) },
+      botLevel: room.botLevel, roundTime: room.roundTime, bots: { team: room.bots.team, list: room.bots.list.map((b) => ({ id: b.id, name: b.name, team: room.bots.team, bot: true })) },
       members: [...room.members.values()].map((m) => ({ id: m.pid, name: m.name, status: m.status, team: m.team, connected: m.connected, inMatch: m.inMatch }))
     };
   }
@@ -134,6 +135,7 @@ async function setup3D(io, CFG) {
     const every = Math.max(1, Math.round(CFG.tickRate / CFG.sendRate));
     let tick = 0, pending = [];
     room.loop = setInterval(() => {
+      if (room.roundTime > 0 && sim.time >= room.roundTime) { endMatch(room, 'time'); return; }
       const evs = sim.step(dt);
       if (evs.length) pending.push(...evs);
       if (++tick % every === 0) {
@@ -141,15 +143,21 @@ async function setup3D(io, CFG) {
         pending = [];
       }
     }, 1000 / CFG.tickRate);
-    io.to(key(room.code)).emit('3d_match_start', { map: room.map });
+    io.to(key(room.code)).emit('3d_match_start', { map: room.map, roundTime: room.roundTime });
     broadcastState(room);
   }
 
-  function endMatch(room) {
+  function endMatch(room, reason) {
+    let result = null;
+    if (reason === 'time' && room.sim) {
+      let kA = 0, kB = 0;
+      for (const p of room.sim.players.values()) { if (p.team === 'A') kA += p.k; else kB += p.k; }
+      result = { reason, killsA: kA, killsB: kB, winner: kA > kB ? 'A' : kB > kA ? 'B' : null };
+    }
     if (room.loop) clearInterval(room.loop);
     room.loop = null; room.sim = null; room.phase = 'lobby';
     for (const m of room.members.values()) m.inMatch = false;
-    io.to(key(room.code)).emit('3d_match_end');
+    io.to(key(room.code)).emit('3d_match_end', result);
     broadcastState(room);
   }
 
@@ -179,7 +187,8 @@ async function setup3D(io, CFG) {
       const room = {
         code, password: pass, map: MAPS[d.map] && d.map !== 'teste' ? d.map : 'deserto',
         hostId: null, creatorPid: pidOf(d.clientId), phase: 'lobby', members: new Map(),
-        sim: null, loop: null, closeTimer: null, bots: { team: 'B', list: [] }, botLevel: 'amador'
+        sim: null, loop: null, closeTimer: null, bots: { team: 'B', list: [] }, botLevel: 'amador',
+        roundTime: 300
       };
       rooms.set(code, room);
       scheduleCloseIfEmpty(room);
@@ -233,6 +242,7 @@ async function setup3D(io, CFG) {
       if (d && MAPS[d.map] && d.map !== 'teste') room.map = d.map;
       if (d && VALID_LEVELS.includes(d.botLevel)) room.botLevel = d.botLevel;
       if (d && (d.bots != null || d.botTeam)) setBots(room, d.bots != null ? d.bots : room.bots.list.length, d.botTeam || room.bots.team);
+      if (d && VALID_ROUND_TIMES.includes(Number(d.roundTime))) room.roundTime = Number(d.roundTime);
       broadcastState(room);
     });
 

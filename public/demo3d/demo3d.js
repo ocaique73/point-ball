@@ -23,6 +23,78 @@ const DEFAULTS = {
 let S = JSON.parse(JSON.stringify(DEFAULTS));
 try { const saved = JSON.parse(localStorage.getItem('pb3d_settings') || 'null'); if (saved) { S = Object.assign(S, saved); S.x = Object.assign({}, DEFAULTS.x, saved.x || {}); S.wtune = Object.assign({}, saved.wtune || {}); } } catch (e) {}
 const save = () => { try { localStorage.setItem('pb3d_settings', JSON.stringify(S)); } catch (e) {} };
+if (S.mute == null) S.mute = '0';
+
+// ---------- sons (sintetizados, sem arquivo de áudio) ----------
+const SFX = (() => {
+  let ctx = null, master = null;
+  function init() {
+    if (ctx) { if (ctx.state === 'suspended') ctx.resume().catch(() => {}); return; }
+    try {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      master = ctx.createGain(); master.gain.value = 0.55; master.connect(ctx.destination);
+    } catch (e) { ctx = null; }
+  }
+  function noiseBuf(dur) {
+    const n = Math.max(1, Math.floor(ctx.sampleRate * dur)), buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    return buf;
+  }
+  // toca um "beep" curto: onda + envelope de volume
+  function tone(freq, dur, type, vol, opts) {
+    opts = opts || {};
+    const t0 = ctx.currentTime;
+    const osc = ctx.createOscillator(); osc.type = type || 'square'; osc.frequency.setValueAtTime(freq, t0);
+    if (opts.slideTo) osc.frequency.exponentialRampToValueAtTime(Math.max(1, opts.slideTo), t0 + dur);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(Math.max(0.001, vol), t0 + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    let node = osc;
+    if (opts.pan != null && ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, opts.pan)); node.connect(p); node = p; }
+    node.connect(g); g.connect(master);
+    osc.start(t0); osc.stop(t0 + dur + 0.02);
+  }
+  function noise(dur, vol, opts) {
+    opts = opts || {};
+    const t0 = ctx.currentTime;
+    const src = ctx.createBufferSource(); src.buffer = noiseBuf(dur);
+    const filt = ctx.createBiquadFilter(); filt.type = opts.lowpass ? 'lowpass' : 'highpass'; filt.frequency.value = opts.freq || 1200;
+    const g = ctx.createGain(); g.gain.setValueAtTime(Math.max(0.001, vol), t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    let node = src; node.connect(filt);
+    if (opts.pan != null && ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, opts.pan)); filt.connect(p); node = p; } else node = filt;
+    node.connect(g); g.connect(master);
+    src.start(t0); src.stop(t0 + dur + 0.02);
+  }
+  const KIND = {
+    shot: (vol, opts) => tone(620, 0.09, 'square', 0.5 * vol, Object.assign({ slideTo: 160 }, opts)),
+    knife: (vol, opts) => noise(0.07, 0.35 * vol, Object.assign({ lowpass: true, freq: 2200 }, opts)),
+    hit: (vol, opts) => tone(180, 0.09, 'sine', 0.4 * vol, opts),
+    kill: (vol, opts) => { tone(500, 0.12, 'sawtooth', 0.5 * vol, opts); tone(760, 0.16, 'sawtooth', 0.4 * vol, Object.assign({}, opts)); },
+    jump: (vol, opts) => tone(340, 0.1, 'triangle', 0.3 * vol, Object.assign({ slideTo: 560 }, opts)),
+    land: (vol, opts) => noise(0.06, 0.22 * vol, Object.assign({ lowpass: true, freq: 500 }, opts)),
+    reload: (vol, opts) => { noise(0.04, 0.25 * vol, Object.assign({ lowpass: true, freq: 1800 }, opts)); },
+    throw: (vol, opts) => tone(300, 0.12, 'triangle', 0.3 * vol, Object.assign({ slideTo: 220 }, opts)),
+    explode: (vol, opts) => noise(0.45, 0.6 * vol, Object.assign({ lowpass: true, freq: 700 }, opts)),
+    pickup: (vol, opts) => { tone(660, 0.07, 'sine', 0.3 * vol, opts); tone(880, 0.09, 'sine', 0.25 * vol, opts); },
+    bounce: (vol, opts) => noise(0.05, 0.18 * vol, Object.assign({ lowpass: true, freq: 1400 }, opts))
+  };
+  return {
+    init,
+    play(kind, vol, opts) {
+      if (!ctx || S.mute === '1') return;
+      const fn = KIND[kind]; if (fn) fn(Math.max(0, Math.min(1, vol == null ? 1 : vol)), opts);
+    }
+  };
+})();
+// volume por distância até o "me" (jogadores/explosões longe tocam mais baixo)
+function sfxAt(kind, x, z, opts) {
+  const me = sim && sim.players.get('me');
+  if (!me) { SFX.play(kind, 1, opts); return; }
+  const dx = x - me.x, dz = z - me.z, dist = Math.hypot(dx, dz);
+  const vol = dist < 40 ? 1 : Math.max(0, 1 - dist / 1400);
+  if (vol <= 0.02) return;
+  const pan = Math.max(-1, Math.min(1, dx / 400));
+  SFX.play(kind, vol, Object.assign({ pan }, opts));
+}
 
 // ---------- renderizador ----------
 const canvas = $('view');
@@ -610,6 +682,8 @@ document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () 
 }));
 
 // ---------- multiplayer: menu (criar/entrar em sala, lobby, times, dono da sala) ----------
+const ROUND_TIME_OPTS = [[0, 'Sem limite'], [120, '2 minutos'], [180, '3 minutos'], [300, '5 minutos'], [600, '10 minutos']];
+function roundTimeLabel(v) { const o = ROUND_TIME_OPTS.find((x) => x[0] === v); return o ? o[1] : (v ? v + 's' : 'Sem limite'); }
 function mpStatus(msg, id) { const el = $(id || 'mp-status'); if (el) el.textContent = msg || ''; }
 function switchMpView(v) {
   $('mp-view-menu').style.display = v === 'lobby' ? 'none' : 'grid';
@@ -624,13 +698,20 @@ function ensureSocket() {
     if (!mine || mine.status !== 'team') { mpStatus('A partida começou — escolha um time para entrar na próxima.', 'mp-status2'); return; }
     enterNetMatch(d.map);
     netMode = true;
+    netRoundTime = d.roundTime || 0;
+    $('h-clock').style.display = netRoundTime > 0 ? '' : 'none';
     lockPointer();
   });
-  socket.on('3d_match_end', () => {
+  socket.on('3d_match_end', (result) => {
     if (locked) { try { document.exitPointerLock(); } catch (e) {} }
+    $('h-clock').style.display = 'none';
     showMenu(true);
     switchMpView('lobby');
     renderLobby();
+    if (result && result.reason === 'time') {
+      const txt = result.winner ? `⏱️ Tempo esgotado — Time ${result.winner === 'A' ? 'Azul' : 'Vermelho'} venceu (${result.killsA}x${result.killsB})` : `⏱️ Tempo esgotado — Empate (${result.killsA}x${result.killsB})`;
+      mpStatus(txt, 'mp-status2');
+    }
   });
   socket.on('3d_state', (msg) => { if (netMode) applySnapshot(msg.s, msg.e); });
   socket.on('3d_toast', (msg) => mpStatus(msg, room3d ? 'mp-status2' : 'mp-status'));
@@ -694,12 +775,13 @@ function renderLobby() {
       <label class="field" style="grid-template-columns:120px 1fr"><span>Mapa</span><select id="mp-set-map">${Object.keys(MAPS).map((k) => `<option value="${k}" ${k === room3d.map ? 'selected' : ''}>${esc(MAPS[k].name)}</option>`).join('')}</select><span></span></label>
       <label class="field" style="grid-template-columns:120px 1fr"><span>Bots</span><select id="mp-set-bots">${[0, 1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${n === room3d.bots.list.length ? 'selected' : ''}>${n}</option>`).join('')}</select><span></span></label>
       <label class="field" style="grid-template-columns:120px 1fr"><span>Time dos bots</span><select id="mp-set-botteam"><option value="A" ${room3d.bots.team === 'A' ? 'selected' : ''}>Azul</option><option value="B" ${room3d.bots.team === 'B' ? 'selected' : ''}>Vermelho</option></select><span></span></label>
-      <label class="field" style="grid-template-columns:120px 1fr"><span>Nível dos bots</span><select id="mp-set-level"><option value="iniciante" ${room3d.botLevel === 'iniciante' ? 'selected' : ''}>Iniciante</option><option value="amador" ${room3d.botLevel === 'amador' ? 'selected' : ''}>Amador</option><option value="pro" ${room3d.botLevel === 'pro' ? 'selected' : ''}>Profissional</option></select><span></span></label>`;
-    ['mp-set-map', 'mp-set-bots', 'mp-set-botteam', 'mp-set-level'].forEach((id) => $(id).addEventListener('change', () => {
-      socket.emit('3d_update_settings', { map: $('mp-set-map').value, bots: Number($('mp-set-bots').value), botTeam: $('mp-set-botteam').value, botLevel: $('mp-set-level').value });
+      <label class="field" style="grid-template-columns:120px 1fr"><span>Nível dos bots</span><select id="mp-set-level"><option value="iniciante" ${room3d.botLevel === 'iniciante' ? 'selected' : ''}>Iniciante</option><option value="amador" ${room3d.botLevel === 'amador' ? 'selected' : ''}>Amador</option><option value="pro" ${room3d.botLevel === 'pro' ? 'selected' : ''}>Profissional</option></select><span></span></label>
+      <label class="field" style="grid-template-columns:120px 1fr"><span>Tempo do round</span><select id="mp-set-roundtime">${ROUND_TIME_OPTS.map(([v, label]) => `<option value="${v}" ${v === room3d.roundTime ? 'selected' : ''}>${label}</option>`).join('')}</select><span></span></label>`;
+    ['mp-set-map', 'mp-set-bots', 'mp-set-botteam', 'mp-set-level', 'mp-set-roundtime'].forEach((id) => $(id).addEventListener('change', () => {
+      socket.emit('3d_update_settings', { map: $('mp-set-map').value, bots: Number($('mp-set-bots').value), botTeam: $('mp-set-botteam').value, botLevel: $('mp-set-level').value, roundTime: Number($('mp-set-roundtime').value) });
     }));
   } else {
-    $('mp-host-settings').innerHTML = `<div class="wdesc">Mapa: ${esc(MAPS[room3d.map] ? MAPS[room3d.map].name : room3d.map)} · Bots: ${room3d.bots.list.length} (${room3d.bots.team === 'A' ? 'Azul' : 'Vermelho'}, ${room3d.botLevel})</div>`;
+    $('mp-host-settings').innerHTML = `<div class="wdesc">Mapa: ${esc(MAPS[room3d.map] ? MAPS[room3d.map].name : room3d.map)} · Bots: ${room3d.bots.list.length} (${room3d.bots.team === 'A' ? 'Azul' : 'Vermelho'}, ${room3d.botLevel}) · Tempo: ${roundTimeLabel(room3d.roundTime)}</div>`;
   }
   $('mp-start-row').innerHTML = room3d.phase === 'match'
     ? '<div class="wdesc">⚔️ Partida em andamento...</div>'
@@ -738,6 +820,7 @@ bindSetting('o-weapon', 'weapon', null, () => { const me = sim.players.get('me')
 $('w-desc').textContent = WDESC[S.weapon];
 bindSetting('o-sens', 'sens');
 bindSetting('o-invert', 'invert');
+bindSetting('o-mute', 'mute');
 // ---------- sala de teste: velocidade / pulo / cadência / recarga ajustáveis ----------
 bindSetting('o-test', 'test', null, () => { if (sim) sim.godMode = S.test === '1'; });
 bindSetting('o-speed', 'speed', null, () => { if (sim) sim.setParam('speed', S.speed); });
@@ -783,9 +866,9 @@ function drawPreview() {
   drawCross(ctx, c.width, c.height, S.x, 0.65, { kind: (Math.floor(performance.now() / 900) % 2) ? 'kill' : 'hit', a: 1 });
 }
 setInterval(() => { if (menuOpen) drawPreview(); }, 450);
-$('btn-play').addEventListener('click', () => lockPointer());
+$('btn-play').addEventListener('click', () => { SFX.init(); lockPointer(); });
 function lockPointer() { try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) {} }
-canvas.addEventListener('click', () => { if (!locked) lockPointer(); });
+canvas.addEventListener('click', () => { SFX.init(); if (!locked) lockPointer(); });
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === canvas;
   showMenu(!locked);
@@ -796,7 +879,7 @@ document.addEventListener('pointerlockchange', () => {
 let sim = null;
 const keys = {};
 // ---------- multiplayer: estado de rede ----------
-let socket = null, netMode = false, myPid = null, room3d = null;
+let socket = null, netMode = false, myPid = null, room3d = null, netRoundTime = 0;
 let netYaw = 0, netPitch = 0, netFireHeld = false, netInputT = 0, netRecvT = 0, netInterval = 130;
 document.addEventListener('mousemove', (e) => {
   if (!locked || !sim) return;
@@ -878,6 +961,10 @@ const SLOT_NAMES = { primary: '1', potion: '2', knife: '3', nade: '4', smoke: '5
 function hud(me) {
   let h = ''; for (let i = 0; i < P.lives; i++) h += `<span class="${i < me.lives && me.alive ? '' : 'lost'}">❤️</span>`;
   $('h-lives').innerHTML = h;
+  if (netMode && netRoundTime > 0) {
+    const left = Math.max(0, Math.ceil(netRoundTime - sim.time));
+    $('h-clock').textContent = '⏱️ ' + String(Math.floor(left / 60)).padStart(2, '0') + ':' + String(left % 60).padStart(2, '0');
+  }
   const w = sim.WEAPONS[me.primary];
   if (me.weapon === 'primary') { $('h-ammo').textContent = me.reloadUntil ? 'recarregando...' : `${me.ammo[me.primary]}/${w.mag}`; $('h-mags').textContent = `· pentes ${me.mags[me.primary]}`; }
   else if (me.weapon === 'knife') { $('h-ammo').textContent = 'FACA'; $('h-mags').textContent = ''; }
@@ -1193,11 +1280,15 @@ function frame(now) {
 function handleEvent(e, now) {
   addEffect(e, now);
   const a = avatars.get(e.id), p = e.id && sim.players.get(e.id);
-  if (e.type === 'shot' && a) { const s = SHOOT_ANIM[e.weapon]; a.trigger(s[0], s[1], now); if (e.id === 'me') { kick = 1; if (e.weapon === 'mao' || e.weapon === 'disco') swing = 1; } }
-  if (e.type === 'knife' && a) { a.trigger('1H_Melee_Attack_Stab', 1.9, now); if (e.id === 'me') swing = 1; }
-  if ((e.type === 'nade_throw' || e.type === 'smoke_throw') && a) { a.trigger('Throw', 1.7, now); if (e.id === 'me') swing = 1; }
+  const pos = p ? [p.x, p.z] : (a ? [a.root.position.x, a.root.position.z] : null);
+  if (e.type === 'shot' && a) { const s = SHOOT_ANIM[e.weapon]; a.trigger(s[0], s[1], now); if (e.id === 'me') { kick = 1; if (e.weapon === 'mao' || e.weapon === 'disco') swing = 1; } if (pos) sfxAt('shot', pos[0], pos[1]); }
+  if (e.type === 'knife' && a) { a.trigger('1H_Melee_Attack_Stab', 1.9, now); if (e.id === 'me') swing = 1; if (pos) sfxAt('knife', pos[0], pos[1]); }
+  if ((e.type === 'nade_throw' || e.type === 'smoke_throw') && a) { a.trigger('Throw', 1.7, now); if (e.id === 'me') swing = 1; if (pos) sfxAt('throw', pos[0], pos[1]); }
   if (e.type === 'drink' && a) { a.trigger('Use_Item', 1.1, now); if (e.id === 'me') swing = 1; }
-  if (e.type === 'pickup' && e.id === 'me') feed(e.kind === 'potion' ? '🧪 Poção reabastecida' : '💣 Granada/fumaça reabastecida');
+  if (e.type === 'pickup' && e.id === 'me') { feed(e.kind === 'potion' ? '🧪 Poção reabastecida' : '💣 Granada/fumaça reabastecida'); SFX.play('pickup', 1); }
+  if (e.type === 'explode' && Number.isFinite(e.x)) sfxAt('explode', e.x, e.z);
+  if (e.type === 'jump' && e.id === 'me') sfxAt('jump', p ? p.x : 0, p ? p.z : 0);
+  if (e.type === 'land' && pos) sfxAt('land', pos[0], pos[1]);
   if (e.type === 'tornado_start') feed('🌪️ Furacão! Segura ou foge do centro dele');
   if (e.type === 'tornado_end') feed('🌪️ O furacão jogou todo mundo longe');
   if (e.type === 'sand_start') feed('🏜️ Tempestade de areia — visibilidade caindo');
@@ -1210,12 +1301,15 @@ function handleEvent(e, now) {
   if (e.type === 'jump' && a) a.legsOnce('Jump_Start', 1.6, now);
   if (e.type === 'djump' && a) a.legsOnce('Jump_Full_Short', 1.6, now);
   if (e.type === 'land' && a) a.legsOnce('Jump_Land', 1.8, now);
-  if (e.type === 'hit') { const v = avatars.get(e.victim); if (v) v.trigger('Hit_A', 1.5, now); if (e.by === 'me') hitMark = { kind: 'hit', t: now }; }
+  if (e.type === 'hit') { const v = avatars.get(e.victim); if (v) v.trigger('Hit_A', 1.5, now); if (e.by === 'me') hitMark = { kind: 'hit', t: now }; const vp = sim.players.get(e.victim); if (vp) sfxAt('hit', vp.x, vp.z); }
   if (e.type === 'kill') {
     if (e.killer === 'me') hitMark = { kind: 'kill', t: now };
     const k = sim.players.get(e.killer), v = sim.players.get(e.victim);
     feed(`${k ? `<span class="t${k.team}">${esc(k.name)}</span>` : ''} ${WICON[e.weapon] || '💥'} <span class="t${v ? v.team : 'B'}">${esc(v ? v.name : '?')}</span>`);
+    SFX.play('kill', e.killer === 'me' || e.victim === 'me' ? 1 : 0.5);
   }
+  if (e.type === 'reload') SFX.play('reload', e.id === 'me' ? 1 : 0.3);
+  if (e.type === 'bounce' && Number.isFinite(e.x)) sfxAt('bounce', e.x, e.z);
   void p;
 }
 

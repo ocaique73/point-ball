@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 25/09/2026 — v0.16.0 — demo 3D Three.js **completa**: todos os 8 mapas do 2D portados, sala de teste, pulo/velocidade/armas ajustáveis, poção, reabastecimento, indicador de bomba, explosão melhorada, cruz na lápide, reskins de mapa, e agora **multiplayer completo** (salas, senha, times, dono da sala, igual ao 2D). Godot pausado por ora. Push pro GitHub pendente (ver observação abaixo). https://point-ball.onrender.com
+Última atualização: 25/09/2026 — v0.17.0 (Three.js): **tempo limite de round** no multiplayer (dono escolhe: sem limite/2/3/5/10 min; acaba a partida quando zera, ganha quem tem mais abates, empate se empatar) e **sons** sintetizados (tiro, faca, acerto, abate, pulo, aterrissagem, ricochete, recarga, explosão, arremesso, pickup — com volume/direção por distância e botão de mudo em Controles). Godot pausado por ora. https://point-ball.onrender.com
 
 ---
 
@@ -307,22 +307,21 @@
   - [x] Mapa **Sala escura**: a luz apaga e acende sozinha de tempos em tempos
   - [x] Mapa **Cidade à noite**: escuro o tempo todo, só os postes iluminam — atirar num poste apaga ele por um tempo
 - [x] v0.16.0 (Three.js): **multiplayer completo, igual ao 2D** — salas com código e senha, lista de salas abertas, escolha de time (azul/vermelho), dono da sala controla mapa/bots/nível, "Iniciar partida", reconexão se cair a conexão. Servidor autoritativo (`server3d.js`) roda o `Sim3D` como o 2D roda o `Game`, manda o estado pela rede a cada tick; o cliente só desenha o que o servidor manda (sem prever localmente — só a mira/câmera do mouse é instantânea, a posição do corpo segue o servidor com uma leve suavização). Sem previsão do lado do cliente foi decisão consciente pra simplificar.
-- [~] **Caique:** testar os blocos 1, 2, 3 e o multiplayer (v0.16.0)
+- [x] v0.17.0 (Three.js): **tempo limite de round** — o dono da sala escolhe (sem limite/2/3/5/10 min) na aba Multiplayer do lobby; o servidor conta pelo `sim.time` e, ao zerar, encerra a partida, soma os abates de cada time e manda o resultado (vitória/empate) pro lobby; HUD mostra o relógio no canto superior. **Sons** sintetizados via Web Audio (sem arquivo de áudio pra baixar): tiro, faca, acerto, abate, pulo, aterrissagem, ricochete na parede, recarga, explosão, arremesso de granada/fumaça e pickup — volume mais baixo e panorâmico conforme a distância até você; botão "Som: Ligado/Mudo" na aba Controles.
+- [~] **Caique:** testar os blocos 1, 2, 3, o multiplayer (v0.16.0) e o tempo de round + sons (v0.17.0)
 
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
-- [ ] Sons (tiro, batida na parede, acerto, faca, pulo)
+- [x] Sons (tiro, ricochete, acerto, faca, pulo, recarga, explosão) + botão de mudo — v0.17.0
+- [x] Tempo limite por round — v0.17.0
 - [ ] Controles para celular (joystick na tela)
-- [ ] Tempo limite por round
 - [ ] Chat na sala de espera
 - [ ] Botão do dono para expulsar jogador
-- [ ] Sons (tiro, ricochete, acerto, bomba, portal, vitória) + botão de mudo
 - [ ] Minimapa/indicador de onde veio o tiro que te acertou
 - [ ] Itens que aparecem no mapa (escudo, munição extra, bomba extra, velocidade por 5 s)
 - [ ] Modo "Capture a bandeira"
 - [ ] Ranking/histórico de partidas (salvo no servidor)
 - [ ] Chat rápido na partida (mensagens prontas: "cuidado!", "vem comigo")
 - [ ] Emotes / skins simples (chapéu, óculos) desbloqueados por abates
-- [ ] Controles de celular (joystick virtual)
 - [ ] Replay do último abate (killcam)
 - [ ] Mapa editor: você desenha paredes no /teste e salva como mapa novo
 
