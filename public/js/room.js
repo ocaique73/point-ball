@@ -385,7 +385,9 @@
         if (moving) {
           const l = Math.hypot(mx, my); mx /= l; my /= l;
           const sp = config.playerSpeed * (mine.sl || 1);
-          const m = RC_GAME.moveCircle(pred.x, pred.y, mx * sp * dt, my * sp * dt, mine.r, walls);
+          let ddx = mx * sp * dt, ddy = my * sp * dt;
+          if (latest.hz && latest.hz.h && latest.hz.h.length) [ddx, ddy] = RC_GAME.holeSlowMove(pred.x, pred.y, ddx, ddy, mine.r, latest.hz.h.map((h) => ({ x: h[1], y: h[2], r: h[3] })), config.holeSlow);
+          const m = RC_GAME.moveCircle(pred.x, pred.y, ddx, ddy, mine.r, walls);
           pred.x = m.x; pred.y = m.y;
           if (latest.pt && latest.pt.o) { const w = RC_GAME.portalWrap(gameMap, config, pred.x, pred.y, mine.r, latest.pt.pr); if (w) { pred.x = w.x; pred.y = w.y; } }
         }

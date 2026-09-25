@@ -39,8 +39,6 @@
     if (map.layouts) for (const s of map.layouts[((layout || 0) % map.layouts.length + map.layouts.length) % map.layouts.length]) seg(s, { mv: true });
     // cantos do casco (nave): espaço, ninguém passa
     if (map.blocks) for (const b of map.blocks) rects.push({ x: b[0] * W, y: b[1] * H, w: b[2] * W, h: b[3] * H, space: true });
-    // postes da cidade: bloqueiam e apagam quando levam tiro
-    if (map.lamps) map.lamps.forEach((l, i) => rects.push({ x: l[0] * W - 8, y: l[1] * H - 8, w: 16, h: 16, lamp: i }));
     return rects;
   }
 
@@ -116,14 +114,14 @@
     }
     return [[0, 2], [1, 3]];
   }
-  // primeira abertura do round: portais de cima ligados aos de baixo (atravessa o mapa de cima para baixo)
+  // primeira abertura do round: portais da esquerda ligados aos da direita na mesma altura (atravessa o mapa)
   function firstPortalPairs(list) {
     const pr = [];
-    for (const q of list) if (q.s === 'T') { const o = list.find((w) => w.s === 'B' && w.a === q.a); if (o) pr.push([q.i, o.i]); }
+    for (const q of list) if (q.s === 'L') { const o = list.find((w) => w.s === 'R' && w.a === q.a); if (o) pr.push([q.i, o.i]); }
     return pr.length ? pr : pickPortalPairs(list, null);
   }
 
-  // estado dos portais: abertos 3 s no começo (cima <-> baixo), fechados 6 s, depois abre 10 s / fecha 5 s repetindo.
+  // estado dos portais: abertos 3 s no começo (esquerda <-> direita), fechados 6 s, depois abre 10 s / fecha 5 s repetindo.
   // k = número da abertura (-2 = abertura inicial, -1 = fechado inicial)
   function portalCycle(el, cfg) {
     const fo = cfg.portalFirstOpen, fc = cfg.portalFirstClosed;
@@ -133,6 +131,33 @@
     const k = Math.floor(e / p);
     if (t < cfg.portalOpen) return { o: 1, n: cfg.portalOpen - t, k };
     return { o: 0, n: p - t, k };
+  }
+
+  // formato irregular da poça de lava: raio muda com o ângulo (ondas sorteadas pela seed); m = espelhada
+  function lavaR(q, ang) {
+    let s = (q.seed >>> 0) || 1;
+    const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+    const a = q.m ? Math.PI - ang : ang;
+    const stretch = 0.15 + rnd() * 0.25, rot = rnd() * Math.PI;
+    let k = 1 + stretch * Math.cos(2 * (a - rot));
+    for (const f of [3, 4, 5]) k += (0.04 + rnd() * 0.09) * Math.sin(f * a + rnd() * 6.28);
+    return q.r * k;
+  }
+  function inLava(q, x, y, m) {
+    const dx = x - q.x, dy = y - q.y, d = Math.hypot(dx, dy);
+    if (d > q.r * 1.7 + m) return false;
+    return d < lavaR(q, Math.atan2(dy, dx)) + m;
+  }
+  // buraco da nave: na beirada o passo em direção ao buraco fica mais lento (como uma parede fininha e fraca);
+  // para longe do buraco anda normal. holes = [{x, y, r}]
+  function holeSlowMove(x, y, dx, dy, r, holes, slow) {
+    for (const h of holes) {
+      const ox = x - h.x, oy = y - h.y, d = Math.hypot(ox, oy);
+      if (d >= h.r + r || d < 1) continue;
+      const ix = -ox / d, iy = -oy / d, dot = dx * ix + dy * iy; // componente indo para dentro
+      if (dot > 0) { dx -= ix * dot * (1 - slow); dy -= iy * dot * (1 - slow); }
+    }
+    return [dx, dy];
   }
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -233,7 +258,7 @@
       this.hillTarget = opts.hillTarget || 100;  // koth: pontos para vencer
       this.matchTime = opts.matchTime || 180;   // tdm/ffa: duração (s)
       this.killLimit = opts.killLimit || 30;    // tdm/ffa: abates para vencer
-      this.bombs = []; this.smokes = []; this.holes = []; this.nextHoleId = 1;
+      this.bombs = []; this.smokes = []; this.holes = []; this.nextHoleId = 1; this.meteorsFallen = 0;
       this.lampOffUntil = []; this.layout = 0;
       this.nextBombId = 1;
       this.mapId = MAPS[opts.mapId] ? opts.mapId : 'deserto';
@@ -444,10 +469,11 @@
         const pools = [];
         for (let i = 0; i < c.lavaPairs; i++) {
           for (let tries = 0; tries < 30; tries++) {
-            const r = c.lavaRadius * (0.75 + Math.random() * 0.5);
-            const x = W * 0.14 + r + Math.random() * (W * 0.46 - W * 0.14 - r * 1.2), y = c.wallThickness + r + Math.random() * (H - 2 * (c.wallThickness + r));
-            if (pools.some((q) => Math.hypot(q.x - x, q.y - y) < q.r + r + 20)) continue;
-            pools.push({ x, y, r }, { x: W - x, y, r });
+            const r = c.lavaRadius * (0.8 + Math.random() * 0.5);
+            const x = W * 0.14 + r + Math.random() * (W * 0.46 - W * 0.14 - r * 1.3), y = c.wallThickness + r * 1.2 + Math.random() * (H - 2 * (c.wallThickness + r * 1.2));
+            if (pools.some((q) => Math.hypot(q.x - x, q.y - y) < (q.r + r) * 1.2 + 20)) continue;
+            const seed = Math.floor(Math.random() * 1e6); // formato próprio de cada poça (o do outro lado é espelhado)
+            pools.push({ x, y, r, seed, m: 0 }, { x: W - x, y, r, seed, m: 1 });
             break;
           }
         }
@@ -461,7 +487,7 @@
       if (cy.s !== 2) { this.lavaOn = false; return; }
       for (const p of alive) {
         const r = this.radiusOf(p);
-        if (this.lava.pools.some((q) => Math.hypot(p.x - q.x, p.y - q.y) < q.r + r * 0.3)) this.damage(p, null, 'lava');
+        if (this.lava.pools.some((q) => inLava(q, p.x, p.y, r * 0.3))) this.damage(p, null, 'lava');
       }
     }
     // troca as paredes que mudam; quem ficou dentro de uma parede nova é empurrado para fora
@@ -482,46 +508,39 @@
     updateMeteors(dt, alive) {
       const c = this.cfg, W = c.mapWidth, H = c.mapHeight;
       const cy = this.cycle(c.meteorInterval, c.meteorWarn, 0.4);
-      this.holes = this.holes.filter((h) => this.time < h.until);
-      if (cy.s >= 1 && (!this.meteor || this.meteor.idx !== cy.idx)) {
+      const more = this.meteorsFallen < c.meteorMax; // só caem meteorMax vezes por round (2 x 2 = 4 meteoros)
+      if (more && cy.s >= 1 && (!this.meteor || this.meteor.idx !== cy.idx)) {
         // lugar sorteado do lado esquerdo; o outro cai no ponto espelhado do lado direito
         const R = c.holeRadius;
         let x = W * 0.3, y = H / 2;
         for (let i = 0; i < 40; i++) {
-          const tx = W * 0.14 + R + Math.random() * (W * 0.47 - W * 0.14 - R), ty = H * 0.12 + R * 0.5 + Math.random() * (H * 0.76 - R);
-          if (this.holes.some((h) => Math.hypot(h.x - tx, h.y - ty) < h.r + R)) continue;
+          const tx = W * 0.14 + R + Math.random() * (W * 0.4 - W * 0.14 - R), ty = H * 0.12 + R * 0.5 + Math.random() * (H * 0.76 - R); // nunca colado no meio
+          if (this.holes.some((h) => Math.hypot(h.x - tx, h.y - ty) < h.r + R + 30)) continue;
           x = tx; y = ty; break;
         }
         this.meteor = { idx: cy.idx, pts: [[x, y], [W - x, y]], hit: false };
       }
       if (cy.s === 2 && this.meteor && !this.meteor.hit) {
-        this.meteor.hit = true;
+        this.meteor.hit = true; this.meteorsFallen++;
         for (const [x, y] of this.meteor.pts) {
-          this.holes.push({ id: this.nextHoleId++, x, y, r: c.holeRadius, t0: this.time, until: this.time + c.holeTime });
+          this.holes.push({ id: this.nextHoleId++, x, y, r: c.holeRadius, t0: this.time }); // o buraco fica até o fim do round
           this.events.push({ type: 'explode', x, y });
           this.events.push({ type: 'meteor', x, y });
         }
       }
       if (cy.s === 0 && this.meteor && this.meteor.hit) this.meteor = null;
-      // cair no buraco: a beira "segura" um pouco (dá tempo de sair); no meio cai rápido
+      // entrou no buraco (o meio do corpo passou da beira): cai, sem volta
       for (const p of alive) {
-        let hole = null, d = 0;
-        for (const h of this.holes) { const dd = Math.hypot(p.x - h.x, p.y - h.y); if (dd < h.r * this.holeK(h)) { hole = h; d = dd; break; } }
-        if (!hole) { p.fallT = Math.max(0, (p.fallT || 0) - dt * 2); continue; }
-        p.fallT = (p.fallT || 0) + dt * (d < hole.r * 0.45 ? 3 : 1);
-        if (d > 1) { // puxa devagar para o meio
-          const m = moveCircle(p.x, p.y, (hole.x - p.x) / d * c.holePull * dt, (hole.y - p.y) / d * c.holePull * dt, this.radiusOf(p), this.walls);
-          p.x = m.x; p.y = m.y;
-        }
-        if (p.fallT >= c.holeGrace) {
-          p.fallT = 0;
-          p.lives = 1; p.invulnUntil = 0; p.protectUntil = 0;
-          this.damage(p, null, 'fall');
-          this.events.push({ type: 'fall', id: p.id, x: hole.x, y: hole.y });
-        }
+        const r = this.radiusOf(p);
+        const hole = this.holes.find((h) => Math.hypot(p.x - h.x, p.y - h.y) < h.r * this.holeK(h) - r * 0.35);
+        if (!hole) continue;
+        p.lives = 1; p.invulnUntil = 0; p.protectUntil = 0;
+        this.damage(p, null, 'fall');
+        this.events.push({ type: 'fall', id: p.id, x: p.x, y: p.y });
       }
     }
-    holeK(h) { return Math.min(1, (this.time - h.t0) / 0.25, (h.until - this.time) / 0.6 + 0.2); } // abre rápido, fecha no fim
+    holeK(h) { return Math.min(1, (this.time - h.t0) / 0.25); } // abre rápido depois do impacto
+    inHole(x, y, m) { return this.holes.some((h) => Math.hypot(x - h.x, y - h.y) < h.r * this.holeK(h) + (m || 0)); }
 
     // ---------- Cidade à noite ----------
     lampOn(i) { return !(this.lampOffUntil && this.time < (this.lampOffUntil[i] || 0)); }
@@ -547,7 +566,7 @@
     }
     // perigo no chão (lava / buraco) perto de (x, y)? devolve o centro dele
     dangerAt(x, y, m) {
-      if (this.lava && this.lavaCy && this.lavaCy.s >= 1) for (const q of this.lava.pools) if (Math.hypot(x - q.x, y - q.y) < q.r + m) return q;
+      if (this.lava && this.lavaCy && this.lavaCy.s >= 1) for (const q of this.lava.pools) if (inLava(q, x, y, m)) return q;
       for (const h of this.holes) if (Math.hypot(x - h.x, y - h.y) < h.r + m) return h;
       return null;
     }
@@ -561,14 +580,14 @@
       if (hz === 'lava') {
         const cy = this.cycle(c.lavaInterval, c.lavaWarn, c.lavaDuration), L = this.lava;
         const out = { t: 'lava', s: cy.s, n: r1(cy.n), k: Math.round(cy.k * 100) / 100, lay: this.layout || 0 };
-        if (cy.s >= 1 && L && L.idx === cy.idx) { out.p = L.pools.map((q) => [r1(q.x), r1(q.y), r1(q.r)]); out.nl = L.next; }
+        if (cy.s >= 1 && L && L.idx === cy.idx) { out.p = L.pools.map((q) => [r1(q.x), r1(q.y), r1(q.r), q.seed, q.m]); out.nl = L.next; }
         return out;
       }
       if (hz === 'meteor') {
         const cy = this.cycle(c.meteorInterval, c.meteorWarn, 0.4);
         const out = { t: 'meteor', s: cy.s, n: r1(cy.n), k: Math.round(cy.k * 100) / 100,
-          h: this.holes.map((h) => [h.id, r1(h.x), r1(h.y), r1(h.r * this.holeK(h)), r1(h.until - this.time)]) };
-        if (cy.s === 1 && this.meteor) out.m = this.meteor.pts.map((q) => [r1(q[0]), r1(q[1])]);
+          h: this.holes.map((h) => [h.id, r1(h.x), r1(h.y), r1(h.r * this.holeK(h)), r1(this.time - h.t0)]), ml: Math.max(0, c.meteorMax - this.meteorsFallen) };
+        if (cy.s === 1 && this.meteor && !this.meteor.hit) out.m = this.meteor.pts.map((q) => [r1(q[0]), r1(q[1])]);
         return out;
       }
       if (hz === 'tornado') {
@@ -711,6 +730,10 @@
     updateBombs() {
       const c = this.cfg, keep = [];
       for (const b of this.bombs) {
+        if (this.time >= b.t0 + b.flight && this.holes.length && this.inHole(b.tx, b.ty)) { // caiu no buraco: some, não estoura
+          this.events.push({ type: 'sucked', x: b.tx, y: b.ty });
+          continue;
+        }
         if (this.time < b.t0 + b.flight + b.fuse) { keep.push(b); continue; }
         if (b.smoke) { // fumaça: não machuca ninguém, só abre a cortina
           this.smokes.push({ id: b.id, x: b.tx, y: b.ty, t0: this.time, until: this.time + c.smokeTime });
@@ -829,7 +852,7 @@
       this.lightStart = this.phaseUntil;
       this.tornado = null; this.storm = null; this.sand = null;
       this.hill = null; this.portalPick = null;
-      this.holes = []; this.meteor = null; this.lava = null; this.lavaOn = false; this.lampOffUntil = [];
+      this.holes = []; this.meteor = null; this.meteorsFallen = 0; this.lava = null; this.lavaOn = false; this.lampOffUntil = [];
       if (MAPS[this.mapId] && MAPS[this.mapId].layouts && this.layout) this.setLayout(0);
       this.events.push({ type: 'round_start', round: this.round });
     }
@@ -910,7 +933,9 @@
         const l = Math.hypot(mx, my); mx /= l; my /= l;
         if (!p.hasAim) { p.fx = mx; p.fy = my; }
         const sp = c.playerSpeed * this.speedMul(p);
-        const m = moveCircle(p.x, p.y, mx * sp * dt, my * sp * dt, this.radiusOf(p), this.walls);
+        let ddx = mx * sp * dt, ddy = my * sp * dt;
+        if (this.holes.length) [ddx, ddy] = holeSlowMove(p.x, p.y, ddx, ddy, this.radiusOf(p), this.holes, c.holeSlow);
+        const m = moveCircle(p.x, p.y, ddx, ddy, this.radiusOf(p), this.walls);
         p.x = m.x; p.y = m.y;
         if (this.portalNow && this.portalNow.o) {
           const w = portalWrap(this.mapId, c, p.x, p.y, this.radiusOf(p), this.portalNow.pr);
@@ -1027,14 +1052,20 @@
           if (this.holes.length && this.holes.some((h) => Math.hypot(b.x - h.x, b.y - h.y) < h.r * this.holeK(h) * 0.9)) {
             this.events.push({ type: 'sucked', x: b.x, y: b.y }); dead = true; break;
           }
+          // tiro no poste (cidade): apaga a luz. O personagem passa por baixo, só o tiro bate
+          const LM = MAPS[this.mapId] && MAPS[this.mapId].lamps;
+          if (LM) {
+            let hitLamp = -1;
+            for (let li = 0; li < LM.length; li++) if (circleRect(b.x, b.y, br, { x: LM[li][0] * c.mapWidth - 8, y: LM[li][1] * c.mapHeight - 8, w: 16, h: 16 })) { hitLamp = li; break; }
+            if (hitLamp >= 0) {
+              this.lampOffUntil[hitLamp] = this.time + c.lampOff;
+              this.events.push({ type: 'lamp_off', x: LM[hitLamp][0] * c.mapWidth, y: LM[hitLamp][1] * c.mapHeight });
+              dead = true; break;
+            }
+          }
           for (const R of this.walls) {
             const col = circleRect(b.x, b.y, br, R);
             if (!col) continue;
-            if (R.lamp != null) { // tiro no poste: apaga a luz
-              this.lampOffUntil[R.lamp] = this.time + c.lampOff;
-              this.events.push({ type: 'lamp_off', x: R.x + R.w / 2, y: R.y + R.h / 2 });
-              dead = true; break;
-            }
             const dot = b.vx * col.nx + b.vy * col.ny;
             if (dot < 0) { b.vx -= 2 * dot * col.nx; b.vy -= 2 * dot * col.ny; }
             b.x = col.x + col.nx * 0.01; b.y = col.y + col.ny * 0.01;
@@ -1124,7 +1155,7 @@
           bo: p.bombs, so: p.smokes, sp: this.protectedNow(p) ? 1 : 0,
           rs: !p.alive && p.respawnAt ? r1(Math.max(0, p.respawnAt - t)) : 0,
           sl: t < p.slowUntil ? p.slowF : 1, sk: t < p.slowUntil ? p.slowKind : 0,
-          ts: p.jump && p.jump.toss ? 1 : 0, fa: p.fallT ? Math.round(Math.min(1, p.fallT / this.cfg.holeGrace) * 100) / 100 : 0,
+          ts: p.jump && p.jump.toss ? 1 : 0, 
           st: [p.stats.k, p.stats.d, p.stats.a]
         });
       }
@@ -1145,5 +1176,5 @@
     }
   }
 
-  return { Game, buildWalls, moveCircle, circleFree, circleRect, lineBlocked, spawnPos, knifeTarget, portalWrap, portalCycle, portalList, portalGeom, openWalls, pickPortalPairs };
+  return { Game, lavaR, holeSlowMove, buildWalls, moveCircle, circleFree, circleRect, lineBlocked, spawnPos, knifeTarget, portalWrap, portalCycle, portalList, portalGeom, openWalls, pickPortalPairs };
 });

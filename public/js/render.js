@@ -458,30 +458,81 @@ window.PBRenderer = (function () {
     }
 
     // ---------- Vulcão ----------
+    // caminho do formato irregular da poça
+    lavaPath(g, q, grow) {
+      g.beginPath();
+      for (let i = 0; i <= 40; i++) {
+        const a = i / 40 * Math.PI * 2, rr = RC_GAME.lavaR(q, a) * grow;
+        const x = q.x + Math.cos(a) * rr, y = q.y + Math.sin(a) * rr;
+        if (i) g.lineTo(x, y); else g.moveTo(x, y);
+      }
+      g.closePath();
+    }
     drawLava(hz, now) {
       if (!hz.p || hz.s === 0) return;
-      const g = this.ctx;
-      for (const [x, y, R] of hz.p) {
-        if (hz.s === 1) { // aviso: chão rachando e piscando
+      const g = this.ctx, t = now / 1000;
+      for (const P of hz.p) {
+        const q = { x: P[0], y: P[1], r: P[2], seed: P[3] || 1, m: P[4] || 0 }, R = q.r;
+        if (hz.s === 1) { // aviso: chão rachando com brilho por baixo, piscando
           const blink = Math.floor(now / (hz.k > 0.6 ? 90 : 170)) % 2 === 0;
-          g.fillStyle = `rgba(255,90,20,${blink ? 0.28 : 0.1})`;
-          g.beginPath(); g.arc(x, y, R * (0.5 + hz.k * 0.5), 0, Math.PI * 2); g.fill();
+          g.fillStyle = `rgba(255,90,20,${blink ? 0.25 : 0.08})`;
+          this.lavaPath(g, q, 0.5 + hz.k * 0.5); g.fill();
           g.setLineDash([10, 8]); g.strokeStyle = 'rgba(255,140,40,.85)'; g.lineWidth = 3;
-          g.beginPath(); g.arc(x, y, R, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+          this.lavaPath(g, q, 1); g.stroke(); g.setLineDash([]);
           continue;
         }
-        const cool = hz.k > 0.85 ? (hz.k - 0.85) / 0.15 : 0; // no fim vai esfriando
-        const grd = g.createRadialGradient(x, y, 0, x, y, R);
-        grd.addColorStop(0, cool ? `rgba(255,190,80,${1 - cool * 0.6})` : '#ffe066');
-        grd.addColorStop(0.55, '#ff6a00');
-        grd.addColorStop(1, '#8f1d0a');
-        g.fillStyle = grd; g.beginPath(); g.arc(x, y, R, 0, Math.PI * 2); g.fill();
-        g.strokeStyle = '#2b140e'; g.lineWidth = 5; g.stroke();
-        for (let i = 0; i < 5; i++) { // bolhas
-          const a = i * 1.7 + x * 0.01, ph = (now / 700 + i * 0.37) % 1;
-          g.fillStyle = `rgba(255,236,160,${(0.7 * (1 - ph)).toFixed(2)})`;
-          g.beginPath(); g.arc(x + Math.cos(a) * R * 0.5, y + Math.sin(a) * R * 0.5, 3 + ph * 7, 0, Math.PI * 2); g.fill();
+        const cool = hz.k > 0.85 ? (hz.k - 0.85) / 0.15 : 0; // no fim a lava esfria e escurece
+        const rise = Math.min(1, hz.k * 12); // sobe rápido no começo
+        g.save();
+        // brilho quente em volta
+        g.shadowColor = `rgba(255,80,0,${0.8 * (1 - cool)})`; g.shadowBlur = 28;
+        g.fillStyle = '#5c1204';
+        this.lavaPath(g, q, rise); g.fill();
+        g.shadowBlur = 0;
+        this.lavaPath(g, q, rise); g.clip();
+        // base: laranja por dentro, vermelho escuro na beira
+        const base = g.createRadialGradient(q.x, q.y, 0, q.x, q.y, R * 1.3);
+        base.addColorStop(0, cool ? '#c2410c' : '#ff8a1f'); base.addColorStop(0.6, '#d9360b'); base.addColorStop(1, '#6b1405');
+        g.fillStyle = base; g.fillRect(q.x - R * 1.8, q.y - R * 1.8, R * 3.6, R * 3.6);
+        const rnd = (() => { let s = (q.seed * 7 + 3) >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; })();
+        // correntes quentes (amarelo) andando devagar
+        for (let i = 0; i < 7; i++) {
+          const ph = rnd() * 6.28, sp = 0.25 + rnd() * 0.35, orb = R * (0.2 + rnd() * 0.55), rr = R * (0.28 + rnd() * 0.2);
+          const x = q.x + Math.cos(t * sp + ph) * orb, y = q.y + Math.sin(t * sp * 1.3 + ph) * orb * 0.8;
+          const hg = g.createRadialGradient(x, y, 0, x, y, rr);
+          hg.addColorStop(0, `rgba(255,230,120,${0.85 * (1 - cool)})`); hg.addColorStop(0.5, `rgba(255,160,40,${0.45 * (1 - cool)})`); hg.addColorStop(1, 'rgba(255,120,20,0)');
+          g.fillStyle = hg; g.beginPath(); g.arc(x, y, rr, 0, Math.PI * 2); g.fill();
         }
+        // placas de crosta escura boiando (vão para o outro lado)
+        for (let i = 0; i < 6; i++) {
+          const ph = rnd() * 6.28, sp = 0.12 + rnd() * 0.2, orb = R * (0.3 + rnd() * 0.6), rr = R * (0.14 + rnd() * 0.16);
+          const x = q.x + Math.cos(-t * sp + ph) * orb, y = q.y + Math.sin(-t * sp + ph) * orb * 0.85;
+          g.fillStyle = `rgba(40,10,4,${0.45 + cool * 0.4})`;
+          g.beginPath();
+          for (let k = 0; k < 7; k++) { const a = k / 7 * 6.28 + ph, w = rr * (0.7 + 0.3 * Math.sin(k * 2.3 + ph)); const px = x + Math.cos(a) * w, py = y + Math.sin(a) * w; if (k) g.lineTo(px, py); else g.moveTo(px, py); }
+          g.closePath(); g.fill();
+          g.strokeStyle = `rgba(255,150,40,${0.6 * (1 - cool)})`; g.lineWidth = 1.5; g.stroke(); // fresta brilhando em volta da crosta
+        }
+        // veios brilhando que escorrem
+        g.strokeStyle = `rgba(255,214,102,${0.55 * (1 - cool)})`; g.lineWidth = 2; g.setLineDash([14, 10]); g.lineDashOffset = -t * 18;
+        for (let i = 0; i < 3; i++) {
+          const a = rnd() * 6.28, b2 = a + 1.5 + rnd() * 1.5;
+          g.beginPath(); g.moveTo(q.x + Math.cos(a) * R * 0.8, q.y + Math.sin(a) * R * 0.8);
+          g.quadraticCurveTo(q.x + (rnd() - 0.5) * R * 0.6, q.y + (rnd() - 0.5) * R * 0.6, q.x + Math.cos(b2) * R * 0.8, q.y + Math.sin(b2) * R * 0.8);
+          g.stroke();
+        }
+        g.setLineDash([]);
+        // bolhas que estouram
+        for (let i = 0; i < 4; i++) {
+          const ph = ((t * (0.5 + i * 0.13) + rnd()) % 1), a = rnd() * 6.28, d = R * rnd() * 0.6;
+          const x = q.x + Math.cos(a) * d, y = q.y + Math.sin(a) * d;
+          g.strokeStyle = `rgba(255,240,180,${(0.8 * (1 - ph) * (1 - cool)).toFixed(2)})`; g.lineWidth = 2;
+          g.beginPath(); g.arc(x, y, 2 + ph * 9, 0, Math.PI * 2); g.stroke();
+        }
+        g.restore();
+        // beira de rocha escura com fio quente por dentro
+        g.strokeStyle = '#1f0c07'; g.lineWidth = 6; this.lavaPath(g, q, rise); g.stroke();
+        g.strokeStyle = `rgba(255,120,20,${0.8 * (1 - cool)})`; g.lineWidth = 1.5; this.lavaPath(g, q, rise * 0.96); g.stroke();
       }
     }
     drawMovingWalls(hz, now) {
@@ -523,12 +574,8 @@ window.PBRenderer = (function () {
         g.restore();
         path();
         g.strokeStyle = '#1b2230'; g.lineWidth = 7; g.stroke();
-        const hot = Math.max(0, 1 - (this.cfg.holeTime - left) / 3); // metal quente logo depois do impacto
+        const hot = Math.max(0, 1 - left / 3); // metal quente logo depois do impacto (left = idade do buraco)
         g.strokeStyle = `rgba(255,${120 + hot * 80},40,${(0.25 + hot * 0.6).toFixed(2)})`; g.lineWidth = 2.5; g.stroke();
-        if (left < 2) { // sendo consertado
-          g.strokeStyle = `rgba(56,189,248,${Math.floor(now / 120) % 2 ? 0.8 : 0.3})`; g.lineWidth = 2; g.setLineDash([6, 6]);
-          g.beginPath(); g.arc(x, y, R + 8, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
-        }
       }
     }
     drawMeteors(hz, now) {

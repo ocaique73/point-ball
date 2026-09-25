@@ -111,10 +111,10 @@ window.PB = (function () {
     deserto: '🏜️ A cada 25s uma tempestade de areia sai do meio para as laterais e tampa a visão.',
     neve: '❄️ A cada 25s uma tempestade fria desce pelo mapa e congela quem pegar.',
     floresta: '🌪️ A cada 25s nasce um furacão que anda pelo mapa e joga longe quem ele tocar.',
-    cidade: '🌃 Escuro o tempo todo: o inimigo só aparece na luz dos postes, bem perto de você ou quando atira. Atire num poste para apagá-lo por 8s.',
-    vulcao: '🌋 A cada 25s o chão racha (2s de aviso) e sobem poças de lava por 7s — encostar tira 1 vida. As paredes do meio mudam de lugar a cada erupção.',
-    nave: '☄️ A cada 25s caem 2 meteoros, um de cada lado (sempre espelhados), e abrem buracos para o espaço. Na beira do buraco você ainda consegue sair; no meio cai. Tiro que passa por cima é sugado.',
-    portal: '🌀 8 portais nas bordas (2 em cada lado). A cada abertura, 2 pares sorteados abrem — entre (ou atire) em um e saia no par da mesma cor. No começo abrem 3s (cima ↔ baixo), fecham 6s, e depois abrem 10s / fecham 5s sorteados.',
+    cidade: '🌃 Escuro o tempo todo: o inimigo só aparece na luz dos postes, bem perto de você ou quando atira. O personagem passa por baixo do poste, mas o tiro bate nele e apaga a luz por 8s.',
+    vulcao: '🌋 A cada 25s o chão racha (2s de aviso) e sobem 2 pares de poças de lava por 7s — encostar tira 1 vida. As paredes do meio mudam de lugar a cada erupção.',
+    nave: '☄️ Aos 25s e aos 50s caem 2 meteoros, um de cada lado (sempre espelhados), e abrem buracos para o espaço que ficam até o fim do round. A beira segura um pouco, mas quem entra cai. Tiro, bomba e fumaça que caem lá são sugados.',
+    portal: '🌀 8 portais nas bordas (2 em cada lado). A cada abertura, 2 pares sorteados abrem — entre (ou atire) em um e saia no par da mesma cor. No começo abrem 3s (esquerda ↔ direita), fecham 6s, e depois abrem 10s / fecham 5s sorteados.',
     escuro: '🌑 A luz apaga a cada 25s — no escuro só o tiro aparece.'
   };
 
