@@ -105,11 +105,13 @@ window.PBRenderer = (function () {
       }
       // muros
       for (const R of this.walls) {
+        if (R.door) continue; // portas dos portais são desenhadas por cima (mudam)
         const x = R.x * s, y = R.y * s, w = R.w * s, h = R.h * s;
         g.fillStyle = 'rgba(0,0,0,.22)';
         g.fillRect(x + 4 * s, y + 5 * s, w, h);
       }
       for (const R of this.walls) {
+        if (R.door) continue;
         const x = R.x * s, y = R.y * s, w = R.w * s, h = R.h * s;
         g.fillStyle = R.border ? th.border : th.wall;
         g.fillRect(x, y, w, h);
@@ -155,6 +157,7 @@ window.PBRenderer = (function () {
         if (!t) { t = []; this.trails.set(b[0], t); }
         const last = t[t.length - 1];
         t.team = b[4];
+        if (last && Math.hypot(last.x - b[1], last.y - b[2]) > 150) t.length = 0; // passou pelo portal
         if (!last || last.x !== b[1] || last.y !== b[2]) t.push({ x: b[1], y: b[2] });
         if (t.length > 9) t.shift();
       }
@@ -219,6 +222,8 @@ window.PBRenderer = (function () {
 
       // mortos primeiro, depois vivos, pulando por último (ficam por cima)
       const ps = view.players.slice().sort((a, b) => (a.al - b.al) || ((a.jz >= 0) - (b.jz >= 0)));
+      if (this.map.portals) this.drawPortals(view.pt, now);
+      if (view.hl) this.drawHill(view.hl, now);
       if (view.hz && view.hz.t === 'storm') this.drawStorm(view.hz, now);
       for (const p of ps) this.drawPlayer(p, p.id === view.meId, now);
       if (view.hz && view.hz.t === 'tornado') this.drawTornado(view.hz, now);
@@ -232,6 +237,64 @@ window.PBRenderer = (function () {
     }
 
     // furacão visto de cima: braços de vento em espiral, meio transparentes, girando
+    // portais nas laterais: fechados = barreira apagada; abertos = redemoinho de energia
+    drawPortals(pt, now) {
+      const g = this.ctx, c = this.cfg, W = c.mapWidth, H = c.mapHeight, t = c.wallThickness;
+      const open = pt && pt.o;
+      const closingSoon = open && pt.n < 1.5 && Math.floor(now / 110) % 2 === 0;
+      const COLORS = ['0,229,255', '255,64,200']; // cada par tem sua cor
+      this.map.portals.forEach(([a, b], i) => {
+        const y0 = a * H, h = (b - a) * H, col = COLORS[i % COLORS.length];
+        for (const x0 of [0, W - t]) {
+          if (!open) {
+            g.fillStyle = '#2a2350';
+            g.fillRect(x0, y0, t, h);
+            g.strokeStyle = `rgba(${col},.35)`; g.lineWidth = 2;
+            g.strokeRect(x0 + 1, y0 + 1, t - 2, h - 2);
+            g.beginPath(); // grade
+            for (let yy = y0 + 8; yy < y0 + h; yy += 12) { g.moveTo(x0 + 3, yy); g.lineTo(x0 + t - 3, yy); }
+            g.stroke();
+          } else {
+            const cx = x0 === 0 ? t * 0.5 : W - t * 0.5, cy = y0 + h / 2;
+            const grd = g.createRadialGradient(cx, cy, 2, cx, cy, h * 0.6);
+            grd.addColorStop(0, `rgba(${col},${closingSoon ? 0.35 : 0.8})`);
+            grd.addColorStop(1, `rgba(${col},0)`);
+            g.fillStyle = grd;
+            g.fillRect(x0 === 0 ? 0 : W - t * 3, y0 - 10, t * 3, h + 20);
+            g.strokeStyle = `rgba(${col},${closingSoon ? 0.4 : 0.95})`; g.lineWidth = 3;
+            for (let k = 0; k < 3; k++) {
+              const ph = now / 250 + k * 2.1;
+              g.beginPath();
+              g.ellipse(cx, cy, t * 0.55 + k * 3, h / 2 - k * 6, 0, ph, ph + Math.PI * 1.2);
+              g.stroke();
+            }
+          }
+        }
+      });
+    }
+
+    // Rei da colina: área no chão; cor de quem domina, amarela piscando se disputada
+    drawHill(H, now) {
+      const g = this.ctx;
+      const col = H.o === 'A' ? '59,130,246' : H.o === 'B' ? '239,68,68' : H.o === 'X' ? '250,204,21' : '255,255,255';
+      const pulse = H.o === 'X' ? (Math.floor(now / 150) % 2 ? 0.28 : 0.12) : H.o ? 0.24 : 0.1;
+      g.save();
+      g.fillStyle = `rgba(${col},${pulse})`;
+      g.beginPath(); g.arc(H.x, H.y, H.r, 0, Math.PI * 2); g.fill();
+      g.setLineDash([14, 10]); g.lineDashOffset = -now / 40;
+      g.strokeStyle = `rgba(${col},.9)`; g.lineWidth = 4;
+      g.beginPath(); g.arc(H.x, H.y, H.r, 0, Math.PI * 2); g.stroke();
+      g.setLineDash([]);
+      g.font = `900 ${Math.round(H.r * 0.34)}px Segoe UI, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.globalAlpha = 0.55; g.fillText('👑', H.x, H.y); g.globalAlpha = 1;
+      if (H.n <= 5) { // próximo lugar da colina
+        g.setLineDash([6, 8]); g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 2;
+        g.beginPath(); g.arc(H.nx, H.ny, H.r, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+      }
+      g.restore();
+      g.textBaseline = 'alphabetic';
+    }
+
     // bomba: [id, x, y, progresso do voo 0..1, time, tempo até explodir]
     drawBomb(b, now) {
       const g = this.ctx, c = this.cfg;
@@ -456,7 +519,7 @@ window.PBRenderer = (function () {
       prog = Math.max(0, Math.min(1, prog));
       const rw = Math.max(2, r * 0.2);
       g.lineWidth = rw;
-      g.strokeStyle = 'rgba(0,0,0,.35)';
+      g.strokeStyle = '#111827'; // trilho escuro: dá pra ver bem quanto falta para fechar
       g.beginPath(); g.arc(0, 0, r - rw / 2, 0, Math.PI * 2); g.stroke();
       if (prog > 0) {
         g.strokeStyle = TEAM_STRONG[p.tm];

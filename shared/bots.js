@@ -50,10 +50,18 @@
     const dist = target ? Math.hypot(target.x - p.x, target.y - p.y) : 0;
 
     // escolhe direção de tempos em tempos
+    const hill = game.gameMode === 'koth' && game.hillState ? game.hillState() : null;
+    const hillDist = hill ? Math.hypot(hill.x - p.x, hill.y - p.y) : 0;
     if (ai.t <= 0) {
       ai.t = 0.5 + Math.random() * 0.9;
       let mx = 0, my = 0;
-      if (target) {
+      if (hill && hillDist > hill.r * 0.6 && (!visible || Math.random() < 0.65)) {
+        // rei da colina: vai para a colina
+        mx = (hill.x - p.x) / hillDist; my = (hill.y - p.y) / hillDist;
+        if (Math.random() < 0.3) { const a = Math.atan2(my, mx) + (Math.random() - 0.5) * 1.6; mx = Math.cos(a); my = Math.sin(a); }
+      } else if (hill && hillDist <= hill.r * 0.6 && !visible) {
+        const a = Math.random() * Math.PI * 2; mx = Math.cos(a) * 0.5; my = Math.sin(a) * 0.5; // fica rondando dentro
+      } else if (target) {
         const dx = (target.x - p.x) / (dist || 1), dy = (target.y - p.y) / (dist || 1);
         if (p.weapon === 'knife') { mx = dx; my = dy; } // faca: vai pra cima
         else if (visible && Math.random() > L.dodge) { mx = dx * 0.5; my = dy * 0.5; } // bots fracos andam meio reto

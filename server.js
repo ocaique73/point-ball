@@ -26,7 +26,8 @@ const MAX_PER_TEAM = 5;
 const MAX_WAITING = 10;
 const MAX_QUEUE = 10;
 const VALID_ROUNDS = [1, 2, 3, 5, 7];
-const VALID_MODES = ['rounds', 'tdm', 'ffa'];
+const VALID_MODES = ['rounds', 'tdm', 'ffa', 'koth'];
+const VALID_HILL = [50, 75, 100, 150];
 const VALID_DM_TIME = [60, 120, 180, 300];
 const VALID_KILLS = [20, 25, 30, 50];
 const VALID_LEVELS = ['facil', 'media', 'semipro', 'pro'];
@@ -98,7 +99,7 @@ function publicState(room) {
   return {
     code: room.code, hasPassword: !!room.password, map: room.map, rounds: room.rounds,
     hostId: room.hostId, phase: room.phase,
-    gameMode: room.gameMode, dmTime: room.dmTime, killLimit: room.killLimit, botLevel: room.botLevel,
+    gameMode: room.gameMode, dmTime: room.dmTime, killLimit: room.killLimit, botLevel: room.botLevel, hillTarget: room.hillTarget,
     bots: { team: room.bots.team, list: room.bots.list.map((b) => ({ id: b.id, name: b.name, color: b.color, avatar: '', team: room.bots.team, bot: true })) },
     members: [...room.members.values()].map((m) => ({
       id: m.pid, name: m.name, color: m.color, avatar: m.avatar, status: m.status, team: m.team,
@@ -169,7 +170,7 @@ function removeMember(room, cid) {
 
 function startMatch(room) {
   const game = new Game(CONFIG, { mode: 'match', mapId: room.map, rounds: room.rounds,
-    gameMode: room.gameMode, matchTime: room.dmTime, killLimit: room.killLimit });
+    gameMode: room.gameMode, matchTime: room.dmTime, killLimit: room.killLimit, hillTarget: room.hillTarget });
   for (const m of room.members.values()) {
     if (m.status === 'team' && m.connected) {
       game.addPlayer({ id: m.pid, name: m.name, team: m.team, clientKnife: true });
@@ -212,7 +213,7 @@ function endMatch(room, end) {
       return { id: p.id, name: m.name || p.name, avatar: m.avatar || '', color: m.color || '#fff', team: p.team, stats: p.stats };
     });
     io.to(room.code).emit('match_end', { winner: end.winner, score: end.score, rounds: game.totalRounds, players,
-      mode: game.gameMode, killLimit: game.killLimit, timeUp: !!end.timeUp });
+      mode: game.gameMode, killLimit: game.killLimit, hillTarget: game.hillTarget, timeUp: !!end.timeUp });
   } else {
     io.to(room.code).emit('match_aborted');
   }
@@ -248,7 +249,8 @@ io.on('connection', (socket) => {
       gameMode: VALID_MODES.includes(d.gameMode) ? d.gameMode : 'rounds',
       dmTime: VALID_DM_TIME.includes(Number(d.dmTime)) ? Number(d.dmTime) : 180,
       killLimit: VALID_KILLS.includes(Number(d.killLimit)) ? Number(d.killLimit) : 30,
-      botLevel: 'semipro'
+      botLevel: 'semipro',
+      hillTarget: VALID_HILL.includes(Number(d.hillTarget)) ? Number(d.hillTarget) : 100
     };
     rooms.set(code, room);
     scheduleCloseIfEmpty(room); // se ninguém entrar em 2 min, fecha
@@ -340,6 +342,7 @@ io.on('connection', (socket) => {
     if (d && VALID_DM_TIME.includes(Number(d.dmTime))) room.dmTime = Number(d.dmTime);
     if (d && VALID_KILLS.includes(Number(d.killLimit))) room.killLimit = Number(d.killLimit);
     if (d && VALID_LEVELS.includes(d.botLevel)) room.botLevel = d.botLevel;
+    if (d && VALID_HILL.includes(Number(d.hillTarget))) room.hillTarget = Number(d.hillTarget);
     if (d && (d.bots != null || d.botTeam)) setBots(room, d.bots != null ? d.bots : room.bots.list.length, d.botTeam || room.bots.team);
     broadcastState(room);
   });

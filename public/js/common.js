@@ -105,12 +105,13 @@ window.PB = (function () {
   }
 
   const TEAM_NAME = { A: 'Azul', B: 'Vermelho' };
-  const MAP_NAME = { deserto: 'Deserto', neve: 'Neve', floresta: 'Floresta', escuro: 'Sala escura' };
+  const MAP_NAME = { deserto: 'Deserto', neve: 'Neve', floresta: 'Floresta', escuro: 'Sala escura', portal: 'Portais' };
 
   const MAP_NOTE = {
     deserto: '🏜️ A cada 25s uma tempestade de areia sai do meio para as laterais e tampa a visão.',
     neve: '❄️ A cada 25s uma tempestade fria desce pelo mapa e congela quem pegar.',
     floresta: '🌪️ A cada 25s nasce um furacão que anda pelo mapa e joga longe quem ele tocar.',
+    portal: '🌀 Portais nas laterais: entre (ou atire) de um lado e saia do outro. Começam fechados 7s, abrem 10s, fecham 5s.',
     escuro: '🌑 A luz apaga a cada 25s — no escuro só o tiro aparece.'
   };
 

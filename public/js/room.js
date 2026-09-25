@@ -14,7 +14,7 @@
   let roundMsg = '';
   let gameMap = null;
   let pred = { init: false, x: 0, y: 0, fx: 1, fy: 0 };
-  let walls = [];
+  let walls = [], wallsAll = [], wallsOpen = [];
   let lastPreview = null;
 
   const renderer = new PBRenderer($('game-canvas'));
@@ -98,7 +98,9 @@
   function setupGame(mapId) {
     gameMap = mapId;
     renderer.setup(config, mapId);
-    walls = RC_GAME.buildWalls(mapId, config);
+    wallsAll = RC_GAME.buildWalls(mapId, config);
+    wallsOpen = wallsAll.filter((R) => !R.door);
+    walls = wallsAll;
     snaps = []; latest = null; pred.init = false; roundMsg = '';
   }
 
@@ -147,11 +149,14 @@
     $('set-mode').value = state.gameMode || 'rounds';
     $('set-dmtime').value = String(state.dmTime || 180);
     $('set-kills').value = String(state.killLimit || 30);
+    $('set-hill').value = String(state.hillTarget || 100);
     $('set-botlevel').value = state.botLevel || 'semipro';
-    const dmMode = state.gameMode === 'tdm' || state.gameMode === 'ffa';
+    const dmMode = state.gameMode === 'tdm' || state.gameMode === 'ffa' || state.gameMode === 'koth';
     document.querySelectorAll('.dm-only').forEach((e) => (e.style.display = dmMode ? '' : 'none'));
+    document.querySelectorAll('.kills-only').forEach((e) => (e.style.display = state.gameMode === 'tdm' || state.gameMode === 'ffa' ? '' : 'none'));
+    document.querySelectorAll('.koth-only').forEach((e) => (e.style.display = state.gameMode === 'koth' ? '' : 'none'));
     document.querySelectorAll('.rounds-only').forEach((e) => (e.style.display = dmMode ? 'none' : ''));
-    ['set-map', 'set-rounds', 'set-bots', 'set-botteam', 'set-mode', 'set-dmtime', 'set-kills', 'set-botlevel'].forEach((id) => ($(id).disabled = !isHost || live));
+    ['set-map', 'set-rounds', 'set-bots', 'set-botteam', 'set-mode', 'set-dmtime', 'set-kills', 'set-botlevel', 'set-hill'].forEach((id) => ($(id).disabled = !isHost || live));
     if (state.bots) {
       $('set-bots').value = String(state.bots.list.length);
       $('set-botteam').value = state.bots.team;
@@ -204,9 +209,9 @@
   $('pick-B').onclick = () => socket.emit('choose_team', { team: 'B' });
   $('join-A').onclick = () => socket.emit('choose_team', { team: 'A' });
   $('join-B').onclick = () => socket.emit('choose_team', { team: 'B' });
-  $('set-map').onchange = $('set-rounds').onchange = $('set-mode').onchange = $('set-dmtime').onchange = $('set-kills').onchange = () =>
+  $('set-map').onchange = $('set-rounds').onchange = $('set-mode').onchange = $('set-dmtime').onchange = $('set-kills').onchange = $('set-hill').onchange = () =>
     socket.emit('update_settings', { map: $('set-map').value, rounds: Number($('set-rounds').value),
-      gameMode: $('set-mode').value, dmTime: Number($('set-dmtime').value), killLimit: Number($('set-kills').value) });
+      gameMode: $('set-mode').value, dmTime: Number($('set-dmtime').value), killLimit: Number($('set-kills').value), hillTarget: Number($('set-hill').value) });
   $('set-botlevel').onchange = () => socket.emit('update_settings', { botLevel: $('set-botlevel').value });
   $('set-bots').onchange = $('set-botteam').onchange = () =>
     socket.emit('update_settings', { bots: Number($('set-bots').value), botTeam: $('set-botteam').value });
@@ -247,8 +252,9 @@
     $('v-title').innerHTML = d.winner ? `🏆 VITÓRIA DO TIME <span class="t${d.winner}">${tn(d.winner)}</span>` : '🤝 EMPATE';
     $('v-score').innerHTML = `<span class="tA">Azul ${d.score.A}</span> x <span class="tB">${d.score.B} Vermelho</span>`;
     const winners = d.players.filter((p) => p.team === d.winner);
-    const tieMsg = d.mode === 'tdm' ? 'Os dois times fizeram a mesma quantidade de abates.' : `Ninguém fez mais da metade dos ${d.rounds} rounds.`;
+    const tieMsg = d.mode === 'tdm' ? 'Os dois times fizeram a mesma quantidade de abates.' : d.mode === 'koth' ? 'Os dois times fizeram os mesmos pontos na colina.' : `Ninguém fez mais da metade dos ${d.rounds} rounds.`;
     $('v-winners').innerHTML = d.winner ? 'Vencedores: ' + winners.map((p) => `<b>${esc(p.name)}</b>`).join(', ') : tieMsg;
+    if (d.mode === 'koth') $('v-score').innerHTML = `<span class="tA">Azul ${d.score.A}</span> x <span class="tB">${d.score.B} Vermelho</span> <small class="muted">pontos na colina</small>`;
     if (d.mode === 'tdm') $('v-score').innerHTML = `<span class="tA">Azul ${d.score.A}</span> x <span class="tB">${d.score.B} Vermelho</span> <small class="muted">abates</small>`;
     const sorted = d.players.slice().sort((a, b) => ((b.team === d.winner) - (a.team === d.winner)) || (b.stats.k - a.stats.k));
     $('v-body').innerHTML = sorted.map((p) => `
@@ -332,7 +338,7 @@
     const ba = new Map(a.s.b.map((x) => [x[0], x]));
     const bullets = b.s.b.map((x) => {
       const o = ba.get(x[0]);
-      if (!o) return x;
+      if (!o || Math.hypot(o[1] - x[1], o[2] - x[2]) > 150) return x; // portal: não desenha atravessando o mapa
       return [x[0], o[1] + (x[1] - o[1]) * al, o[2] + (x[2] - o[2]) * al, x[3], x[4]];
     });
     let hz = b.s.hz;
@@ -358,6 +364,7 @@
     if ($('scr-game').classList.contains('hidden') || !latest || !config) return;
     const view = interpolated(now);
     if (!view) return;
+    walls = latest.pt && latest.pt.o ? wallsOpen : wallsAll;
     const mine = latest.p.find((p) => p.id === you);
     if (mine) {
       // predição local do próprio personagem (resposta imediata ao teclado)
@@ -373,6 +380,7 @@
           const sp = config.playerSpeed * (mine.sl || 1);
           const m = RC_GAME.moveCircle(pred.x, pred.y, mx * sp * dt, my * sp * dt, mine.r, walls);
           pred.x = m.x; pred.y = m.y;
+          if (latest.pt && latest.pt.o) { const w = RC_GAME.portalWrap(gameMap, config, pred.x, pred.y, mine.r); if (w) { pred.x = w.x; pred.y = w.y; } }
         }
         const err = Math.hypot(mine.x - pred.x, mine.y - pred.y);
         if (err > 90) { pred.x = mine.x; pred.y = mine.y; }
@@ -415,7 +423,7 @@
     let bombAim = null;
     if (bombAiming && mine && mine.al && mine.bo > 0) { const t = bombTarget(); if (t) bombAim = { x: pred.x, y: pred.y, tx: t.x, ty: t.y }; }
     renderer.draw({ players: view.players, bullets: view.bullets, hz: view.hz, bombs: view.bombs, bombAim, meId: you,
-      ffa: latest.md === 'ffa', light: latest.lg ? latest.lg.s : 0 });
+      ffa: latest.md === 'ffa', light: latest.lg ? latest.lg.s : 0, pt: latest.pt, hl: latest.hl });
     hud.update(mine || null, latest, config, { roundMsg, nameOf });
   }
   requestAnimationFrame(frame);
