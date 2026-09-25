@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 24/09/2026 — v0.8.0 na branch `dev` (3 mapas novos para teste) · no ar: v0.7.0 em https://point-ball.onrender.com
+Última atualização: 24/09/2026 — v0.8.1 no ar (inclui os 3 mapas novos em teste) em https://point-ball.onrender.com
 
 ---
 
@@ -222,7 +222,7 @@
 - [x] **Fumaça** na rodinha do mouse: voa igual à bomba (mesmo alcance/tempo), ao cair abre uma cortina de 5 s, raio 150
 - [x] Miolo (55% do raio) totalmente fechado; daí até a borda vai clareando até sumir — só dá para se esconder no meio
 - [x] Não machuca ninguém; 1 fumaça por vida/round (igual bomba); HUD mostra 💨×1
-- [x] Bots não enxergam através do miolo da fumaça; você continua se vendo dentro dela
+- [x] Bots não enxergam através do miolo da fumaça
 - [x] Tudo ajustável no /teste (grupo "Fumaça"); cfgVersion 10 (valores antigos salvos no /teste são descartados)
 - [~] **Caique:** testar
 
@@ -237,6 +237,12 @@
 - [x] Bots desviam de lava e buracos; nascimento evita lava/buraco
 - [x] Tudo ajustável no /teste (grupos Cidade à noite, Vulcão, Nave espacial); cfgVersion 11
 - [~] **Caique:** testar e decidir quais mapas ficam
+
+## 8.16 v0.8.1 — fumaça maior, portais mais justos
+- [x] Raio da fumaça 200 (era 150); dentro da fumaça nem você se vê
+- [x] Portais: nunca os 2 pares na mesma parede — pelo menos um par liga paredes diferentes
+- [x] Início do round no mapa Portais: abrem 3 s ligando cima ↔ baixo, fecham 6 s, depois ciclo normal sorteado (abre 10 s / fecha 5 s)
+- [~] **Caique:** testar
 
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
 - [ ] Sons (tiro, batida na parede, acerto, faca, pulo)

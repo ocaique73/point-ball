@@ -99,24 +99,38 @@
     const s = new Set(); for (const [i, j] of pr) { s.add(i); s.add(j); }
     return wallsAll.filter((R) => !(R.door && s.has(R.pi)));
   }
-  // sorteia 2 pares entre todos os portais (nunca repete o mesmo sorteio seguido)
-  function pickPortalPairs(n, prev, rnd) {
+  // sorteia 2 pares entre todos os portais (nunca repete o mesmo sorteio seguido).
+  // Regra: pelo menos um dos pares liga paredes diferentes (os dois pares na mesma parede perde a graça)
+  function pickPortalPairs(list, prev, rnd) {
     rnd = rnd || Math.random;
+    if (typeof list === 'number') { const n = list; list = []; for (let i = 0; i < n; i++) list.push({ i, s: String(i) }); }
+    const n = list.length, side = (i) => list[i].s;
     const key = (pr) => pr.map((p) => p.slice().sort((a, b) => a - b).join('-')).sort().join('|');
-    for (let tries = 0; tries < 20; tries++) {
+    for (let tries = 0; tries < 60; tries++) {
       const ids = []; for (let i = 0; i < n; i++) ids.push(i);
       for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
       const pr = [[ids[0], ids[1]], [ids[2], ids[3]]];
+      const same = pr.filter(([x, y]) => side(x) === side(y)).length;
+      if (same >= 2) continue;
       if (!prev || key(pr) !== key(prev)) return pr;
     }
-    return [[0, 1], [2, 3]];
+    return [[0, 2], [1, 3]];
+  }
+  // primeira abertura do round: portais de cima ligados aos de baixo (atravessa o mapa de cima para baixo)
+  function firstPortalPairs(list) {
+    const pr = [];
+    for (const q of list) if (q.s === 'T') { const o = list.find((w) => w.s === 'B' && w.a === q.a); if (o) pr.push([q.i, o.i]); }
+    return pr.length ? pr : pickPortalPairs(list, null);
   }
 
-  // estado dos portais: fechado 7 s no começo, depois abre 10 s / fecha 5 s repetindo. k = número da abertura
+  // estado dos portais: abertos 3 s no começo (cima <-> baixo), fechados 6 s, depois abre 10 s / fecha 5 s repetindo.
+  // k = número da abertura (-2 = abertura inicial, -1 = fechado inicial)
   function portalCycle(el, cfg) {
-    if (el < cfg.portalFirstClosed) return { o: 0, n: cfg.portalFirstClosed - el, k: -1 };
-    const p = cfg.portalOpen + cfg.portalClosed, t = (el - cfg.portalFirstClosed) % p;
-    const k = Math.floor((el - cfg.portalFirstClosed) / p);
+    const fo = cfg.portalFirstOpen, fc = cfg.portalFirstClosed;
+    if (el < fo) return { o: 1, n: fo - el, k: -2 };
+    if (el < fo + fc) return { o: 0, n: fo + fc - el, k: -1 };
+    const e = el - fo - fc, p = cfg.portalOpen + cfg.portalClosed, t = e % p;
+    const k = Math.floor(e / p);
     if (t < cfg.portalOpen) return { o: 1, n: cfg.portalOpen - t, k };
     return { o: 0, n: p - t, k };
   }
@@ -586,12 +600,13 @@
     hasPortals() { return !!(MAPS[this.mapId] && MAPS[this.mapId].portals); }
     portalState() {
       if (!this.hasPortals()) return null;
-      if (!this.hazardsOn()) return { o: 0, n: this.cfg.portalFirstClosed };
+      if (!this.hazardsOn()) return { o: 0, n: 0 };
       const st = portalCycle(this.time - this.lightStart, this.cfg);
       if (st.o) {
         if (!this.portalPick || this.portalPick.k !== st.k) {
           const prev = this.portalPick && this.portalPick.pr;
-          const pr = pickPortalPairs(portalList(MAPS[this.mapId]).length, prev);
+          const list = portalList(MAPS[this.mapId]);
+          const pr = st.k === -2 ? firstPortalPairs(list) : pickPortalPairs(list, prev);
           this.portalPick = { k: st.k, pr, walls: openWalls(this.wallsAll, pr) };
         }
         st.pr = this.portalPick.pr;

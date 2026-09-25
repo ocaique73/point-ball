@@ -336,14 +336,8 @@ window.PBRenderer = (function () {
       this.drawTrails(0.28);
       for (const b of view.bullets) this.drawBullet(b);
       for (const b of view.bombs || []) this.drawBomb(b, now);
-      // fumaça por cima de todo mundo (esconde quem está no meio); você continua se vendo
-      if (view.smokes && view.smokes.length) {
-        for (const m of view.smokes) this.drawSmoke(m, now);
-        const meP = ps.find((p) => p.id === view.meId && p.al);
-        if (meP && view.smokes.some((m) => Math.hypot(m[1] - meP.x, m[2] - meP.y) < c.smokeRadius + meP.r)) {
-          g.globalAlpha = 0.85; this.drawPlayer(meP, true, now); g.globalAlpha = 1;
-        }
-      }
+      // fumaça por cima de todo mundo — no meio ninguém aparece, nem você (a ideia é se perder nela)
+      if (view.smokes && view.smokes.length) for (const m of view.smokes) this.drawSmoke(m, now);
       if (view.bombAim) this.drawBombAim(view.bombAim);
       this.drawEffects(now);
       if (view.hz && view.hz.t === 'sand') this.drawSand(view.hz, now); // por cima de tudo
