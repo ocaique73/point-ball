@@ -7,14 +7,16 @@ Animações: parado, correndo, andando de lado e de costas, pulando, mirando, at
 jogando bomba e fumaça, levando tiro e morrendo. As pernas e os braços são animados separados
 (dá para correr atirando, recarregando ou jogando bomba ao mesmo tempo).
 
-Controles: clique para prender o mouse (Esc solta) · WASD andar · mouse olhar/mirar · clique atirar · botão direito bomba ·
-rodinha fumaça · Espaço super pulo · 1/2 arma/faca · R recarregar · V 1ª/3ª pessoa.
-A bomba e a fumaça caem onde a mira encosta no chão (olhe para baixo para jogar mais perto).
+Controles: clique em **Jogar** (o mouse fica preso; **Esc** abre o menu) · WASD andar · mouse olhar/mirar · clique atirar/usar ·
+Espaço pular (sem limite) · Espaço de novo no ar = **pulo duplo** (carrega a cada 15 s, passa por cima dos muros) ·
+1 arma · 3 faca · 4 granada · 5 fumaça (pega e joga com o clique) · rodinha troca de arma · R recarregar · V 1ª/3ª pessoa · **Tab** placar.
+
+Menu do **Esc**: câmera, mapa, bots, nível, sombras, FOV, arma principal (lançador, estilingue, bolinha na mão, arco, disco),
+sensibilidade do mouse e **editor de mira** (cor, tamanho, espessura, espaço, ponto, círculo de recarga e marcador de acerto em X).
 
 ## Demo A — Three.js (web + PC)
 
-Usa **a mesma lógica do jogo 2D** (`shared/game.js` e `shared/bots.js`); só a câmera, os controles e o desenho mudaram.
-Tem bots com os 3 níveis e 4 mapas.
+Tem física 3D própria (`public/demo3d/sim3d.js`): tiro e granada seguem a mira, ricochete no muro e no chão, pulo duplo. 4 mapas e bots com 3 níveis.
 
 **No navegador**
 1. Na pasta do projeto: `npm install` e `npm start`
@@ -27,7 +29,7 @@ Tem bots com os 3 níveis e 4 mapas.
 
 ## Demo B — Godot 4.7 (PC)
 
-Refeita do zero em GDScript (`main.gd`). Tem arma, faca, bomba, fumaça, pulo, 2 bots e 3 mapas.
+Refeita em GDScript (`main.gd`) com as mesmas regras da demo A: 5 armas, faca, granada, fumaça, pulo duplo, lápide, menu, mira e placar. 3 mapas.
 
 1. Abra o `Godot_v4.7-stable_win64.exe` (não precisa instalar)
 2. **Importar** → escolha `demo3d/godot/project.godot` → **Importar e editar** (na 1ª vez ele prepara os bonecos, leva alguns segundos)
