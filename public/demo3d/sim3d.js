@@ -28,6 +28,132 @@ export const BOT_LEVELS = {
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
+// ---------- portais (estilo oval, na parede de borda) ----------
+// rx/ry = meia largura/meia altura do oval; cy = altura do centro do oval
+export const PORTAL = { rx: 56, ry: 70, cy: 72 };
+// monta os portais abertos a partir da lista de aberturas do mapa (G.portalList) e dos pares sorteados:
+// tira a "porta" de cada abertura aberta e deixa só um vão do tamanho do oval (o resto vira moldura)
+export function portalLayout(walls, list, pairs, W, H, t) {
+  if (!list || !list.length || !pairs) return { walls, portals: [] };
+  const open = new Map();
+  pairs.forEach(([i, j], k) => { open.set(i, { k, end: 0, to: j }); open.set(j, { k, end: 1, to: i }); });
+  const out = [], rx = PORTAL.rx;
+  for (const R of walls) {
+    if (!(R.door && open.has(R.pi))) { out.push(R); continue; }
+    const q = list[R.pi], horiz = q.s === 'T' || q.s === 'B';
+    if (horiz) {
+      const mid = R.x + R.w / 2;
+      out.push({ x: R.x, y: R.y, w: mid - rx - R.x, h: R.h, border: true, pframe: R.pi });
+      out.push({ x: mid + rx, y: R.y, w: R.x + R.w - (mid + rx), h: R.h, border: true, pframe: R.pi });
+    } else {
+      const mid = R.y + R.h / 2;
+      out.push({ x: R.x, y: R.y, w: R.w, h: mid - rx - R.y, border: true, pframe: R.pi });
+      out.push({ x: R.x, y: mid + rx, w: R.w, h: R.y + R.h - (mid + rx), border: true, pframe: R.pi });
+    }
+  }
+  const portals = [];
+  for (const q of list) {
+    if (!open.has(q.i)) continue;
+    const o = open.get(q.i), m = (q.a + q.b) / 2;
+    let bx, bz, nx = 0, nz = 0;
+    if (q.s === 'L') { bx = 0; bz = m * H; nx = 1; }
+    else if (q.s === 'R') { bx = W; bz = m * H; nx = -1; }
+    else if (q.s === 'T') { bx = m * W; bz = 0; nz = 1; }
+    else { bx = m * W; bz = H; nz = -1; }
+    // c = centro da face de dentro da parede; n = normal pra dentro do mapa; tg = tangente (x local)
+    portals.push({ i: q.i, s: q.s, bx, bz, cx: bx + nx * t, cz: bz + nz * t, nx, nz, tx: nz, tz: -nx, pair: o.k, end: o.end, to: o.to, t, half: (q.b - q.a) / 2 * (q.s === 'L' || q.s === 'R' ? H : W) });
+  }
+  for (const p of portals) p.link = portals.findIndex((o) => o.i === p.to);
+  return { walls: out, portals };
+}
+
+// ---------- vulcão: buracos no chão com lava lá embaixo ----------
+export const HOLE = { depth: 70, kill: 38 };
+// sorteia 3 pares de buracos espelhados, longe das paredes e do meio (onde ficam as áreas de reabastecer)
+export function makeLavaHoles(W, H, walls, rnd) {
+  rnd = rnd || Math.random;
+  const holes = [];
+  const free = (x, z, r) => {
+    for (const R of walls) {
+      const cx = clamp(x, R.x, R.x + R.w), cz = clamp(z, R.y, R.y + R.h);
+      if ((x - cx) ** 2 + (z - cz) ** 2 < r * r) return false;
+    }
+    return !holes.some((h) => Math.hypot(h.x - x, h.z - z) < h.r + r + 10);
+  };
+  for (let i = 0; i < 3; i++) {
+    for (let tries = 0; tries < 60; tries++) {
+      const r = 58 + rnd() * 24;
+      const x = W * 0.17 + rnd() * (W * 0.24), z = 100 + rnd() * (H - 200);
+      if (!free(x, z, r + 22) || !free(W - x, z, r + 22)) continue;
+      const seed = Math.floor(rnd() * 1e6);
+      holes.push({ x, z, r, seed, m: 0 }, { x: W - x, z, r, seed, m: 1 });
+      break;
+    }
+  }
+  return holes;
+}
+
+// ---------- deserto: montanhas de areia (dá pra andar e subir em cima) ----------
+// cada parede do meio do deserto vira uma crista de areia; a altura é a mesma no servidor e no navegador
+export const DUNE = { h: 118, w: 150, cell: 10 };
+export class DuneField {
+  static isDune(R) { return !R.border && !R.space; }
+  constructor(walls, W, H) {
+    this.W = W; this.H = H;
+    this.segs = [];
+    for (const R of walls) {
+      if (!DuneField.isDune(R)) continue;
+      const horiz = R.w >= R.h, t = Math.min(R.w, R.h);
+      const ax = horiz ? R.x + t / 2 : R.x + R.w / 2, az = horiz ? R.y + R.h / 2 : R.y + t / 2;
+      const bx = horiz ? R.x + R.w - t / 2 : R.x + R.w / 2, bz = horiz ? R.y + R.h / 2 : R.y + R.h - t / 2;
+      const len = Math.hypot(bx - ax, bz - az);
+      // cristas curtas ficam mais baixinhas (montinho), as compridas viram serra
+      const h = DUNE.h * clamp(0.72 + len / 900, 0.72, 1.05);
+      this.segs.push({ ax, az, bx, bz, h, w: DUNE.w });
+    }
+    const c = DUNE.cell;
+    this.nx = Math.ceil(W / c) + 1; this.nz = Math.ceil(H / c) + 1;
+    this.grid = new Float32Array(this.nx * this.nz);
+    let mx = 0;
+    for (let j = 0; j < this.nz; j++) for (let i = 0; i < this.nx; i++) {
+      const v = this.raw(i * c, j * c); this.grid[j * this.nx + i] = v; if (v > mx) mx = v;
+    }
+    this.maxH = mx;
+  }
+  raw(x, z) {
+    let best = 0, k2 = 0;
+    for (const s of this.segs) {
+      const dx = s.bx - s.ax, dz = s.bz - s.az, L2 = dx * dx + dz * dz || 1;
+      const u = clamp(((x - s.ax) * dx + (z - s.az) * dz) / L2, 0, 1);
+      const d = Math.hypot(x - (s.ax + dx * u), z - (s.az + dz * u));
+      if (d >= s.w) continue;
+      const k = 1 - d / s.w, prof = k * k * (3 - 2 * k);
+      // o topo da crista sobe e desce um pouco (não fica reto)
+      const wob = 0.86 + 0.14 * Math.sin(u * 5.1 + s.ax * 0.013 + s.az * 0.021);
+      const v = s.h * prof * wob;
+      if (v > best) { k2 = best; best = v; } else if (v > k2) k2 = v;
+    }
+    if (best <= 0) return 0;
+    // junta duas cristas suave (sem "vinco" onde se encontram)
+    const blend = Math.max(0, 1 - (best - k2) / 40);
+    best += blend * blend * 10;
+    // ondinhas de vento na areia
+    const rip = Math.sin(x * 0.045 + z * 0.018) * 0.6 + Math.sin(x * 0.021 - z * 0.05 + 1.7) * 0.4;
+    return best + rip * 3.2 * Math.min(1, best / 30);
+  }
+  at(x, z) {
+    const c = DUNE.cell, fx = x / c, fz = z / c;
+    if (fx < 0 || fz < 0 || fx >= this.nx - 1 || fz >= this.nz - 1) return 0;
+    const i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j, n = this.nx, g = this.grid;
+    const a = g[j * n + i], b = g[j * n + i + 1], cc = g[(j + 1) * n + i], d = g[(j + 1) * n + i + 1];
+    return (a * (1 - u) + b * u) * (1 - v) + (cc * (1 - u) + d * u) * v;
+  }
+  grad(x, z) {
+    const e = 6;
+    return [(this.at(x + e, z) - this.at(x - e, z)) / (2 * e), (this.at(x, z + e) - this.at(x, z - e)) / (2 * e)];
+  }
+}
+
 export class Sim3D {
   // walls = retângulos do 2D ({x, y, w, h, border}) — y do 2D vira z aqui
   constructor(walls, mapW, mapH, opts) {
@@ -36,8 +162,14 @@ export class Sim3D {
     // sala de teste pode ajustar velocidade/pulo/etc sem mexer nos valores padrão
     this.P = Object.assign({}, P, opts.params || {});
     this.WEAPONS = {}; for (const k of WEAPON_IDS) this.WEAPONS[k] = Object.assign({}, WEAPONS[k], (opts.weapons && opts.weapons[k]) || {});
-    this.godMode = !!opts.godMode; // sala de teste: não morre, pra facilitar testar
-    this.boxes = walls.filter((R) => !R.space).map((R) => ({ x0: R.x, z0: R.y, x1: R.x + R.w, z1: R.y + R.h, top: R.border ? this.P.borderH : this.P.wallH }));
+    // sala de teste / modo teste: só quem está nesta lista não morre (você); os bots morrem normal
+    this.godIds = new Set(opts.godIds || (opts.godMode ? ['me'] : []));
+    // deserto: as paredes do meio viram montanhas de areia (terreno), só a borda continua sendo muro
+    this.dunes = opts.terrain === 'dunes' ? new DuneField(walls, mapW, mapH) : null;
+    this.boxes = walls.filter((R) => !R.space && !(this.dunes && DuneField.isDune(R))).map((R) => ({ x0: R.x, z0: R.y, x1: R.x + R.w, z1: R.y + R.h, top: R.border ? this.P.borderH : this.P.wallH }));
+    this.wallT = (opts.cfg && opts.cfg.wallThickness) || 24;
+    // vulcão: buracos no chão (quem cai na lava morre)
+    this.holes = opts.holes && opts.holes.length ? opts.holes : null;
     this.players = new Map();
     this.bullets = []; this.nades = []; this.smokes = []; this.tombs = [];
     this.time = 0; this.nextId = 1; this.events = [];
@@ -51,12 +183,10 @@ export class Sim3D {
     this.hazardT = this.hazard === 'tornado' ? 8 : 6;
     this.tornadoActive = false; this.tornado = null;
     this.sandActive = false; this.sandK = 0;
-    this.portalMap = opts.portalMap || null; this.cfg = opts.cfg || null; this.portalPairs = opts.portalPairs || null;
-    this.G = opts.G || null; // funções do shared/game.js (portais) — window.RC_GAME no navegador, injetado no servidor
+    // portais abertos (vêm prontos do portalLayout): entra num, sai no par dele — gente, tiro e granada
+    this.portals = opts.portals || [];
     // teto que ricocheteia tiro (folhas da floresta / vidro da nave), null = sem teto
     this.ceilingY = opts.ceilingY != null ? opts.ceilingY : null;
-    // vulcão: poças de lava (sorteadas uma vez no início, sem trocar de layout, pra simplificar)
-    this.lavaPools = opts.lavaPools || null; this.lavaActive = false; this.lavaT = 5;
     // cidade à noite / sala escura: postes de luz e ciclo de escuridão
     this.lamps = (opts.lamps || []).map((p, i) => ({ x: p[0], z: p[1], i, offUntil: 0 }));
     this.lightOn = true; this.darkT = 6;
@@ -65,6 +195,22 @@ export class Sim3D {
   setParam(key, val) { if (key in this.P) this.P[key] = val; }
   // sala de teste: muda cadência/recarga/etc de uma arma ao vivo
   setWeaponParam(wid, key, val) { if (this.WEAPONS[wid] && key in this.WEAPONS[wid]) this.WEAPONS[wid][key] = val; }
+  // compatibilidade: "godMode" liga/desliga só pra você ('me')
+  get godMode() { return this.godIds.has('me'); }
+  set godMode(v) { if (v) this.godIds.add('me'); else this.godIds.delete('me'); }
+  // altura do chão (montanhas de areia); 0 no chão comum
+  groundAt(x, z) { return this.dunes ? this.dunes.at(x, z) : 0; }
+  // está em cima de um buraco de lava? m = margem (positivo = precisa estar mais pra dentro)
+  holeAt(x, z, m) {
+    if (!this.holes) return null;
+    for (const h of this.holes) if ((x - h.x) ** 2 + (z - h.z) ** 2 < (h.r - (m || 0)) ** 2) return h;
+    return null;
+  }
+  // pisa no chão? (fora dos buracos) — a altura do chão ali
+  floorAt(x, z, r) {
+    if (this.holeAt(x, z, r * 0.35)) return -Infinity;
+    return this.groundAt(x, z);
+  }
 
   // ---------- jogadores ----------
   addPlayer(o) {
@@ -88,9 +234,9 @@ export class Sim3D {
     for (let i = 0; i < 60; i++) {
       const x = p.team === 'A' ? 60 + Math.random() * 160 : this.W - 60 - Math.random() * 160;
       const z = 80 + Math.random() * (this.H - 160);
-      if (!this.boxes.some((b) => this.circleBox(x, z, r, b))) { p.x = x; p.z = z; break; }
+      if (!this.boxes.some((b) => this.circleBox(x, z, r, b)) && !this.holeAt(x, z, -r - 20)) { p.x = x; p.z = z; break; }
     }
-    p.y = 0; p.vx = p.vy = p.vz = 0; p.grounded = true;
+    p.y = this.groundAt(p.x, p.z); p.vx = p.vy = p.vz = 0; p.grounded = true;
     p.lives = this.P.lives; p.alive = true; p.weapon = 'primary';
     for (const w of WEAPON_IDS) { p.ammo[w] = this.WEAPONS[w].mag; p.mags[w] = this.WEAPONS[w].mags; }
     p.nades = 1; p.smokes = 1; p.potions = 1; p.reloadUntil = 0; p.charge0 = 0;
@@ -147,8 +293,30 @@ export class Sim3D {
     const l = x - b.x0, rt = b.x1 - x, tp = z - b.z0, bt = b.z1 - z, m = Math.min(l, rt, tp, bt);
     if (m === l) return [b.x0 - r, z]; if (m === rt) return [b.x1 + r, z]; if (m === tp) return [x, b.z0 - r]; return [x, b.z1 + r];
   }
+  // raio (o + d*t) entra na areia? devolve o primeiro t (mesma escala de d) ou Infinity
+  terrainHit(ox, oy, oz, dx, dy, dz, tMax) {
+    const D = this.dunes; if (!D) return Infinity;
+    const top = D.maxH + 1;
+    if (oy > top && dy >= 0) return Infinity;
+    const dl = Math.hypot(dx, dy, dz) || 1, st = 9 / dl;
+    let t = 0;
+    if (oy > top) t = (top - oy) / dy; // pula direto pra altura onde a areia pode estar
+    let prev = t;
+    for (; t <= tMax; t += st) {
+      const y = oy + dy * t;
+      if (y > top) { if (dy >= 0) return Infinity; prev = t; continue; }
+      if (y < D.at(ox + dx * t, oz + dz * t)) {
+        let a = prev, b = t; // refina
+        for (let k = 0; k < 6; k++) { const m = (a + b) / 2; if (oy + dy * m < D.at(ox + dx * m, oz + dz * m)) b = m; else a = m; }
+        return b;
+      }
+      prev = t;
+    }
+    return Infinity;
+  }
   // segmento (a -> b) bate em algum muro? (visão dos bots, explosão)
   segBlocked(ax, ay, az, bx, by, bz) {
+    if (this.dunes && this.terrainHit(ax, ay, az, bx - ax, by - ay, bz - az, 1) <= 1) return true;
     for (const b of this.boxes) {
       let t0 = 0, t1 = 1;
       const d = [bx - ax, by - ay, bz - az], o = [ax, ay, az], mn = [b.x0, 0, b.z0], mx = [b.x1, b.top, b.z1];
@@ -182,7 +350,13 @@ export class Sim3D {
   // a mira: primeiro ponto que o raio (olho -> direção) acerta (muro, chão ou alguém)
   raycast(ox, oy, oz, dx, dy, dz, maxD, ignoreId) {
     let best = maxD;
-    if (dy < -1e-6) best = Math.min(best, -oy / dy);
+    if (dy < -1e-6) {
+      let tf = -oy / dy;
+      // mirando dentro de um buraco do vulcão: o ponto é lá embaixo na lava
+      if (this.holes && this.holeAt(ox + dx * tf, oz + dz * tf, 0)) tf = (-HOLE.depth - oy) / dy;
+      best = Math.min(best, tf);
+    }
+    if (this.dunes) best = Math.min(best, this.terrainHit(ox, oy, oz, dx, dy, dz, best));
     for (const b of this.boxes) {
       let t0 = 0, t1 = best;
       const d = [dx, dy, dz], o = [ox, oy, oz], mn = [b.x0, 0, b.z0], mx = [b.x1, b.top, b.z1];
@@ -240,9 +414,8 @@ export class Sim3D {
       smokes: this.smokes.map((s) => ({ id: s.id, x: s.x, z: s.z, t0: s.t0, until: s.until })),
       tombs: this.tombs.map((t) => ({ id: t.id, x: t.x, y: t.y, z: t.z, name: t.name, team: t.team, t0: t.t0, until: t.until })),
       pickups: this.pickups.map((u) => ({ id: u.id, type: u.type, x: u.x, z: u.z, r: u.r, cdUntil: u.cdUntil })),
-      hazard: this.hazard, sandK: this.sandK, lavaActive: this.lavaActive, lightOn: this.lightOn,
-      lamps: this.lamps.map((l) => ({ i: l.i, x: l.x, z: l.z, offUntil: l.offUntil })),
-      lavaPools: this.lavaPools
+      hazard: this.hazard, sandK: this.sandK, lightOn: this.lightOn,
+      lamps: this.lamps.map((l) => ({ i: l.i, x: l.x, z: l.z, offUntil: l.offUntil }))
     };
   }
 
@@ -258,6 +431,11 @@ export class Sim3D {
     const wl = Math.hypot(wx, wz); if (wl > 1) { wx /= wl; wz /= wl; }
     const spdK = (this.hazard === 'sand' && this.sandActive) ? 0.72 : 1; // tempestade de areia atrapalha andar
     wx *= this.P.speed * spdK; wz *= this.P.speed * spdK;
+    // subindo a montanha de areia: fica mais devagar conforme a subida
+    if (this.dunes && p.grounded && wl > 0.01) {
+      const [gx, gz] = this.dunes.grad(p.x, p.z), up = (wx * gx + wz * gz) / this.P.speed;
+      if (up > 0) { const k = 1 / (1 + up * 0.9); wx *= k; wz *= k; }
+    }
     if (p.grounded) { p.vx = wx; p.vz = wz; }
     else { // no ar: mantém o impulso, com um pouco de controle
       const k = Math.min(1, this.P.airControl * dt * 6);
@@ -273,17 +451,37 @@ export class Sim3D {
         if (o) { p.x = o[0]; p.z = o[1]; }
       }
     }
-    // vertical: gravidade, chão e topo dos muros
+    // portal: entrou no oval, sai no par dele (olhando pro lado certo, com o mesmo embalo)
+    if (this.portals.length) {
+      const w = this.portalCross(p, r, true);
+      if (w) {
+        const oy = p.yaw, fx2 = Math.cos(oy), fz2 = Math.sin(oy);
+        const fu = fx2 * w.P.tx + fz2 * w.P.tz, fn = fx2 * w.P.nx + fz2 * w.P.nz;
+        p.yaw = Math.atan2(-fu * w.Q.tz - fn * w.Q.nz, -fu * w.Q.tx - fn * w.Q.nx);
+        let dyaw = p.yaw - oy; dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
+        this.events.push({ type: 'portal', id: p.id, x: p.x, z: p.z, dyaw, from: w.P.i, to: w.Q.i });
+      }
+    }
+    // caiu num buraco do vulcão: não sai mais pelos lados (só pulo duplo salva, se ainda der)
+    const pit = this.holes && p.y < -2 ? this.holeAt(p.x, p.z, -r) : null;
+    if (pit) {
+      const dx = p.x - pit.x, dz = p.z - pit.z, d = Math.hypot(dx, dz), lim = pit.r - r * 0.5;
+      if (d > lim && d > 0) { p.x = pit.x + dx / d * lim; p.z = pit.z + dz / d * lim; }
+    }
+    // vertical: gravidade, chão (areia / buraco) e topo dos muros
     const y0 = p.y;
     p.vy -= this.P.gravity * dt; p.y += p.vy * dt;
-    let floor = 0;
+    let floor = pit ? -Infinity : this.floorAt(p.x, p.z, r);
     for (const b of this.boxes) if (this.circleBox(p.x, p.z, r * 0.7, b) && y0 >= b.top - 2) floor = Math.max(floor, b.top);
-    if (p.y <= floor) {
+    // descendo o morro andando: continua grudado no chão (sem ficar "pulando" ladeira abaixo)
+    const snap = p.grounded && p.vy <= 0 && floor > -Infinity && y0 - floor < 16;
+    if (p.y <= floor || snap) {
       if (!p.grounded && p.vy < -200) this.events.push({ type: 'land', id: p.id });
       p.y = floor; p.vy = 0;
       if (!p.grounded) { p.grounded = true; p.djUsed = false; p.jumps = 0; }
-    } else if (p.grounded && p.y > floor + 1) p.grounded = false;
-    else if (p.y > floor) p.grounded = false;
+    } else p.grounded = false;
+    // lá embaixo é lava
+    if (this.holes && p.y < -HOLE.kill) { this.lavaFall(p); return; }
     // atirar / usar
     if (p.input.fire) this.useWeapon(p, false);
     else if (p.charge0) this.useWeapon(p, true); // soltou o botão do arco
@@ -375,25 +573,35 @@ export class Sim3D {
   updateHazard(dt) {
     if (this.hazard === 'tornado') this.updateTornado(dt);
     else if (this.hazard === 'sand') this.updateSand(dt);
-    else if (this.hazard === 'lava') this.updateLava(dt);
     else if (this.hazard === 'dark') this.updateDark(dt);
-    if (this.portalMap) this.updatePortals();
   }
-  // vulcão: a lava sobe (machuca) e desce de tempos em tempos
-  updateLava(dt) {
-    if (!this.lavaPools) return;
-    this.lavaT -= dt;
-    if (this.lavaT <= 0) {
-      this.lavaActive = !this.lavaActive;
-      this.lavaT = this.lavaActive ? 6 : 8;
-      this.events.push({ type: this.lavaActive ? 'lava_on' : 'lava_off' });
+  // vulcão: caiu na lava = morreu (o abate vai pra quem acertou por último, se foi há pouco)
+  lavaFall(p) {
+    if (this.godIds.has(p.id)) { this.spawn(p); this.events.push({ type: 'respawn', id: p.id }); this.events.push({ type: 'lava_fall', id: p.id, x: p.x, z: p.z, saved: true }); return; }
+    let by = null, bt = -1;
+    for (const id in p.lastHitBy) if (this.time - p.lastHitBy[id] < 5 && p.lastHitBy[id] > bt) { bt = p.lastHitBy[id]; by = id; }
+    this.events.push({ type: 'lava_fall', id: p.id, x: p.x, z: p.z });
+    p.lives = 1; p.invulnUntil = 0; p.protectUntil = 0;
+    this.damage(p, by, 'lava');
+  }
+  // portal: o objeto o (x, y, z, vx, vz) passou da face do portal? leva pro par (gira posição e velocidade)
+  portalCross(o, rad, isPlayer) {
+    for (const P of this.portals) {
+      const dx = o.x - P.cx, dz = o.z - P.cz, v = dx * P.nx + dz * P.nz;
+      if (v >= 0 || v < -(P.t + rad + 40)) continue;
+      const u = dx * P.tx + dz * P.tz;
+      if (isPlayer) { if (Math.abs(u) > PORTAL.rx || o.y > PORTAL.cy + PORTAL.ry - 20) continue; }
+      else { const eu = u / PORTAL.rx, ey = (o.y - PORTAL.cy) / PORTAL.ry; if (eu * eu + ey * ey > 1) continue; }
+      const Q = this.portals[P.link]; if (!Q) continue;
+      let u2 = -u;
+      if (isPlayer) { const lim = PORTAL.rx - rad - 1; u2 = clamp(u2, -lim, lim); }
+      const v2 = Math.max(-v, rad + 3);
+      o.x = Q.cx + Q.tx * u2 + Q.nx * v2; o.z = Q.cz + Q.tz * u2 + Q.nz * v2;
+      const vu = o.vx * P.tx + o.vz * P.tz, vn = o.vx * P.nx + o.vz * P.nz;
+      o.vx = -vu * Q.tx - vn * Q.nx; o.vz = -vu * Q.tz - vn * Q.nz;
+      return { P, Q };
     }
-    if (!this.lavaActive) return;
-    for (const p of this.players.values()) {
-      if (!p.alive) continue;
-      const r = this.radius(p);
-      if (this.lavaPools.some((q) => Math.hypot(p.x - q.x, p.z - q.z) < q.r + r * 0.3)) this.damage(p, null, 'lava');
-    }
+    return null;
   }
   // sala escura: a luz apaga de tempos em tempos
   updateDark(dt) {
@@ -447,21 +655,6 @@ export class Sim3D {
     }
     this.sandK += ((this.sandActive ? 1 : 0) - this.sandK) * Math.min(1, dt * 1.2);
   }
-  // portais (igual ao 2D): entrou num aberto, sai no par dele
-  updatePortals() {
-    // no navegador usa window.RC_GAME (carregado via <script>); no servidor quem cria o Sim3D passa opts.G
-    const Gm = this.G || (typeof window !== 'undefined' ? window.RC_GAME : null);
-    if (!Gm || !this.cfg) return;
-    for (const p of this.players.values()) {
-      if (!p.alive) continue;
-      const w = Gm.portalWrap(this.portalMap, this.cfg, p.x, p.z, this.radius(p), this.portalPairs);
-      if (!w) continue;
-      p.x = w.x; p.z = w.y;
-      const vx = p.vx * w.co - p.vz * w.si, vz = p.vx * w.si + p.vz * w.co;
-      p.vx = vx; p.vz = vz;
-      this.events.push({ type: 'portal', id: p.id, x: p.x, z: p.z });
-    }
-  }
   // granada / fumaça: joga para onde a mira aponta, quica no muro e no chão
   throwNade(p, smoke) {
     if (smoke ? p.smokes < 1 : p.nades < 1) { p.weapon = p.lastWeapon; return; }
@@ -479,7 +672,20 @@ export class Sim3D {
   bounceStep(o, r, rest, dt) {
     o.x += o.vx * dt; o.y += o.vy * dt; o.z += o.vz * dt;
     let hit = false;
-    if (o.y < r) { o.y = r; o.vy = Math.abs(o.vy) * rest; o.vx *= 0.98; o.vz *= 0.98; hit = 'floor'; }
+    // chão (menos em cima de um buraco do vulcão: cai lá dentro)
+    if (o.y < r && !(this.holes && this.holeAt(o.x, o.z, 0))) { o.y = r; o.vy = Math.abs(o.vy) * rest; o.vx *= 0.98; o.vz *= 0.98; hit = 'floor'; }
+    // montanha de areia: quica seguindo a inclinação do morro
+    if (this.dunes) {
+      const g = this.dunes.at(o.x, o.z);
+      if (g > 0.5 && o.y - r < g) {
+        const [gx, gz] = this.dunes.grad(o.x, o.z), l = Math.hypot(gx, 1, gz);
+        const nx = -gx / l, ny = 1 / l, nz = -gz / l;
+        o.y = g + r;
+        const dot = o.vx * nx + o.vy * ny + o.vz * nz;
+        if (dot < 0) { o.vx -= (1 + rest) * dot * nx; o.vy -= (1 + rest) * dot * ny; o.vz -= (1 + rest) * dot * nz; if (rest < 1) { o.vx *= 0.97; o.vz *= 0.97; } }
+        hit = 'floor';
+      }
+    }
     for (const b of this.boxes) {
       const cx = clamp(o.x, b.x0, b.x1), cy = clamp(o.y, 0, b.top), cz = clamp(o.z, b.z0, b.z1);
       let nx = o.x - cx, ny = o.y - cy, nz = o.z - cz; const d2 = nx * nx + ny * ny + nz * nz;
@@ -506,6 +712,9 @@ export class Sim3D {
       for (let i = 0; i < n && !dead; i++) {
         b.vy -= b.grav * sub;
         let hit = this.bounceStep(b, b.r, b.rest, sub);
+        if (this.portals.length && this.portalCross(b, b.r, false)) this.events.push({ type: 'portal_shot', x: b.x, y: b.y, z: b.z });
+        // caiu na lava ou saiu do mapa: some
+        if (b.y < -HOLE.depth + 8 || b.x < -80 || b.z < -80 || b.x > this.W + 80 || b.z > this.H + 80) { dead = true; break; }
         // teto que ricocheteia (folhas da floresta / vidro da nave)
         if (!hit && this.ceilingY != null && b.y + b.r >= this.ceilingY && b.vy > 0) {
           b.y = this.ceilingY - b.r; b.vy = -Math.abs(b.vy) * (b.rest || 0.7); hit = 'ceiling';
@@ -538,8 +747,13 @@ export class Sim3D {
     const keep = [];
     for (const g of this.nades) {
       const n = 4, sub = dt / n;
-      for (let i = 0; i < n; i++) { g.vy -= this.P.gravity * sub; this.bounceStep(g, this.P.nadeR, 0.45, sub); }
-      if (g.y <= this.P.nadeR + 0.5) { g.vx *= 0.9; g.vz *= 0.9; } // rolando no chão
+      for (let i = 0; i < n; i++) {
+        g.vy -= this.P.gravity * sub; this.bounceStep(g, this.P.nadeR, 0.45, sub);
+        if (this.portals.length) this.portalCross(g, this.P.nadeR, false);
+      }
+      // caiu na lava: some (sem explodir)
+      if (g.y < -HOLE.depth + 8) { this.events.push({ type: 'lava_splash', x: g.x, z: g.z }); continue; }
+      if (g.y <= this.groundAt(g.x, g.z) + this.P.nadeR + 0.5) { g.vx *= 0.9; g.vz *= 0.9; } // rolando no chão
       g.spin += Math.hypot(g.vx, g.vz) * dt * 0.05;
       const age = this.time - g.t0;
       if (g.smoke ? age >= this.P.smokeFuse : age >= this.P.nadeFuse) {
@@ -567,7 +781,7 @@ export class Sim3D {
 
   damage(v, by, weapon) {
     if (!v.alive || this.time < v.invulnUntil || this.time < v.protectUntil) return;
-    if (this.godMode) { // sala de teste: não morre, só mostra o marcador de acerto
+    if (this.godIds.has(v.id)) { // sala de teste / modo teste: você não morre, só mostra o marcador de acerto
       v.invulnUntil = this.time + this.P.invuln;
       this.events.push({ type: 'hit', by, victim: v.id, weapon });
       return;
@@ -630,6 +844,14 @@ export class Sim3D {
       p.pitch *= 0.9;
     }
     p.input.fwd = ai.fwd || 0; p.input.side = ai.side || 0;
+    // vulcão: não anda pra dentro do buraco de lava
+    if (this.holes && p.grounded && (p.input.fwd || p.input.side)) {
+      const fx = Math.cos(p.yaw), fz = Math.sin(p.yaw);
+      let wx = fx * p.input.fwd - fz * p.input.side, wz = fz * p.input.fwd + fx * p.input.side;
+      const wl = Math.hypot(wx, wz) || 1; wx /= wl; wz /= wl;
+      const h = this.holeAt(p.x + wx * 60, p.z + wz * 60, -22);
+      if (h) { p.input.fwd = 0; p.input.side = 0; ai.wander = Math.atan2(p.z - h.z, p.x - h.x); ai.t = Math.min(ai.t, 0.35); ai.stuck = 0; if (!sees) ai.fwd = 0; }
+    }
     if (p.weapon !== 'primary' && p.weapon !== 'knife') p.weapon = 'primary';
   }
 }

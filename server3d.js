@@ -12,6 +12,7 @@ const MEMBER_GRACE = 2 * 60 * 1000;
 const MAX_PER_TEAM = 5;
 const ROOM_NAME_RE = /^[A-Za-z0-9]{1,5}$/;
 const VALID_LEVELS = ['iniciante', 'amador', 'pro'];
+const VALID_ROUND_TIMES = [0, 120, 180, 300, 600];
 // teto que ricocheteia tiro (mesmo valor do cliente em demo3d.js)
 const CEILING_Y = { floresta: 340, nave: 360 };
 
@@ -20,7 +21,7 @@ function pidOf(clientId) { return crypto.createHash('sha256').update(String(clie
 function cleanName(n) { return String(n || '').trim().slice(0, 20) || 'Jogador'; }
 
 async function setup3D(io, CFG) {
-  const { Sim3D } = await import('./public/demo3d/sim3d.js');
+  const { Sim3D, portalLayout, makeLavaHoles } = await import('./public/demo3d/sim3d.js');
   const rooms = new Map();
   const key = (code) => '3d:' + code;
 
@@ -48,7 +49,7 @@ async function setup3D(io, CFG) {
   function publicState(room) {
     return {
       code: room.code, hasPassword: !!room.password, map: room.map, hostId: room.hostId, phase: room.phase,
-      botLevel: room.botLevel, bots: { team: room.bots.team, list: room.bots.list.map((b) => ({ id: b.id, name: b.name, team: room.bots.team, bot: true })) },
+      botLevel: room.botLevel, roundTime: room.roundTime, bots: { team: room.bots.team, list: room.bots.list.map((b) => ({ id: b.id, name: b.name, team: room.bots.team, bot: true })) },
       members: [...room.members.values()].map((m) => ({ id: m.pid, name: m.name, status: m.status, team: m.team, connected: m.connected, inMatch: m.inMatch }))
     };
   }
@@ -86,21 +87,7 @@ async function setup3D(io, CFG) {
     broadcastState(room);
   }
 
-  // poças de lava (vulcão) e postes (cidade), igual à lógica do cliente em demo3d.js buildMap()
-  function lavaPoolsFor(mapId, walls, W, H) {
-    if (mapId !== 'vulcao') return null;
-    const pools = [];
-    for (let i = 0; i < 3; i++) {
-      for (let tries = 0; tries < 30; tries++) {
-        const r = 55 + Math.random() * 25;
-        const x = W * 0.16 + Math.random() * (W * 0.28), z = 70 + Math.random() * (H - 140);
-        if (!G.circleFree(x, z, r + 15, walls, CFG)) continue;
-        pools.push({ x, z, r }, { x: W - x, z, r });
-        break;
-      }
-    }
-    return pools;
-  }
+  // postes (cidade), igual à lógica do cliente em demo3d.js buildMap()
   function lampsFor(mapId, W, H) {
     if (mapId !== 'cidade') return null;
     return MAPS.cidade.lamps.map(([nx, nz]) => [nx * W, nz * H]);
@@ -109,21 +96,25 @@ async function setup3D(io, CFG) {
   function startMatch(room) {
     const map = MAPS[room.map];
     const W = CFG.mapWidth, H = CFG.mapHeight;
+    // sorteios da partida (portais abertos, buracos de lava) são feitos aqui e mandados pros clientes,
+    // pra todo mundo ver exatamente o mesmo mapa que o servidor está simulando
     let walls = G.buildWalls(room.map, CFG, 0);
-    let portalPairs = null;
+    let portalPairs = null, portals = [];
     if (map && map.portals) {
       const list = G.portalList(map);
       portalPairs = G.pickPortalPairs(list, null);
-      walls = G.openWalls(walls, portalPairs);
+      const lay = portalLayout(walls, list, portalPairs, W, H, CFG.wallThickness);
+      walls = lay.walls; portals = lay.portals;
     }
+    const holes = room.map === 'vulcao' ? makeLavaHoles(W, H, walls) : null;
     const sim = new Sim3D(walls, W, H, {
       hazard: map ? map.hazard : null,
-      portalMap: (map && map.portals) ? room.map : null,
-      cfg: CFG, portalPairs, G,
+      cfg: CFG, portals, holes,
+      terrain: room.map === 'deserto' ? 'dunes' : null,
       ceilingY: CEILING_Y[room.map] || null,
-      lavaPools: lavaPoolsFor(room.map, walls, W, H),
       lamps: lampsFor(room.map, W, H)
     });
+    room.matchInfo = { map: room.map, roundTime: room.roundTime, portalPairs, holes };
     for (const m of room.members.values()) {
       if (m.status === 'team' && m.connected) { sim.addPlayer({ id: m.pid, name: m.name, team: m.team }); m.inMatch = true; }
     }
@@ -134,6 +125,7 @@ async function setup3D(io, CFG) {
     const every = Math.max(1, Math.round(CFG.tickRate / CFG.sendRate));
     let tick = 0, pending = [];
     room.loop = setInterval(() => {
+      if (room.roundTime > 0 && sim.time >= room.roundTime) { endMatch(room, 'time'); return; }
       const evs = sim.step(dt);
       if (evs.length) pending.push(...evs);
       if (++tick % every === 0) {
@@ -141,15 +133,21 @@ async function setup3D(io, CFG) {
         pending = [];
       }
     }, 1000 / CFG.tickRate);
-    io.to(key(room.code)).emit('3d_match_start', { map: room.map });
+    io.to(key(room.code)).emit('3d_match_start', room.matchInfo);
     broadcastState(room);
   }
 
-  function endMatch(room) {
+  function endMatch(room, reason) {
+    let result = null;
+    if (reason === 'time' && room.sim) {
+      let kA = 0, kB = 0;
+      for (const p of room.sim.players.values()) { if (p.team === 'A') kA += p.k; else kB += p.k; }
+      result = { reason, killsA: kA, killsB: kB, winner: kA > kB ? 'A' : kB > kA ? 'B' : null };
+    }
     if (room.loop) clearInterval(room.loop);
-    room.loop = null; room.sim = null; room.phase = 'lobby';
+    room.loop = null; room.sim = null; room.phase = 'lobby'; room.matchInfo = null;
     for (const m of room.members.values()) m.inMatch = false;
-    io.to(key(room.code)).emit('3d_match_end');
+    io.to(key(room.code)).emit('3d_match_end', result);
     broadcastState(room);
   }
 
@@ -179,7 +177,8 @@ async function setup3D(io, CFG) {
       const room = {
         code, password: pass, map: MAPS[d.map] && d.map !== 'teste' ? d.map : 'deserto',
         hostId: null, creatorPid: pidOf(d.clientId), phase: 'lobby', members: new Map(),
-        sim: null, loop: null, closeTimer: null, bots: { team: 'B', list: [] }, botLevel: 'amador'
+        sim: null, loop: null, closeTimer: null, bots: { team: 'B', list: [] }, botLevel: 'amador',
+        roundTime: 300
       };
       rooms.set(code, room);
       scheduleCloseIfEmpty(room);
@@ -215,7 +214,7 @@ async function setup3D(io, CFG) {
       if (!room.hostId || (room.creatorPid === m.pid && !room.members.has(room.hostId))) pickHost(room);
       if (!room.hostId) room.hostId = m.pid;
       scheduleCloseIfEmpty(room);
-      ack({ ok: true, you: m.pid, state: publicState(room), match: room.phase === 'match' ? { map: room.map } : null });
+      ack({ ok: true, you: m.pid, state: publicState(room), match: room.phase === 'match' ? room.matchInfo : null });
       broadcastState(room);
     });
 
@@ -233,6 +232,7 @@ async function setup3D(io, CFG) {
       if (d && MAPS[d.map] && d.map !== 'teste') room.map = d.map;
       if (d && VALID_LEVELS.includes(d.botLevel)) room.botLevel = d.botLevel;
       if (d && (d.bots != null || d.botTeam)) setBots(room, d.bots != null ? d.bots : room.bots.list.length, d.botTeam || room.bots.team);
+      if (d && VALID_ROUND_TIMES.includes(Number(d.roundTime))) room.roundTime = Number(d.roundTime);
       broadcastState(room);
     });
 
@@ -245,6 +245,11 @@ async function setup3D(io, CFG) {
       startMatch(room);
     });
 
+    // dono encerra a partida pra todo mundo (volta todos pra sala de espera)
+    socket.on('3d_end_match', () => {
+      const { room, m } = ctx(); if (!m || room.hostId !== m.pid || room.phase !== 'match') return;
+      endMatch(room);
+    });
     socket.on('3d_leave_match', () => {
       const { room, m } = ctx(); if (!m || !m.inMatch) return;
       m.inMatch = false;

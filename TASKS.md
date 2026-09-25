@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 25/09/2026 — v0.16.0 — demo 3D Three.js **completa**: todos os 8 mapas do 2D portados, sala de teste, pulo/velocidade/armas ajustáveis, poção, reabastecimento, indicador de bomba, explosão melhorada, cruz na lápide, reskins de mapa, e agora **multiplayer completo** (salas, senha, times, dono da sala, igual ao 2D). Godot pausado por ora. Push pro GitHub pendente (ver observação abaixo). https://point-ball.onrender.com
+Última atualização: 25/09/2026 — v0.18.0 (Three.js): mapas refeitos a pedido do Caique (portais ovais de ver através, base na Lua, postes que iluminam, deserto com montanhas de areia, árvores grandes, vulcão com buracos de lava, gelo de verdade) + modo teste só pra você + sala reconecta sozinha. Antes, v0.17.0 (Three.js): **tempo limite de round** no multiplayer (dono escolhe: sem limite/2/3/5/10 min; acaba a partida quando zera, ganha quem tem mais abates, empate se empatar) e **sons** sintetizados (tiro, faca, acerto, abate, pulo, aterrissagem, ricochete, recarga, explosão, arremesso, pickup — com volume/direção por distância e botão de mudo em Controles). Godot pausado por ora. https://point-ball.onrender.com
 
 ---
 
@@ -307,22 +307,35 @@
   - [x] Mapa **Sala escura**: a luz apaga e acende sozinha de tempos em tempos
   - [x] Mapa **Cidade à noite**: escuro o tempo todo, só os postes iluminam — atirar num poste apaga ele por um tempo
 - [x] v0.16.0 (Three.js): **multiplayer completo, igual ao 2D** — salas com código e senha, lista de salas abertas, escolha de time (azul/vermelho), dono da sala controla mapa/bots/nível, "Iniciar partida", reconexão se cair a conexão. Servidor autoritativo (`server3d.js`) roda o `Sim3D` como o 2D roda o `Game`, manda o estado pela rede a cada tick; o cliente só desenha o que o servidor manda (sem prever localmente — só a mira/câmera do mouse é instantânea, a posição do corpo segue o servidor com uma leve suavização). Sem previsão do lado do cliente foi decisão consciente pra simplificar.
-- [~] **Caique:** testar os blocos 1, 2, 3 e o multiplayer (v0.16.0)
+- [x] v0.17.0 (Three.js): **tempo limite de round** — o dono da sala escolhe (sem limite/2/3/5/10 min) na aba Multiplayer do lobby; o servidor conta pelo `sim.time` e, ao zerar, encerra a partida, soma os abates de cada time e manda o resultado (vitória/empate) pro lobby; HUD mostra o relógio no canto superior. **Sons** sintetizados via Web Audio (sem arquivo de áudio pra baixar): tiro, faca, acerto, abate, pulo, aterrissagem, ricochete na parede, recarga, explosão, arremesso de granada/fumaça e pickup — volume mais baixo e panorâmico conforme a distância até você; botão "Som: Ligado/Mudo" na aba Controles.
+- [~] **Caique:** testar os blocos 1, 2, 3, o multiplayer (v0.16.0) e o tempo de round + sons (v0.17.0)
+- [x] v0.18.0 (Three.js): ajustes pedidos depois de testar a versão web
+  - [x] **Portais** estilo oval com borda de luz que se mexe (par azul/laranja e par roxo/verde); dá pra **ver o outro lado** através do portal (câmera virtual atrás do portal par); passam por ele gente, tiro e granada, saindo olhando pro lado certo e com o mesmo embalo; paredes da sala viraram painéis brancos de laboratório
+  - [x] **Base na Lua** (mapa Nave): paredes de corredor de nave (painel de metal claro, fita de luz, rodapé com faixa amarela), casco com **janelas** mostrando a superfície da Lua lá fora (crateras, pedras, serras), a **Terra no céu**, vigas segurando o teto de vidro, piso de placas de metal
+  - [x] **Cidade à noite**: a luz dos postes estava fraca demais (não iluminava nada) — agora ilumina o chão e as paredes em volta; poste novo com braço, luminária, brilho e mancha de luz no chão (atirar ainda apaga por 9 s)
+  - [x] **Deserto**: as paredes do meio viraram **montanhas de areia** — dá pra andar, subir em cima (subida deixa mais devagar), a areia bloqueia visão e tiro, e tiro/granada quicam seguindo o morro; borda virou paredão de arenito; dunas grandes até o horizonte
+  - [x] **Floresta**: árvores bem maiores (tronco + 3 copas) e floresta em volta do mapa
+  - [x] **Vulcão**: no lugar das poças no chão, **buracos no chão com lava lá embaixo** — caiu, morreu (o abate vai pra quem te acertou por último); lava animada, brasas subindo, brilho de calor; bots desviam dos buracos; tiro e granada caem no buraco
+  - [x] **Neve**: gelo menos transparente (dá pra ver através de UMA parede; duas já escurecem), com reflexo, veios, rachaduras e neve em cima
+  - [x] **Modo teste / sala de teste**: só você não morre; os bots morrem normal
+  - [x] Multiplayer: os sorteios da partida (portais abertos, buracos de lava) agora vêm do servidor — antes cada um via um mapa diferente; botão "Sair da partida" e "Encerrar partida (todos)" pro dono; se a conexão cair, o navegador entra de novo na sala sozinho
+- [x] Godot (`demo3d/godot`): os 8 mapas agora existem (geometria+cores portadas do `shared/maps.js`), incluindo Nave, Portais, Vulcão, Sala escura e Cidade à noite no menu de mapa.
+- [x] Godot: mecânica da **Sala escura** (luz apaga/acende sozinha, com lanterna fraca pra dar pra jogar) e do **Vulcão** (4 poças de lava espelhadas que alternam ativa/inativa e doem quando ativas).
+- [ ] Godot: falta a mecânica de **Portais** (teletransporte — é a mais complexa, precisa abrir buracos na parede e sincronizar posição/velocidade) e da **Cidade à noite** (postes que acendem/apagam ao levar tiro; hoje o mapa não é permanentemente escuro ainda).
+- [ ] Godot: **multiplayer do zero** (o Godot não usa o servidor Node/Socket.IO da versão web — precisa de servidor dedicado ENet, salas, times, dono da sala). Fase grande, ainda não iniciada.
 
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
-- [ ] Sons (tiro, batida na parede, acerto, faca, pulo)
+- [x] Sons (tiro, ricochete, acerto, faca, pulo, recarga, explosão) + botão de mudo — v0.17.0
+- [x] Tempo limite por round — v0.17.0
 - [ ] Controles para celular (joystick na tela)
-- [ ] Tempo limite por round
 - [ ] Chat na sala de espera
 - [ ] Botão do dono para expulsar jogador
-- [ ] Sons (tiro, ricochete, acerto, bomba, portal, vitória) + botão de mudo
 - [ ] Minimapa/indicador de onde veio o tiro que te acertou
 - [ ] Itens que aparecem no mapa (escudo, munição extra, bomba extra, velocidade por 5 s)
 - [ ] Modo "Capture a bandeira"
 - [ ] Ranking/histórico de partidas (salvo no servidor)
 - [ ] Chat rápido na partida (mensagens prontas: "cuidado!", "vem comigo")
 - [ ] Emotes / skins simples (chapéu, óculos) desbloqueados por abates
-- [ ] Controles de celular (joystick virtual)
 - [ ] Replay do último abate (killcam)
 - [ ] Mapa editor: você desenha paredes no /teste e salva como mapa novo
 

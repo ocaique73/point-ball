@@ -56,8 +56,8 @@ const BOT_LEVELS := {
 }
 const TEAM_COLOR := { "A": Color("#3b82f6"), "B": Color("#ef4444") }
 const TEAM_LIGHT := { "A": Color("#93c5fd"), "B": Color("#fca5a5") }
-const MAP_IDS := ["deserto", "neve", "floresta"]
-const MAP_NAMES := ["Deserto", "Neve", "Floresta"]
+const MAP_IDS := ["deserto", "neve", "floresta", "nave", "portal", "vulcao", "escuro", "cidade"]
+const MAP_NAMES := ["Deserto", "Neve", "Floresta", "Nave espacial", "Portais", "Vulcão", "Sala escura", "Cidade à noite"]
 const BOT_NAMES := ["Tonhão", "Pipoca", "Faísca", "Marreta", "Coxinha", "Paçoca", "Jacaré", "Canela", "Pitomba", "Quindim"]
 const UPPER := ["spine", "chest", "head", "upperarm.l", "upperarm.r", "lowerarm.l", "lowerarm.r", "wrist.l", "wrist.r", "hand.l", "hand.r", "handslot.l", "handslot.r", "elbowIK.l", "elbowIK.r", "handIK.l", "handIK.r"]
 const LOCO := ["Idle", "Running_A", "Walking_Backwards", "Running_Strafe_Left", "Running_Strafe_Right", "Jump_Start", "Jump_Idle", "Jump_Land", "Jump_Full_Short"]
@@ -80,6 +80,14 @@ var tombs: Array = []
 var me: Fighter
 var camera: Camera3D
 var sun: DirectionalLight3D
+var world_env: Environment
+var player_torch: OmniLight3D
+var cur_map_id := "deserto"
+var hazard_light_on := true
+var hazard_next := 0.0
+var lava_pools: Array = []
+var lava_meshes: Array = []
+var lava_active := false
 var view_models := {}
 var time := 0.0
 var kick := 0.0
@@ -151,6 +159,7 @@ class Fighter extends CharacterBody3D:
 	var lower_once_until := 0.0
 	var loco_now := ""
 	var arms_now := ""
+	var lava_tick := 0.0
 	# bot
 	var ai := {}
 
@@ -260,10 +269,17 @@ func _ready() -> void:
 	sun.directional_shadow_max_distance = 60.0
 	sun.rotation_degrees = Vector3(-50, -35, 0)
 	add_child(sun)
+	world_env = env
 	camera = Camera3D.new()
 	camera.near = 0.05
 	camera.fov = S["fov"]
 	add_child(camera)
+	player_torch = OmniLight3D.new()
+	player_torch.light_energy = 2.2
+	player_torch.omni_range = 13.0
+	player_torch.light_color = Color("#fff3d6")
+	player_torch.visible = false
+	camera.add_child(player_torch)
 	smoke_tex = _make_smoke_texture()
 	_build_view_models()
 	_build_ui()
@@ -325,7 +341,23 @@ func _new_game() -> void:
 		map_root.queue_free()
 	map_root = Node3D.new()
 	add_child(map_root)
-	var data: Dictionary = MapsData.MAPS[MAP_IDS[int(S["map"])]]
+	cur_map_id = MAP_IDS[int(S["map"])]
+	hazard_light_on = true
+	hazard_next = time + 6.0
+	sun.light_energy = 1.2
+	if world_env:
+		world_env.ambient_light_energy = 0.45
+	player_torch.visible = cur_map_id == "escuro"
+	lava_active = false
+	lava_meshes.clear()
+	if cur_map_id == "vulcao":
+		lava_pools = [
+			{"x": 0.20 * W, "z": 0.30 * H, "r": 1.8}, {"x": 0.20 * W, "z": 0.70 * H, "r": 1.8},
+			{"x": 0.80 * W, "z": 0.30 * H, "r": 1.8}, {"x": 0.80 * W, "z": 0.70 * H, "r": 1.8}
+		]
+	else:
+		lava_pools = []
+	var data: Dictionary = MapsData.MAPS[cur_map_id]
 	var th: Dictionary = data["theme"]
 	# chão (também é colisão)
 	var floor_body := StaticBody3D.new()
@@ -351,6 +383,13 @@ func _new_game() -> void:
 		var x2: float = s[2] * W
 		var y2: float = s[3] * H
 		_wall(Rect2(minf(x1, x2) - T / 2, minf(y1, y2) - T / 2, absf(x2 - x1) + T, absf(y2 - y1) + T), Color(th["wall"]), WALL_H)
+	for pool in lava_pools:
+		var lm := CylinderMesh.new()
+		lm.top_radius = pool["r"]; lm.bottom_radius = pool["r"]; lm.height = 0.05
+		var lmat := _mat(Color("#4b1a10"), 0.6, 0.0)
+		var lava_mi := _mesh(lm, lmat, Vector3(pool["x"], 0.04, pool["z"]))
+		map_root.add_child(lava_mi)
+		lava_meshes.append(lava_mi)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(S["map"]) * 97 + 5
 	for n in 34:
@@ -365,6 +404,14 @@ func _new_game() -> void:
 			deco = Color.WHITE
 		elif th["deco"] == "tree":
 			deco = Color("#3f7d3a")
+		elif th["deco"] == "panels":
+			deco = Color("#9fb3d6")
+		elif th["deco"] == "tiles":
+			deco = Color(th["wall"]).lightened(0.35)
+		elif th["deco"] == "ash":
+			deco = Color("#6b5a52")
+		elif th["deco"] == "city":
+			deco = Color("#f2cf6e")
 		var rock := _mesh(_flat(sm), _mat(deco), Vector3(rng.randf_range(1.5, W - 1.5), 0, rng.randf_range(1.5, H - 1.5)))
 		rock.rotation = Vector3(rng.randf() * 3, rng.randf() * 3, 0)
 		map_root.add_child(rock)
@@ -685,7 +732,7 @@ func _damage(v: Fighter, by: Fighter, weapon: String) -> void:
 		if by == me:
 			hit_kind = "kill"
 			hit_t = time
-		var icon: String = {"knife": "faca", "nade": "granada"}.get(weapon, WEAPONS.get(weapon, {}).get("name", "tiro"))
+		var icon: String = {"knife": "faca", "nade": "granada", "lava": "lava"}.get(weapon, WEAPONS.get(weapon, {}).get("name", "tiro"))
 		_feed("[color=%s]%s[/color]  [%s]  [color=%s]%s[/color]" % [TEAM_LIGHT[by.team].to_html(false) if by else "#ffffff", by.nick if by else "?", icon, TEAM_LIGHT[v.team].to_html(false), v.nick])
 	else:
 		v.model.scale = Vector3.ONE * v.scale0 * SHRINK
@@ -1014,6 +1061,7 @@ func _throw_nade(f: Fighter, smoke: bool) -> void:
 # ---------------- simulação (60 vezes por segundo; a imagem é interpolada) ----------------
 func _physics_process(dt: float) -> void:
 	time += dt
+	_update_hazard()
 	for f in fighters:
 		_update_fighter(f, dt)
 	_update_bullets(dt)
@@ -1027,6 +1075,40 @@ func _physics_process(dt: float) -> void:
 		if time >= t.until:
 			tombs.erase(t)
 			t.queue_free()
+
+
+func _update_hazard() -> void:
+	if cur_map_id == "escuro":
+		if time < hazard_next:
+			return
+		hazard_light_on = not hazard_light_on
+		hazard_next = time + (randf_range(3.0, 6.0) if hazard_light_on else randf_range(2.0, 4.0))
+		sun.light_energy = 1.2 if hazard_light_on else 0.05
+		if world_env:
+			world_env.ambient_light_energy = 0.45 if hazard_light_on else 0.05
+		_feed("💡 A luz voltou" if hazard_light_on else "🕯️ A luz apagou...")
+	elif cur_map_id == "vulcao":
+		if time >= hazard_next:
+			lava_active = not lava_active
+			hazard_next = time + (randf_range(4.0, 6.0) if lava_active else randf_range(5.0, 8.0))
+			var col := Color("#ff5a1f") if lava_active else Color("#4b1a10")
+			for mi in lava_meshes:
+				(mi.material_override as StandardMaterial3D).albedo_color = col
+				(mi.material_override as StandardMaterial3D).emission_enabled = lava_active
+				(mi.material_override as StandardMaterial3D).emission = Color("#ff8a3d")
+				(mi.material_override as StandardMaterial3D).emission_energy_multiplier = 1.6 if lava_active else 0.0
+			_feed("🌋 A lava subiu!" if lava_active else "🌋 A lava baixou")
+		if lava_active:
+			for f in fighters:
+				if not f.alive or time < f.lava_tick:
+					continue
+				for pool in lava_pools:
+					var dx: float = f.position.x - pool["x"]
+					var dz: float = f.position.z - pool["z"]
+					if dx * dx + dz * dz < pool["r"] * pool["r"]:
+						f.lava_tick = time + 0.6
+						_damage(f, null, "lava")
+						break
 
 
 func _update_fighter(f: Fighter, dt: float) -> void:
@@ -1690,7 +1772,10 @@ func _build_menu(layer: CanvasLayer) -> void:
 	# --- Jogo
 	var g1 := _grid(tabs, "Jogo")
 	_opt(g1, "Câmera", [[1, "1ª pessoa"], [3, "3ª pessoa (por trás)"]], "cam", S, Callable())
-	_opt(g1, "Mapa", [[0, MAP_NAMES[0]], [1, MAP_NAMES[1]], [2, MAP_NAMES[2]]], "map", S, _new_game)
+	var map_opts := []
+	for i in MAP_IDS.size():
+		map_opts.append([i, MAP_NAMES[i]])
+	_opt(g1, "Mapa", map_opts, "map", S, _new_game)
 	_opt(g1, "Bots inimigos", [[0, "0"], [1, "1"], [2, "2"], [3, "3"], [5, "5"]], "bots", S, _new_game)
 	_opt(g1, "Nível dos bots", [["iniciante", "Iniciante"], ["amador", "Amador"], ["pro", "Profissional"]], "level", S, _apply_level)
 	_opt(g1, "Sombras", [[true, "Ligadas"], [false, "Desligadas"]], "shadow", S, func(): sun.shadow_enabled = S["shadow"])

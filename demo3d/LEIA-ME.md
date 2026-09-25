@@ -15,17 +15,18 @@ R recarregar · V 1ª/3ª pessoa · **Tab** placar.
 Áreas no chão reabastecem granada/fumaça (amarela) e poção (verde) sozinhas quando você fica em cima. Uma granada
 inimiga lançada mostra a distância e a direção no topo da tela pra você correr.
 
-Mapas: Deserto (dunas + cactos + tempestade de areia), Neve (paredes de gelo semi-transparentes), Floresta (paredes de
-madeira com árvore em cada ponta + furacão + ricochete na copa das árvores), Nave espacial (agora é uma base na Lua,
-com painéis de nave e teto de vidro que também ricocheteia tiro), Portais (atravesse um portal aberto e saia no par
-dele), Vulcão (poças de lava que sobem e descem sozinhas), Sala escura (a luz apaga e acende sozinha), Cidade à noite
+Mapas: Deserto (**montanhas de areia** que dá pra subir, tempestade de areia), Neve (paredes de gelo: dá pra ver através de
+uma, a segunda já escurece), Floresta (paredes de madeira com árvore grande em cada ponta + furacão + ricochete na copa das
+árvores), Nave espacial (uma **base na Lua**: corredor de nave, janelas pra superfície da Lua e a Terra no céu, teto de vidro
+que também ricocheteia tiro), Portais (portais ovais que dá pra **ver através** — gente, tiro e granada passam e saem no
+par), Vulcão (**buracos no chão com lava** — caiu, morreu), Sala escura (a luz apaga e acende sozinha), Cidade à noite
 (só os postes iluminam — atirar num poste apaga ele) e **Sala de teste**.
 
 Menu do **Esc**: câmera, mapa (inclui **Sala de teste**, um mapa aberto sem bots e sem morrer, feito pra treinar),
 bots, nível, sombras, FOV, arma principal (lançador, estilingue, bolinha na mão, arco, disco), sensibilidade do mouse,
 **editor de mira** (cor, tamanho, espessura, espaço, ponto, círculo de recarga e marcador de acerto em X) e a aba
 **Sala de teste**, que deixa ajustar ao vivo (sem reiniciar) a velocidade do personagem, a altura do pulo e a
-cadência/recarga de cada arma — e ligar o "modo teste" (não morre) em qualquer mapa, não só no de teste.
+cadência/recarga de cada arma — e ligar o "modo teste" (você não morre, os bots morrem normal) em qualquer mapa, não só no de teste.
 
 ## Demo A — Three.js (web + PC)
 
