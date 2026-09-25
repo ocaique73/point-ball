@@ -3,52 +3,75 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Demo 3D · Three.js · Point Ball</title>
+<title>Demo 3D FPS · Three.js · Point Ball</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Ccircle cx=%228%22 cy=%228%22 r=%227%22 fill=%22%23ffcc33%22/%3E%3C/svg%3E">
 <style>
-  html, body { margin: 0; height: 100%; background: #0b0f17; color: #e5e7eb; font: 14px/1.35 "Segoe UI", system-ui, sans-serif; overflow: hidden; }
-  #view { position: fixed; inset: 0; display: block; width: 100%; height: 100%; cursor: crosshair; }
-  .panel { position: fixed; background: rgba(10, 14, 22, .82); border: 1px solid #243044; border-radius: 10px; padding: 10px 12px; }
-  #hud { top: 12px; left: 12px; min-width: 210px; }
-  #hud .big { font-size: 20px; font-weight: 800; }
+  html, body { margin: 0; height: 100%; background: #0b0f17; color: #e5e7eb; font: 14px/1.35 "Segoe UI", system-ui, sans-serif; overflow: hidden; user-select: none; }
+  #view { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
+  .panel { position: fixed; background: rgba(10, 14, 22, .78); border: 1px solid #243044; border-radius: 10px; padding: 10px 12px; }
+  #hud { left: 12px; bottom: 12px; min-width: 220px; }
+  #hud .big { font-size: 26px; font-weight: 800; }
   #hud .row { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+  #top { top: 12px; left: 12px; }
   #opts { top: 12px; right: 12px; display: grid; gap: 6px; }
   #opts label { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
   #opts select { background: #111827; color: #e5e7eb; border: 1px solid #334155; border-radius: 6px; padding: 3px 6px; }
   #fps { font-variant-numeric: tabular-nums; color: #86efac; font-weight: 800; }
-  #help { bottom: 12px; left: 50%; transform: translateX(-50%); font-size: 12px; color: #94a3b8; white-space: nowrap; }
   #feed { top: 12px; left: 50%; transform: translateX(-50%); text-align: center; font-weight: 700; }
   .tA { color: #60a5fa; } .tB { color: #f87171; }
   .lost { opacity: .25; }
   h1 { margin: 0 0 4px; font-size: 13px; color: #ffcc33; letter-spacing: .06em; }
+  /* mira sempre no meio */
+  #cross { position: fixed; left: 50%; top: 50%; width: 26px; height: 26px; transform: translate(-50%, -50%); pointer-events: none; }
+  #cross::before, #cross::after { content: ""; position: absolute; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.7); }
+  #cross::before { left: 12px; top: 0; width: 2px; height: 26px; }
+  #cross::after { top: 12px; left: 0; height: 2px; width: 26px; }
+  #cross .dot { position: absolute; left: 11px; top: 11px; width: 4px; height: 4px; border-radius: 50%; background: #ffcc33; }
+  #cross.hit::before, #cross.hit::after { background: #ff4d6d; }
+  #cross .ring { position: absolute; inset: -8px; border-radius: 50%; border: 3px solid rgba(255,255,255,.15); }
+  #start { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(5, 8, 14, .72); cursor: pointer; }
+  #start .card { background: #0f1522; border: 1px solid #2b3a55; border-radius: 14px; padding: 22px 26px; max-width: 520px; text-align: center; }
+  #start h2 { margin: 0 0 8px; color: #ffcc33; }
+  #start kbd { background: #1f2937; border: 1px solid #334155; border-radius: 5px; padding: 1px 6px; font-size: 12px; }
+  #dead { position: fixed; left: 50%; top: 38%; transform: translate(-50%, -50%); font-size: 28px; font-weight: 800; text-shadow: 0 2px 6px #000; display: none; }
 </style>
 </head>
 <body>
 <canvas id="view"></canvas>
+<div id="cross"><div class="ring" id="ring"></div><div class="dot"></div></div>
+<div id="dead">Você caiu! Renascendo...</div>
+<div class="panel" id="top">
+  <h1>POINT BALL · DEMO 3D FPS (THREE.JS)</h1>
+  <div>FPS: <span id="fps">--</span> <span style="color:#94a3b8">(segue o Hz do monitor)</span></div>
+  <div id="h-kda" style="color:#94a3b8"></div>
+</div>
 <div class="panel" id="hud">
-  <h1>POINT BALL · DEMO 3D (THREE.JS)</h1>
   <div class="row"><span id="h-lives"></span> <span id="h-bombs"></span></div>
   <div class="row"><span class="big" id="h-ammo">20</span><span id="h-mags"></span></div>
   <div class="row" id="h-jump"></div>
-  <div class="row">FPS: <span id="fps">--</span> <span id="hz" style="color:#94a3b8"></span></div>
-  <div class="row" id="h-kda" style="color:#94a3b8"></div>
 </div>
 <div class="panel" id="feed" style="display:none"></div>
 <div class="panel" id="opts">
+  <label>Câmera <select id="o-cam"><option value="1">1ª pessoa</option><option value="3">3ª pessoa</option></select></label>
   <label>Mapa <select id="o-map"><option value="deserto">Deserto</option><option value="neve">Neve</option><option value="floresta">Floresta</option><option value="nave">Nave espacial</option></select></label>
   <label>Bots <select id="o-bots"><option>0</option><option>1</option><option selected>2</option><option>3</option><option>5</option></select></label>
   <label>Nível <select id="o-level"><option value="iniciante">Iniciante</option><option value="amador" selected>Amador</option><option value="pro">Profissional</option></select></label>
-  <label>Câmera <select id="o-cam"><option value="tilt">Inclinada</option><option value="top">De cima</option><option value="low">Baixa</option></select></label>
+  <label>Sensibilidade <select id="o-sens"><option value="0.0012">Baixa</option><option value="0.0022" selected>Média</option><option value="0.0035">Alta</option></select></label>
   <label>Sombras <select id="o-shadow"><option value="1">Ligadas</option><option value="0">Desligadas</option></select></label>
 </div>
-<div class="panel" id="help">WASD: andar · Mouse: mirar · Clique: atirar · Botão direito: bomba · Rodinha: fumaça · Espaço: pulo · 1/2: arma/faca · R: recarregar · C: trocar câmera</div>
+<div id="start"><div class="card">
+  <h2>Point Ball 3D — FPS</h2>
+  <p id="loading">Carregando os bonecos...</p>
+  <p><b>Clique para jogar</b> (o mouse fica preso na tela; <kbd>Esc</kbd> solta)</p>
+  <p style="color:#94a3b8;font-size:13px"><kbd>WASD</kbd> andar · <kbd>Mouse</kbd> olhar/mirar · <kbd>Clique</kbd> atirar · <kbd>Botão direito</kbd> bomba · <kbd>Rodinha</kbd> fumaça · <kbd>Espaço</kbd> pulo · <kbd>1</kbd>/<kbd>2</kbd> arma/faca · <kbd>R</kbd> recarregar · <kbd>V</kbd> 1ª/3ª pessoa</p>
+  <p style="color:#64748b;font-size:12px">Bonecos: KayKit Adventurers por Kay Lousberg (CC0)</p>
+</div></div>
 
 <script src="/shared/config.js"></script>
 <script src="/shared/maps.js"></script>
 <script src="/shared/game.js"></script>
 <script src="/shared/bots.js"></script>
-<script src="/js/hud.js"></script>
-<script type="importmap">{ "imports": { "three": "/vendor/three/three.module.js" } }</script>
+<script type="importmap">{ "imports": { "three": "/vendor/three/three.module.js", "three/addons/": "/vendor/three-addons/" } }</script>
 <script type="module" src="/demo3d/demo3d.js"></script>
 </body>
 </html>

@@ -44,6 +44,7 @@ app.get('/sala/:code', (req, res) => res.sendFile(path.join(__dirname, 'public',
 app.get('/teste', (req, res) => res.sendFile(path.join(__dirname, 'public', 'teste.html')));
 // demo 3D (Three.js): a página e a biblioteca three
 app.use('/vendor/three', express.static(path.join(__dirname, 'node_modules', 'three', 'build')));
+app.use('/vendor/three-addons', express.static(path.join(__dirname, 'node_modules', 'three', 'examples', 'jsm')));
 app.get(['/demo3d', '/demo3d/'], (req, res) => res.sendFile(path.join(__dirname, 'public', 'demo3d', 'index.html')));
 app.get('/healthz', (req, res) => res.send('ok'));
 app.get('/api/config', (req, res) => res.json(CONFIG));

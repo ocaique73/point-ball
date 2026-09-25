@@ -784,6 +784,11 @@
       const p = this.players.get(id);
       if (!p || !inp) return;
       p.input = { up: !!inp.up, down: !!inp.down, left: !!inp.left, right: !!inp.right, fire: !!inp.fire };
+      // movimento analógico opcional (usado pela demo 3D em primeira pessoa: anda para onde a câmera olha)
+      if (typeof inp.mx === 'number' && typeof inp.my === 'number' && isFinite(inp.mx) && isFinite(inp.my)) {
+        const l = Math.hypot(inp.mx, inp.my);
+        if (l > 1e-3) { p.input.mx = inp.mx / Math.max(1, l); p.input.my = inp.my / Math.max(1, l); }
+      }
     }
 
     // mira (direção do mouse em volta do personagem)
@@ -952,6 +957,7 @@
       const inp = p.input;
       let mx = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
       let my = (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
+      if (inp.mx != null) { mx = inp.mx; my = inp.my; }
       if (mx || my) {
         const l = Math.hypot(mx, my); mx /= l; my /= l;
         if (!p.hasAim) { p.fx = mx; p.fy = my; }
