@@ -48,7 +48,7 @@
     for (const q of game.players.values()) {
       if (!game.isEnemy(p, q) || !q.alive || q.jump) continue;
       const d = Math.hypot(q.x - p.x, q.y - p.y);
-      const see = !G.lineBlocked(p.x, p.y, q.x, q.y, game.walls);
+      const see = !G.lineBlocked(p.x, p.y, q.x, q.y, game.walls) && !(game.smokeBlocks && game.smokeBlocks(p.x, p.y, q.x, q.y));
       const score = d + (see ? 0 : 600);
       if (score < best) { best = score; target = q; visible = see; }
     }

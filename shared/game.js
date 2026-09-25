@@ -212,7 +212,7 @@
       this.hillTarget = opts.hillTarget || 100;  // koth: pontos para vencer
       this.matchTime = opts.matchTime || 180;   // tdm/ffa: duração (s)
       this.killLimit = opts.killLimit || 30;    // tdm/ffa: abates para vencer
-      this.bombs = [];
+      this.bombs = []; this.smokes = [];
       this.nextBombId = 1;
       this.mapId = MAPS[opts.mapId] ? opts.mapId : 'deserto';
       this.totalRounds = opts.rounds || 3;
@@ -473,8 +473,9 @@
       return i;
     }
 
-    resetPlayer(p, slot) {
+    resetPlayer(p, slot, keepJump) {
       const c = this.cfg;
+      const oldJ = p.jumps, oldAt = p.jumpReadyAt;
       const s = spawnPos(p.team, slot, c);
       p.x = s.x; p.y = s.y;
       p.fx = p.team === 'A' ? 1 : -1; p.fy = 0;
@@ -486,18 +487,19 @@
       p.jumpReadyAt = this.time + (this.mode === 'match' ? c.roundStartDelay : 0) + c.jumpCooldown;
       p.jump = null; p.respawnAt = 0;
       p.slowUntil = 0; p.slowF = 1; p.slowKind = 0;
-      p.bombs = c.bombCount; p.protectUntil = 0;
+      p.bombs = c.bombCount; p.smokes = c.smokeCount; p.protectUntil = 0;
+      // morrer não perde o pulo: se estava carregado continua carregado; se estava carregando, continua de onde parou
+      if (keepJump && oldAt != null) { p.jumps = oldJ >= 1 ? 1 : 0; p.jumpReadyAt = oldAt; }
     }
 
     // renascer (mata-mata / teste): posição longe dos inimigos e 1 s de proteção
     respawn(p) {
       const c = this.cfg, st = p.stats;
-      this.resetPlayer(p, this.teamSlot(p));
+      this.resetPlayer(p, this.teamSlot(p), true);
       p.stats = st;
       if (this.mode !== 'sandbox') {
         const pos = this.farSpawn(p);
         p.x = pos.x; p.y = pos.y;
-        p.jumpReadyAt = this.time + c.jumpCooldown;
         p.protectUntil = this.time + c.spawnProtect;
         this.events.push({ type: 'respawn', id: p.id });
       }
@@ -527,19 +529,19 @@
     }
 
     // bomba: lança até o ponto (limitado pelo alcance); voa por cima dos muros e explode
-    throwBomb(id, tx, ty) {
-      const p = this.players.get(id), c = this.cfg;
-      if (!p || !p.alive || p.jump || p.bombs < 1 || !this.canAct() || this.protectedNow(p)) return false;
+    throwBomb(id, tx, ty, kind) {
+      const p = this.players.get(id), c = this.cfg, smoke = kind === 'smoke';
+      if (!p || !p.alive || p.jump || (smoke ? p.smokes : p.bombs) < 1 || !this.canAct() || this.protectedNow(p)) return false;
       if (!isFinite(tx) || !isFinite(ty)) return false;
       let dx = tx - p.x, dy = ty - p.y;
       const d = Math.hypot(dx, dy);
       if (d > c.bombRange) { dx *= c.bombRange / d; dy *= c.bombRange / d; }
       const m = c.wallThickness + 4;
       const ex = Math.min(c.mapWidth - m, Math.max(m, p.x + dx)), ey = Math.min(c.mapHeight - m, Math.max(m, p.y + dy));
-      p.bombs--;
-      this.bombs.push({ id: this.nextBombId++, owner: p.id, team: this.teamKey(p), sx: p.x, sy: p.y, tx: ex, ty: ey,
+      if (smoke) p.smokes--; else p.bombs--;
+      this.bombs.push({ id: this.nextBombId++, owner: p.id, team: this.teamKey(p), sx: p.x, sy: p.y, tx: ex, ty: ey, smoke,
         t0: this.time, flight: c.bombFlight * (0.5 + 0.5 * Math.hypot(ex - p.x, ey - p.y) / c.bombRange), fuse: c.bombFuse });
-      this.events.push({ type: 'bomb_throw', id: p.id });
+      this.events.push({ type: smoke ? 'smoke_throw' : 'bomb_throw', id: p.id });
       return true;
     }
 
@@ -547,6 +549,11 @@
       const c = this.cfg, keep = [];
       for (const b of this.bombs) {
         if (this.time < b.t0 + b.flight + b.fuse) { keep.push(b); continue; }
+        if (b.smoke) { // fumaça: não machuca ninguém, só abre a cortina
+          this.smokes.push({ id: b.id, x: b.tx, y: b.ty, t0: this.time, until: this.time + c.smokeTime });
+          this.events.push({ type: 'smoke', x: b.tx, y: b.ty });
+          continue;
+        }
         // explode: tira 1 vida de cada inimigo no raio (muro protege)
         for (const q of this.players.values()) {
           if (!q.alive || q.jump || this.teamKey(q) === b.team || this.protectedNow(q)) continue;
@@ -558,6 +565,23 @@
         this.events.push({ type: 'explode', x: b.tx, y: b.ty });
       }
       this.bombs = keep;
+      this.smokes = this.smokes.filter((m) => this.time < m.until);
+    }
+    // a linha entre dois pontos passa pelo miolo fechado de alguma fumaça? (bots não enxergam através)
+    smokeBlocks(x1, y1, x2, y2) {
+      const c = this.cfg, R = c.smokeRadius * c.smokeCore;
+      for (const m of this.smokes) {
+        const k = this.smokeGrow(m); if (k < 0.6) continue;
+        const dx = x2 - x1, dy = y2 - y1, L2 = dx * dx + dy * dy || 1;
+        const u = Math.max(0, Math.min(1, ((m.x - x1) * dx + (m.y - y1) * dy) / L2));
+        if (Math.hypot(x1 + dx * u - m.x, y1 + dy * u - m.y) < R * k) return true;
+      }
+      return false;
+    }
+    // 0..1: fumaça crescendo no começo e sumindo no fim
+    smokeGrow(m) {
+      const t = this.time;
+      return Math.max(0, Math.min(1, (t - m.t0) / 0.35, (m.until - t) / 0.8));
     }
 
     setInput(id, inp) {
@@ -629,9 +653,9 @@
 
     startRound() {
       this.round++;
-      this.bullets = []; this.bombs = [];
+      this.bullets = []; this.bombs = []; this.smokes = [];
       const slots = { A: 0, B: 0 };
-      for (const p of this.players.values()) this.resetPlayer(p, slots[p.team]++);
+      for (const p of this.players.values()) this.resetPlayer(p, slots[p.team]++, this.round > 1);
       if (this.gameMode === 'ffa') { // cada um nasce longe dos outros
         const placed = [];
         for (const p of this.players.values()) { p.alive = false; }
@@ -883,7 +907,7 @@
       else for (const p of this.players.values()) if (p.stats.k >= this.killLimit) reached = true;
       if (!timeUp && !reached) return;
       this.phase = 'matchEnd';
-      this.bullets = []; this.bombs = [];
+      this.bullets = []; this.bombs = []; this.smokes = [];
       let winner = null;
       if (this.teamMode()) {
         const a = Math.floor(this.score.A), b = Math.floor(this.score.B);
@@ -923,7 +947,7 @@
           jz: p.jump ? (p.jump.spin ? 0.12 : Math.min(1, (t - p.jump.t0) / p.jump.dur)) : -1,
           ka: t < p.knifeAnimUntil ? 1 : 0, kd: t < p.knifeAnimUntil ? Math.round(p.knifeAng * 100) / 100 : 0,
           fc: Math.round(Math.max(0, p.fireReady - t) * 100) / 100,
-          bo: p.bombs, sp: this.protectedNow(p) ? 1 : 0,
+          bo: p.bombs, so: p.smokes, sp: this.protectedNow(p) ? 1 : 0,
           rs: !p.alive && p.respawnAt ? r1(Math.max(0, p.respawnAt - t)) : 0,
           sl: t < p.slowUntil ? p.slowF : 1, sk: t < p.slowUntil ? p.slowKind : 0,
           ts: p.jump && p.jump.toss ? 1 : 0,
@@ -940,8 +964,9 @@
         bm: this.bombs.map((b) => {
           const k = Math.min(1, (t - b.t0) / b.flight);
           return [b.id, r1(b.sx + (b.tx - b.sx) * k), r1(b.sy + (b.ty - b.sy) * k), Math.round(k * 100) / 100, b.team,
-            r1(Math.max(0, b.t0 + b.flight + b.fuse - t))];
-        })
+            r1(Math.max(0, b.t0 + b.flight + b.fuse - t)), b.smoke ? 1 : 0];
+        }),
+        sm: this.smokes.map((m) => [m.id, r1(m.x), r1(m.y), Math.round(this.smokeGrow(m) * 100) / 100])
       };
     }
   }

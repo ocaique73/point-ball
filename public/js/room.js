@@ -300,7 +300,8 @@
       bombAiming = false;
       const t = bombTarget();
       if (t) socket.emit('bomb', { x: Math.round(t.x), y: Math.round(t.y) });
-    }
+    },
+    onSmoke: () => { const t = bombTarget(); if (t) socket.emit('smoke', { x: Math.round(t.x), y: Math.round(t.y) }); }
   });
   function sendKeys() { socket.emit('input', Object.assign({}, keys)); }
 
@@ -351,9 +352,9 @@
     const bombs = (b.s.bm || []).map((x) => {
       const o = bma.get(x[0]);
       if (!o) return x;
-      return [x[0], o[1] + (x[1] - o[1]) * al, o[2] + (x[2] - o[2]) * al, o[3] + (x[3] - o[3]) * al, x[4], x[5]];
+      return [x[0], o[1] + (x[1] - o[1]) * al, o[2] + (x[2] - o[2]) * al, o[3] + (x[3] - o[3]) * al, x[4], x[5], x[6]];
     });
-    return { players, bullets, hz, bombs };
+    return { players, bullets, hz, bombs, smokes: b.s.sm || [] };
   }
 
   let last = performance.now();
@@ -426,7 +427,7 @@
     }
     let bombAim = null;
     if (bombAiming && mine && mine.al && mine.bo > 0) { const t = bombTarget(); if (t) bombAim = { x: pred.x, y: pred.y, tx: t.x, ty: t.y }; }
-    renderer.draw({ players: view.players, bullets: view.bullets, hz: view.hz, bombs: view.bombs, bombAim, meId: you,
+    renderer.draw({ players: view.players, bullets: view.bullets, hz: view.hz, bombs: view.bombs, smokes: view.smokes, bombAim, meId: you,
       ffa: latest.md === 'ffa', light: latest.lg ? latest.lg.s : 0, pt: latest.pt, hl: latest.hl });
     hud.update(mine || null, latest, config, { roundMsg, nameOf });
   }

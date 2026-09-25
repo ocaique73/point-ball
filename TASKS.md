@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 24/09/2026 — v0.6.0 na branch `dev` (aguardando teste; inclui a v0.5.1) · no ar: v0.5.0 em https://point-ball.onrender.com
+Última atualização: 24/09/2026 — v0.7.0 na branch `dev` (aguardando teste; inclui v0.5.1 e v0.6.0) · no ar: v0.5.0 em https://point-ball.onrender.com
 
 ---
 
@@ -214,6 +214,17 @@
 - [x] +40 nomes de bot (70 no total)
 - [x] Anel de carregamento: trilho **branco com contorno preto fino** (aparece no deserto, na neve e nos mapas escuros)
 - [~] **Caique:** testar; mandar a lista de nomes de bot que você criou para eu colocar
+
+## 8.14 v0.7.0 — fumaça, pulo guardado, novos valores
+- [x] Pulo carregado não reseta ao morrer (renascer no mata-mata e troca de round); se estava carregando, continua de onde parou
+- [x] Personagem raio 25 (era 22); ao perder 1 vida fica 35% menor (era 50%)
+- [x] Velocidade do tiro 660 (era 700) · raio da bomba 105 (era 95)
+- [x] **Fumaça** na rodinha do mouse: voa igual à bomba (mesmo alcance/tempo), ao cair abre uma cortina de 5 s, raio 150
+- [x] Miolo (55% do raio) totalmente fechado; daí até a borda vai clareando até sumir — só dá para se esconder no meio
+- [x] Não machuca ninguém; 1 fumaça por vida/round (igual bomba); HUD mostra 💨×1
+- [x] Bots não enxergam através do miolo da fumaça; você continua se vendo dentro dela
+- [x] Tudo ajustável no /teste (grupo "Fumaça"); cfgVersion 10 (valores antigos salvos no /teste são descartados)
+- [~] **Caique:** testar
 
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
 - [ ] Sons (tiro, batida na parede, acerto, faca, pulo)

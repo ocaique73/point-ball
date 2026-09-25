@@ -376,6 +376,10 @@ io.on('connection', (socket) => {
     const { room, m } = ctx();
     if (m && room.game && m.inMatch && d) room.game.throwBomb(m.pid, Number(d.x), Number(d.y));
   });
+  socket.on('smoke', (d) => {
+    const { room, m } = ctx();
+    if (m && room.game && m.inMatch && d) room.game.throwBomb(m.pid, Number(d.x), Number(d.y), 'smoke');
+  });
   socket.on('weapon', (w) => {
     const { room, m } = ctx();
     if (m && room.game && m.inMatch) room.game.setWeapon(m.pid, w === 2 || w === 'knife' ? 'knife' : 'gun');

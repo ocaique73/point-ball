@@ -16,7 +16,7 @@
       tornadoSpeed: 'Velocidade do furacão', tornadoThrow: 'Distância que joga', tornadoAirTime: 'Tempo no ar ao ser jogado (s)' }],
     ['Neve: tempestade fria', { stormInterval: 'A cada (s)', stormWarn: 'Aviso antes (s)', stormDuration: 'Tempo descendo (s)', 
       stormBand: 'Altura da nevasca', freezeSlow: 'Velocidade congelado', freezeTime: 'Tempo congelado (s)' }],
-    ['Bomba', { bombCount: 'Bombas por vida/round', bombRange: 'Alcance do lançamento', bombFlight: 'Tempo voando (s)', bombFuse: 'Tempo até explodir no chão (s)', bombRadius: 'Raio da explosão' }],
+    ['Bomba', { bombCount: 'Bombas por vida/round', bombRange: 'Alcance do lançamento', bombFlight: 'Tempo voando (s)', bombFuse: 'Tempo até explodir no chão (s)', bombRadius: 'Raio da explosão' }], ['Fumaça', { smokeCount: 'Fumaças por vida/round', smokeRadius: 'Raio da fumaça', smokeTime: 'Duração (s)', smokeCore: 'Miolo fechado (0-1)' }],
     ['Mata-mata', { respawnDelay: 'Tempo para renascer (s)', spawnProtect: 'Proteção ao renascer (s)' }],
     ['Rei da colina', { hillRadius: 'Tamanho da colina', hillPointsPerSec: 'Pontos por segundo', hillMoveEvery: 'Muda de lugar a cada (s)' }],
     ['Portais', { portalFirstClosed: 'Fechados no começo (s)', portalOpen: 'Tempo aberto (s)', portalClosed: 'Tempo fechado (s)' }],
@@ -165,7 +165,8 @@
       if (!bombAiming) return;
       bombAiming = false;
       const t = bombTarget(); if (t) game.throwBomb('me', t.x, t.y);
-    }
+    },
+    onSmoke: () => { const t = bombTarget(); if (t) game.throwBomb('me', t.x, t.y, 'smoke'); }
   });
 
   // ---- bots ----
@@ -232,7 +233,7 @@
     let bombAim = null;
     const meNow = game.players.get('me');
     if (bombAiming && meNow && meNow.alive && meNow.bombs > 0) { const t = bombTarget(); if (t) bombAim = { x: meNow.x, y: meNow.y, tx: t.x, ty: t.y }; }
-    renderer.draw({ players: s.p, bullets: s.b, hz: s.hz, bombs: s.bm, bombAim, meId: 'me', light: s.lg ? s.lg.s : 0, pt: s.pt });
+    renderer.draw({ players: s.p, bullets: s.b, hz: s.hz, bombs: s.bm, smokes: s.sm, bombAim, meId: 'me', light: s.lg ? s.lg.s : 0, pt: s.pt });
     hud.update(s.p.find((p) => p.id === 'me'), s, cfg, { sandbox: true });
     requestAnimationFrame(frame);
   }

@@ -188,7 +188,7 @@ window.PBRenderer = (function () {
         view = Object.assign({}, view, {
           players: view.players.map((p) => Object.assign({}, p, { tm: p.id === me ? 'A' : 'B' })),
           bullets: view.bullets.map((b) => [b[0], b[1], b[2], b[3], b[4] === me ? 'A' : 'B']),
-          bombs: (view.bombs || []).map((b) => [b[0], b[1], b[2], b[3], b[4] === me ? 'A' : 'B', b[5]])
+          bombs: (view.bombs || []).map((b) => [b[0], b[1], b[2], b[3], b[4] === me ? 'A' : 'B', b[5], b[6]])
         });
       }
       this.updateTrails(view.bullets);
@@ -230,6 +230,14 @@ window.PBRenderer = (function () {
       this.drawTrails(0.28);
       for (const b of view.bullets) this.drawBullet(b);
       for (const b of view.bombs || []) this.drawBomb(b, now);
+      // fumaça por cima de todo mundo (esconde quem está no meio); você continua se vendo
+      if (view.smokes && view.smokes.length) {
+        for (const m of view.smokes) this.drawSmoke(m, now);
+        const meP = ps.find((p) => p.id === view.meId && p.al);
+        if (meP && view.smokes.some((m) => Math.hypot(m[1] - meP.x, m[2] - meP.y) < c.smokeRadius + meP.r)) {
+          g.globalAlpha = 0.85; this.drawPlayer(meP, true, now); g.globalAlpha = 1;
+        }
+      }
       if (view.bombAim) this.drawBombAim(view.bombAim);
       this.drawEffects(now);
       if (view.hz && view.hz.t === 'sand') this.drawSand(view.hz, now); // por cima de tudo
@@ -296,11 +304,49 @@ window.PBRenderer = (function () {
       g.textBaseline = 'alphabetic';
     }
 
-    // bomba: [id, x, y, progresso do voo 0..1, time, tempo até explodir]
+    // cortina de fumaça: [id, x, y, k 0..1]. Miolo totalmente fechado; da metade até a borda vai clareando até sumir
+    drawSmoke(m, now) {
+      const g = this.ctx, c = this.cfg;
+      const [id, x, y, k] = m;
+      if (k <= 0) return;
+      const R = c.smokeRadius * (0.35 + 0.65 * Math.min(1, k * 1.4)), core = Math.max(0.05, Math.min(0.98, c.smokeCore));
+      const a = Math.min(1, k * 1.25);
+      g.save();
+      // nuvenzinhas girando devagar (textura), mais claras que o miolo
+      for (let i = 0; i < 8; i++) {
+        const ang = i / 8 * Math.PI * 2 + now / 4000 * (i % 2 ? 1 : -1) + id;
+        const px = x + Math.cos(ang) * R * 0.55, py = y + Math.sin(ang) * R * 0.55, pr = R * 0.42;
+        const pg = g.createRadialGradient(px, py, 0, px, py, pr);
+        pg.addColorStop(0, `rgba(203,213,225,${(0.55 * a).toFixed(3)})`);
+        pg.addColorStop(1, 'rgba(203,213,225,0)');
+        g.fillStyle = pg; g.beginPath(); g.arc(px, py, pr, 0, Math.PI * 2); g.fill();
+      }
+      const grd = g.createRadialGradient(x, y, 0, x, y, R);
+      grd.addColorStop(0, `rgba(186,196,210,${a})`);
+      grd.addColorStop(core, `rgba(186,196,210,${a})`);
+      grd.addColorStop(core + (1 - core) * 0.45, `rgba(203,213,225,${(0.55 * a).toFixed(3)})`);
+      grd.addColorStop(1, 'rgba(203,213,225,0)');
+      g.fillStyle = grd; g.beginPath(); g.arc(x, y, R, 0, Math.PI * 2); g.fill();
+      g.restore();
+    }
+
+    // bomba: [id, x, y, progresso do voo 0..1, time, tempo até explodir, 1 = fumaça]
     drawBomb(b, now) {
       const g = this.ctx, c = this.cfg;
-      const [, x, y, k, team, left] = b;
+      const [, x, y, k, team, left, smoke] = b;
       const flying = k < 1, h = flying ? Math.sin(Math.PI * k) * 70 : 0;
+      if (smoke) { // granada de fumaça: cinza, soltando fumacinha
+        g.fillStyle = 'rgba(0,0,0,.3)';
+        g.beginPath(); g.ellipse(x + 2, y + 4, 8, 4, 0, 0, Math.PI * 2); g.fill();
+        const bx = x, by = y - h, br = 8 * (1 + h / 140);
+        g.fillStyle = '#94a3b8';
+        g.beginPath(); g.arc(bx, by, br, 0, Math.PI * 2); g.fill();
+        g.strokeStyle = TEAM[team]; g.lineWidth = 2; g.stroke();
+        g.fillStyle = 'rgba(226,232,240,.6)';
+        const w = (now / 120) % 3;
+        g.beginPath(); g.arc(bx - 2, by - br - 3 - w * 2, 3 + w, 0, Math.PI * 2); g.fill();
+        return;
+      }
       if (!flying) { // área da explosão
         const warn = Math.floor(now / (left < 0.3 ? 60 : 120)) % 2 === 0;
         g.fillStyle = `rgba(${TEAM_RGB[team]},${warn ? 0.18 : 0.08})`;
