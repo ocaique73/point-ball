@@ -35,6 +35,7 @@
   #banner small { display: block; font-size: 16px; color: var(--muted); font-weight: 700; }
   #kc { position: fixed; left: 50%; top: 70px; transform: translateX(-50%); display: none; padding: 6px 16px; border-radius: 10px; background: rgba(127,29,29,.75); border: 1px solid #ef4444; color: #fee2e2; font-size: 15px; text-align: center; pointer-events: none; }
   #kc b { letter-spacing: 3px; margin-right: 10px; }
+  #heal { position: fixed; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, rgba(255,60,90,0) 45%, rgba(255,40,80,.55) 100%); transition: opacity .08s; }
   /* tabela (Tab) */
   #board { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(720px, 94vw); display: none; background: rgba(8, 11, 18, .92); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
   #board h3 { margin: 4px 0 6px; }
@@ -49,7 +50,7 @@
   #menu .card { background: #0f1522; border: 1px solid #2b3a55; border-radius: 14px; width: min(760px, 94vw); max-height: 92vh; overflow: auto; }
   #menu header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px 0; }
   #menu h2 { margin: 0; color: var(--acc); font-size: 20px; }
-  .tabs { display: flex; gap: 6px; padding: 12px 18px 0; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 18px 0; }
   .tab { padding: 7px 12px; border-radius: 8px 8px 0 0; border: 1px solid #2b3a55; border-bottom: none; cursor: pointer; color: var(--muted); }
   .tab.on { color: var(--text); background: #16203a; }
   .pane { display: none; padding: 14px 18px; border-top: 1px solid #2b3a55; }
@@ -67,6 +68,9 @@
   kbd { background: #1f2937; border: 1px solid #334155; border-radius: 5px; padding: 1px 6px; font-size: 12px; color: var(--text); }
   #xprev { background: repeating-conic-gradient(#374151 0 25%, #1f2937 0 50%) 0 0/20px 20px; border-radius: 10px; display: block; margin: 0 auto; }
   .wdesc { color: var(--muted); font-size: 13px; }
+  .sw { width: 22px; height: 22px; border-radius: 5px; border: 2px solid transparent; cursor: pointer; padding: 0; }
+  .sw.on { border-color: #fff; box-shadow: 0 0 0 2px var(--acc); }
+  .swrow { display: flex; gap: 4px; flex-wrap: wrap; }
   .foot { padding: 0 18px 16px; display: flex; gap: 10px; justify-content: space-between; align-items: center; }
 </style>
 </head>
@@ -88,12 +92,14 @@
 <div id="board"><h3>Placar</h3><div id="board-net" class="wdesc" style="margin-bottom:6px"></div><div id="board-body"></div></div>
 <div class="panel" id="score"></div>
 <div id="banner"></div>
-<div id="kc"><b>KILLCAM</b><span id="kc-who"></span></div>
+<div id="kc"><b>KILLCAM FINAL</b><span id="kc-who"></span></div>
+<div id="heal"></div>
 
 <div id="menu"><div class="card">
   <header><h2>Point Ball 3D</h2><span id="loading" style="color:var(--muted)">Carregando os bonecos...</span></header>
   <div class="tabs">
     <div class="tab on" data-pane="p-game">Jogo</div>
+    <div class="tab" data-pane="p-look">Personagem</div>
     <div class="tab" data-pane="p-weapon">Arma</div>
     <div class="tab" data-pane="p-cross">Mira</div>
     <div class="tab" data-pane="p-keys">Controles</div>
@@ -111,9 +117,19 @@
     <label class="field"><span>Bots inimigos</span><select id="o-bots"><option>0</option><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option></select><span></span></label>
     <label class="field"><span>Bots no seu time</span><select id="o-allies"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select><span></span></label>
     <label class="field"><span>Nível dos bots</span><select id="o-level"><option value="iniciante">Iniciante</option><option value="amador" selected>Amador</option><option value="pro">Profissional</option></select><span></span></label>
-    <label class="field"><span>Killcam (replay de quem te matou)</span><select id="o-kc"><option value="1">Ligada</option><option value="0">Desligada</option></select><span></span></label>
+    <label class="field"><span>Killcam final (última kill do round/partida)</span><select id="o-kc"><option value="1">Ligada</option><option value="0">Desligada</option></select><span></span></label>
+    <label class="field"><span>Zoom ao mirar (botão direito)</span><select id="o-adszoom"><option value="1">Com zoom</option><option value="0">Sem zoom (só carrega a força)</option></select><span></span></label>
     <label class="field"><span>Sombras</span><select id="o-shadow"><option value="1">Ligadas</option><option value="0">Desligadas</option></select><span></span></label>
     <label class="field"><span>Campo de visão (FOV)</span><input type="range" id="o-fov" min="60" max="110" step="1"><span class="v" id="v-fov"></span></label>
+  </div>
+  <div class="pane" id="p-look">
+    <div class="row2" style="align-items:flex-start;gap:14px">
+      <div><canvas id="lookprev" width="300" height="270" style="border-radius:10px;background:#16203a;display:block"></canvas>
+        <div class="wdesc" style="text-align:center;margin-top:4px">no time <b class="tA">Azul</b> · no time <b class="tB">Vermelho</b></div></div>
+      <div id="look-fields" style="flex:1;display:grid;gap:7px;min-width:280px"></div>
+    </div>
+    <div class="wdesc">Igual Rocket League: cada cor é um <b>tom do seu time</b> — o mesmo tom vira azul no time azul e vermelho no vermelho, então ninguém confunde os times. Vale na hora (no multiplayer, os outros também veem).</div>
+    <div class="row2"><button class="btn" id="look-random">🎲 Sortear</button><button class="btn" id="look-reset">Voltar ao padrão</button></div>
   </div>
   <div class="pane" id="p-weapon">
     <label class="field"><span>Arma principal (1)</span><select id="o-weapon"></select><span></span></label>
@@ -143,11 +159,11 @@
     <label class="field"><span>Inverter mouse (Y)</span><select id="o-invert"><option value="0">Não</option><option value="1">Sim</option></select><span></span></label>
     <label class="field"><span>Som</span><select id="o-mute"><option value="0">Ligado</option><option value="1">Mudo</option></select><span></span></label>
     <div class="keys">
-      <kbd>WASD</kbd> andar · <kbd>Shift</kbd> correr (correndo não dá pra atirar) · <kbd>Mouse</kbd> olhar e mirar · <kbd>Clique</kbd> atirar / usar<br>
+      <kbd>WASD</kbd> andar · <kbd>Shift</kbd> correr (correndo não dá pra atirar) · <kbd>Mouse</kbd> olhar e mirar · <kbd>Clique</kbd> atirar / usar · <kbd>Botão direito</kbd> mirar (segura pra carregar a força do tiro; anda mais devagar)<br>
       <kbd>Espaço</kbd> pular (sem limite) · <kbd>Espaço</kbd> de novo no ar = <b>pulo duplo</b> (carrega a cada 15 s, passa por cima dos muros)<br>
       <kbd>1</kbd> arma principal · <kbd>2</kbd> poção (1 vida) · <kbd>3</kbd> faca · <kbd>4</kbd> granada · <kbd>5</kbd> fumaça · <kbd>Rodinha</kbd> troca de arma<br>
       Granada, fumaça e poção: aperte <kbd>2</kbd>/<kbd>4</kbd>/<kbd>5</kbd> para pegar e <kbd>Clique</kbd> para usar (poção bebe na hora, granada/fumaça vão para onde a mira aponta)<br>
-      Arco: segure o <kbd>Clique</kbd> para puxar e solte para atirar<br>
+      Besta: segure o <kbd>Clique</kbd> para puxar e solte para atirar<br>
       <kbd>R</kbd> recarregar · <kbd>V</kbd> 1ª/3ª pessoa · <kbd>Tab</kbd> (segurar) placar, ping e onde está o servidor · <kbd>Esc</kbd> este menu
     </div>
   </div>

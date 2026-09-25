@@ -34,6 +34,8 @@ cadência/recarga de cada arma — ligar/desligar "você pode morrer" (os bots s
 
 Tem física 3D própria (`public/demo3d/sim3d.js`): tiro e granada seguem a mira, ricochete no muro e no chão, pulo duplo. 8 mapas e bots com 3 níveis.
 
+**Novidades da v0.20** (só no 3D): mapas 40% maiores e redesenhados (`public/demo3d/world3d.js`), portais que abrem/fecham sozinhos com andar de cima, meteoros e portas na nave, caverna na floresta, iglus na neve, tempestade congelante, lava furando o chão, mira com botão direito (zoom + barra de força), besta na 1ª pessoa, killcam final com efeito de lente, animação da poção e a aba **Personagem** (5 personagens, roupas e cores por tons do time — `public/demo3d/looks3d.js`). Os bonecos são do KayKit Adventurers (Kay Lousberg, CC0).
+
 **Multiplayer** (aba "Multiplayer" do menu Esc): crie uma sala (código de 1 a 5 letras/números + senha opcional) ou entre numa sala existente pela lista ou pelo código. Escolha um time (Azul ou Vermelho); o dono da sala escolhe o mapa, os bots e o nível deles, e aperta "Iniciar partida". É igual ao multiplayer do jogo 2D. O servidor é quem manda no jogo (todo mundo vê o mesmo estado); só a mira/câmera do mouse responde na hora, o resto do corpo segue o que o servidor manda.
 
 **No navegador**

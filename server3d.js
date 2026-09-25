@@ -36,9 +36,18 @@ async function detectLocation() {
 function pidOf(clientId) { return crypto.createHash('sha256').update(String(clientId)).digest('hex').slice(0, 12); }
 
 function cleanName(n) { return String(n || '').trim().slice(0, 20) || 'Jogador'; }
+// roupa do personagem (a mesma estrutura de looks3d.js): só valores conhecidos
+const LOOK_CHARS = ['hood', 'rogue', 'knight', 'barbarian', 'mage'], LOOK_HATS = ['none', 'cap', 'beanie', 'top', 'cowboy', 'crown', 'band'];
+function cleanLook(l) {
+  if (!l || typeof l !== 'object') return null;
+  const o = { m: LOOK_CHARS.includes(l.m) ? l.m : 'hood', hat: LOOK_HATS.includes(l.hat) ? l.hat : 'none', cp: l.cp ? 1 : 0, o: l.o ? 1 : 0 };
+  for (const k of ['s', 'p', 'c', 'h', 'a', 'b', 'g', 'hr', 'hc']) { const v = Math.floor(Number(l[k])); o[k] = v >= 0 && v < 8 ? v : 0; }
+  return o;
+}
 
 async function setup3D(io, CFG) {
-  const { Sim3D, portalLayout, forestTrees, CEILING_Y, BORDER_H } = await import('./public/demo3d/sim3d.js');
+  const { Sim3D } = await import('./public/demo3d/sim3d.js');
+  const { world3D, simOptions } = await import('./public/demo3d/world3d.js');
   const rooms = new Map();
   const key = (code) => '3d:' + code;
   detectLocation();
@@ -107,39 +116,16 @@ async function setup3D(io, CFG) {
     broadcastState(room);
   }
 
-  // postes (cidade), igual à lógica do cliente em demo3d.js buildMap()
-  function lampsFor(mapId, W, H) {
-    if (mapId !== 'cidade') return null;
-    return MAPS.cidade.lamps.map(([nx, nz]) => [nx * W, nz * H]);
-  }
-
   function startMatch(room) {
-    const map = MAPS[room.map];
-    const W = CFG.mapWidth, H = CFG.mapHeight;
-    // sorteios da partida (portais abertos, buracos de lava) são feitos aqui e mandados pros clientes,
-    // pra todo mundo ver exatamente o mesmo mapa que o servidor está simulando
-    let walls = G.buildWalls(room.map, CFG, 0);
-    let portalPairs = null, portals = [];
-    if (map && map.portals) {
-      const list = G.portalList(map);
-      portalPairs = G.pickPortalPairs(list, null);
-      const lay = portalLayout(walls, list, portalPairs, W, H, CFG.wallThickness);
-      walls = lay.walls; portals = lay.portals;
-    }
-    if (room.map === 'floresta') walls = walls.concat(forestTrees(W, H, walls)); // árvores (tronco bate)
-    const holes = room.map === 'vulcao' ? [] : null; // a erupção abre os buracos durante a partida
-    const sim = new Sim3D(walls, W, H, {
-      hazard: map ? map.hazard : null,
-      cfg: CFG, portals, holes, borderH: BORDER_H[room.map] || null,
-      terrain: room.map === 'deserto' ? 'dunes' : null,
-      ceilingY: CEILING_Y[room.map] || null,
-      lamps: lampsFor(room.map, W, H),
+    // o mundo 3D (mapa 40% maior, caverna, iglus, portas, andar de cima dos portais...) é montado igual ao do navegador
+    const world = world3D(room.map, G, MAPS, CFG);
+    const sim = new Sim3D(world.walls, world.W, world.H, Object.assign(simOptions(world), {
       mode: room.mode, rounds: room.rounds, killLimit: room.killLimit, hillTarget: room.hillTarget,
       matchTime: room.mode === 'rounds' ? 0 : room.roundTime
-    });
-    room.matchInfo = { map: room.map, roundTime: room.mode === 'rounds' ? 0 : room.roundTime, portalPairs, mode: room.mode };
+    }));
+    room.matchInfo = { map: room.map, roundTime: room.mode === 'rounds' ? 0 : room.roundTime, mode: room.mode };
     for (const m of room.members.values()) {
-      if (m.status === 'team' && m.connected) { sim.addPlayer({ id: m.pid, name: m.name, team: m.team }); m.inMatch = true; }
+      if (m.status === 'team' && m.connected) { sim.addPlayer({ id: m.pid, name: m.name, team: m.team, look: m.look }); m.inMatch = true; }
     }
     for (const t of ['A', 'B']) for (const b of room.bots[t]) sim.addPlayer({ id: b.id, name: b.name, team: t, bot: true, level: room.botLevel });
     room.sim = sim;
@@ -151,7 +137,7 @@ async function setup3D(io, CFG) {
       const evs = sim.step(dt);
       if (evs.length) pending.push(...evs);
       // acabou a partida (limite de abates / pontos / rounds / tempo): mostra o resultado uns segundos e volta pra sala
-      if (sim.result && !room.endTimer) room.endTimer = setTimeout(() => { room.endTimer = null; if (room.sim === sim) endMatch(room, sim.result); }, 4000);
+      if (sim.result && !room.endTimer) room.endTimer = setTimeout(() => { room.endTimer = null; if (room.sim === sim) endMatch(room, sim.result); }, 7500); // dá tempo da killcam final
       if (++tick % every === 0) {
         io.to(key(room.code)).emit('3d_state', { s: sim.snapshot(), e: pending });
         pending = [];
@@ -220,11 +206,11 @@ async function setup3D(io, CFG) {
           if (old) { old.emit('3d_kicked', 'A sala foi aberta em outra aba.'); old.data.room3d = null; old.disconnect(true); }
         }
         if (m.graceTimer) { clearTimeout(m.graceTimer); m.graceTimer = null; }
-        m.name = cleanName(d.name) || m.name;
+        m.name = cleanName(d.name) || m.name; m.look = cleanLook(d.look) || m.look;
       } else {
         if (room.password && String(d.password || '') !== room.password) return ack({ ok: false, error: d.password ? 'wrong_password' : 'need_password' });
         if (teamCount(room) >= MAX_PER_TEAM * 2 + 4) return ack({ ok: false, error: 'full' });
-        m = { cid, pid: pidOf(cid), name: cleanName(d.name), status: 'choosing', team: null, connected: true, inMatch: false, socketId: null, graceTimer: null };
+        m = { cid, pid: pidOf(cid), name: cleanName(d.name), look: cleanLook(d.look), status: 'choosing', team: null, connected: true, inMatch: false, socketId: null, graceTimer: null };
         room.members.set(cid, m);
       }
       m.socketId = socket.id; m.connected = true;
@@ -288,7 +274,7 @@ async function setup3D(io, CFG) {
       const p = room.sim.players.get(m.pid); if (!p || !p.alive) return;
       p.input.fwd = Math.max(-1, Math.min(1, Number(d.fwd) || 0));
       p.input.side = Math.max(-1, Math.min(1, Number(d.side) || 0));
-      p.input.fire = !!d.fire; p.input.sprint = !!d.sprint;
+      p.input.fire = !!d.fire; p.input.sprint = !!d.sprint; p.input.aim = !!d.aim;
       if (Number.isFinite(d.yaw)) p.yaw = Number(d.yaw);
       if (Number.isFinite(d.pitch)) p.pitch = Math.max(-1.5, Math.min(1.5, Number(d.pitch)));
     });
@@ -302,6 +288,12 @@ async function setup3D(io, CFG) {
       else if (d.t === 'cycle') room.sim.cycleWeapon(p, d.dir > 0 ? 1 : -1);
       else if (d.t === 'primary' && typeof d.w === 'string') room.sim.setPrimary(p, d.w);
     });
+    // trocou a roupa no menu: vale na hora (e na próxima partida)
+    socket.on('3d_set_look', (d) => {
+      const { room, m } = ctx(); if (!m) return;
+      m.look = cleanLook(d);
+      if (room.sim) { const p = room.sim.players.get(m.pid); if (p) p.look = m.look; }
+    });
     // ping: o navegador mede o tempo de ida e volta; aproveita pra dizer onde o servidor está
     socket.on('3d_ping', (d, ack) => { if (typeof ack === 'function') ack({ loc: serverLocation || 'descobrindo...' }); });
 
@@ -313,7 +305,7 @@ async function setup3D(io, CFG) {
     socket.on('disconnect', () => {
       const { room, m } = ctx(); if (!m) return;
       m.connected = false; m.socketId = null;
-      if (room.sim && m.inMatch) { const p = room.sim.players.get(m.pid); if (p) p.input = { fwd: 0, side: 0, fire: false, sprint: false }; }
+      if (room.sim && m.inMatch) { const p = room.sim.players.get(m.pid); if (p) p.input = { fwd: 0, side: 0, fire: false, sprint: false, aim: false }; }
       m.graceTimer = setTimeout(() => removeMember(room, m.cid), MEMBER_GRACE);
       scheduleCloseIfEmpty(room);
       broadcastState(room);
