@@ -7,13 +7,15 @@ Animações: parado, correndo, andando de lado e de costas, pulando, mirando, at
 jogando bomba e fumaça, levando tiro e morrendo. As pernas e os braços são animados separados
 (dá para correr atirando, recarregando ou jogando bomba ao mesmo tempo).
 
-Controles: clique em **Jogar** (o mouse fica preso; **Esc** abre o menu) · WASD andar · mouse olhar/mirar · clique atirar/usar ·
+Controles: clique em **Jogar** (o mouse fica preso; **Esc** abre o menu) · WASD andar · **Shift correr** (correndo não atira) · mouse olhar/mirar · clique atirar/usar ·
 Espaço pular (sem limite) · Espaço de novo no ar = **pulo duplo** (carrega a cada 15 s, passa por cima dos muros) ·
 1 arma · **2 poção** (bebe e recupera 1 vida) · 3 faca · 4 granada · 5 fumaça (pega e usa/joga com o clique) · rodinha troca de arma ·
-R recarregar · V 1ª/3ª pessoa · **Tab** placar.
+R recarregar · V 1ª/3ª pessoa · **Tab** placar (com ping e onde fica o servidor).
 
-Áreas no chão reabastecem granada/fumaça (amarela) e poção (verde) sozinhas quando você fica em cima. Uma granada
-inimiga lançada mostra a distância e a direção no topo da tela pra você correr.
+Armas: **arco** (padrão), estilingue e bolinha na mão. Modos (iguais ao 2D): Rounds, Mata-mata em equipe, Cada um por si, Rei da colina e Treino livre. Quando alguém te mata aparece a **killcam** (replay pelos olhos dele).
+
+Uma granada inimiga lançada mostra a distância e a direção no topo da tela pra você correr. Os eventos de cada mapa
+(furacão, tempestade, chuva congelante, erupção, luz apagando) só começam 25 s depois do início e repetem a cada 25 s.
 
 Mapas: Deserto (**montanhas de areia** que dá pra subir, tempestade de areia), Neve (paredes de gelo: dá pra ver através de
 uma, a segunda já escurece), Floresta (paredes de madeira com árvore grande em cada ponta + furacão + ricochete na copa das
@@ -26,7 +28,7 @@ Menu do **Esc**: câmera, mapa (inclui **Sala de teste**, um mapa aberto sem bot
 bots, nível, sombras, FOV, arma principal (lançador, estilingue, bolinha na mão, arco, disco), sensibilidade do mouse,
 **editor de mira** (cor, tamanho, espessura, espaço, ponto, círculo de recarga e marcador de acerto em X) e a aba
 **Sala de teste**, que deixa ajustar ao vivo (sem reiniciar) a velocidade do personagem, a altura do pulo e a
-cadência/recarga de cada arma — e ligar o "modo teste" (você não morre, os bots morrem normal) em qualquer mapa, não só no de teste.
+cadência/recarga de cada arma — ligar/desligar "você pode morrer" (os bots sempre morrem) e escolher o som de cada coisa (4 a 7 opções cada).
 
 ## Demo A — Three.js (web + PC)
 
