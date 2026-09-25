@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 24/09/2026 — v0.10.0 — 2D finalizado + demos 3D FPS para comparar (próximo passo: demos 3D em Three.js e Godot) em https://point-ball.onrender.com
+Última atualização: 24/09/2026 — v0.11.0 — demo 3D Three.js com física 3D própria (Godot em seguida) (próximo passo: demos 3D em Three.js e Godot) em https://point-ball.onrender.com
 
 ---
 
@@ -274,7 +274,18 @@
 - [x] Bonecos humanos KayKit Adventurers (CC0) com animações em 2 camadas (pernas: parado/correr/lado/costas/pulo/morte; braços: mirar/atirar/recarregar/facada/jogar bomba e fumaça/levar tiro)
 - [x] Godot ganhou bomba, fumaça e faca; câmera de 3ª pessoa não atravessa parede nas duas
 - [x] Tiro continua reto na altura do peito (igual ao 2D); olhar para cima/baixo só muda a visão e onde a bomba cai
-- [~] **Caique:** comparar as duas e escolher
+- [x] v0.11.0 (Three.js): física 3D própria (`public/demo3d/sim3d.js`), sem mexer no 2D
+  - [x] Pulo normal sem limite (vai para onde você anda) + **pulo duplo** carregado a cada 15 s (Espaço 2x) para passar por cima dos muros
+  - [x] Tiro e granada vão para onde a mira aponta (sobe/desce); ricochete no muro e no chão
+  - [x] Teclas: 1 arma · 3 faca · 4 granada · 5 fumaça (pega e joga com o clique) · rodinha troca de arma
+  - [x] 5 armas de borracha: lançador, estilingue, bolinha na mão, arco (segura e solta), disco
+  - [x] Morreu: não atira mais, corpo some e fica uma **lápide com o nome** por 8 s
+  - [x] Fumaça com ~160 nuvenzinhas macias (miolo fechado, borda clareando)
+  - [x] Menu no **Esc**: câmera, mapa, bots, nível, sombras, FOV, arma, sensibilidade, inverter Y
+  - [x] **Mira editável**: cor, contorno, tamanho, espessura, espaço, ponto, círculo de recarga, marcador de acerto em X (amarelo = acerto, vermelho = abate)
+  - [x] **Tab** (segurar): placar com abates, mortes, assistências e K/D
+- [ ] Godot: levar as mesmas mudanças
+- [~] **Caique:** testar a Three.js
 
 ## 9. Próximas ideias (não pedidas ainda — confirmar com o Caique)
 - [ ] Sons (tiro, batida na parede, acerto, faca, pulo)
