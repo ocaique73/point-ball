@@ -99,9 +99,10 @@ window.PBHud = (function () {
       if (hz && hz.t === 'storm') lt = hz.s === 2 ? '❄️ TEMPESTADE FRIA!' : hz.s === 1 ? '<span class="warn">❄️ Tempestade chegando no centro...</span>' : `❄️ Tempestade em <b>${Math.ceil(hz.n)}s</b>`;
       if (s.hl && s.ph === 'playing') {
         const o = s.hl.o;
-        const ht = o === 'A' ? '<span class="tA">⛰️ AZUL dominando a colina</span>' : o === 'B' ? '<span class="tB">⛰️ VERMELHO dominando a colina</span>'
+        let ht = o === 'A' ? '<span class="tA">⛰️ AZUL dominando a colina</span>' : o === 'B' ? '<span class="tB">⛰️ VERMELHO dominando a colina</span>'
           : o === 'X' ? '<span class="warn">⛰️ Colina disputada!</span>' : '⛰️ Colina livre';
-        const mv = s.hl.n <= 5 ? ` · <span class="warn">muda em ${Math.ceil(s.hl.n)}s</span>` : ` · muda em ${Math.ceil(s.hl.n)}s`;
+        let mv = s.hl.n <= 5 ? ` · <span class="warn">fecha em ${Math.ceil(s.hl.n)}s</span>` : ` · fecha em ${Math.ceil(s.hl.n)}s`;
+        if (s.hl.pv) { ht = '<span class="warn">⛰️ Nova colina aparecendo...</span>'; mv = ` · vale em ${Math.ceil(s.hl.n)}s`; }
         lt = lt ? `${ht}${mv} &nbsp;|&nbsp; ${lt}` : `${ht}${mv}`;
       }
       this.set('h-light', lt);
