@@ -390,6 +390,19 @@ window.PBRenderer = (function () {
     // Rei da colina: área no chão; cor de quem domina, amarela piscando se disputada
     drawHill(H, now) {
       const g = this.ctx;
+      if (H.pv) { // prévia: só o contorno piscando com a contagem, ainda não vale ponto
+        const on = Math.floor(now / 200) % 2 === 0;
+        g.save();
+        g.fillStyle = `rgba(255,255,255,${on ? 0.08 : 0.03})`;
+        g.beginPath(); g.arc(H.x, H.y, H.r, 0, Math.PI * 2); g.fill();
+        g.setLineDash([8, 10]); g.lineDashOffset = now / 30;
+        g.strokeStyle = `rgba(255,255,255,${on ? 0.85 : 0.4})`; g.lineWidth = 3;
+        g.beginPath(); g.arc(H.x, H.y, H.r, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+        g.font = `900 ${Math.round(H.r * 0.45)}px Segoe UI, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillStyle = 'rgba(255,255,255,.8)'; g.fillText(String(Math.ceil(H.n)), H.x, H.y);
+        g.restore(); g.textBaseline = 'alphabetic';
+        return;
+      }
       const col = H.o === 'A' ? '59,130,246' : H.o === 'B' ? '239,68,68' : H.o === 'X' ? '250,204,21' : '255,255,255';
       const pulse = H.o === 'X' ? (Math.floor(now / 150) % 2 ? 0.28 : 0.12) : H.o ? 0.24 : 0.1;
       g.save();

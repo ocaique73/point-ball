@@ -317,16 +317,24 @@
       if (this.gameMode !== 'koth') return null;
       const c = this.cfg;
       const el = Math.max(0, this.time - this.lightStart);
-      const idx = Math.floor(el / c.hillMoveEvery);
-      if (!this.hill || this.hill.idx !== idx) {
+      // 1ª área já começa valendo; depois de cada área que fecha: hillPreview s mostrando onde vai ser a próxima (sem pontuar)
+      let idx, n, pv = 0;
+      if (el < c.hillMoveEvery) { idx = 0; n = c.hillMoveEvery - el; }
+      else {
+        const per = c.hillPreview + c.hillMoveEvery, e = el - c.hillMoveEvery, t = e % per;
+        idx = 1 + Math.floor(e / per);
+        if (t < c.hillPreview) { pv = 1; n = c.hillPreview - t; } else n = per - t;
+      }
+      if (!this.hill || this.hill.idx !== idx) { // sorteia só quando a área atual fecha
         const pos = this.pickHillSpot(this.hill);
         this.hill = { idx, x: pos.x, y: pos.y };
       }
-      return { idx, x: this.hill.x, y: this.hill.y, r: c.hillRadius, n: c.hillMoveEvery - (el - idx * c.hillMoveEvery) };
+      return { idx, x: this.hill.x, y: this.hill.y, r: c.hillRadius, n, pv };
     }
     updateHill(dt) {
       if (this.gameMode !== 'koth' || this.phase !== 'playing') { this.hillOwner = null; return; }
       const H = this.hillState();
+      if (H.pv) { this.hillOwner = null; return; } // só mostrando onde vai ser: ninguém pontua
       const inside = { A: 0, B: 0 };
       for (const p of this.players.values()) {
         if (!p.alive || p.jump) continue;
@@ -1179,7 +1187,7 @@
         tr: this.totalRounds, sc: this.gameMode === 'koth' ? { A: Math.floor(this.score.A), B: Math.floor(this.score.B) } : this.score, map: this.mapId, lg: this.lightState(), hz: this.hazardSnapshot(), pt: this.portalState(),
         rt: this.mode === 'match' && this.phase === 'playing' ? r1(Math.max(0, (this.isDM() ? this.matchTime : this.cfg.roundTime) - (t - this.lightStart))) : null,
         md: this.gameMode, kl: this.gameMode === 'koth' ? this.hillTarget : this.killLimit,
-        hl: this.gameMode === 'koth' ? (() => { const H = this.hillState(); return { x: r1(H.x), y: r1(H.y), r: H.r, n: r1(H.n), o: this.hillOwner || null }; })() : null,
+        hl: this.gameMode === 'koth' ? (() => { const H = this.hillState(); return { x: r1(H.x), y: r1(H.y), r: H.r, n: r1(H.n), pv: H.pv, o: H.pv ? null : this.hillOwner || null }; })() : null,
         p: ps, b: this.bullets.map((b) => [b.id, r1(b.x), r1(b.y), b.hits, b.team]),
         bm: this.bombs.map((b) => {
           const k = Math.min(1, (t - b.t0) / b.flight);

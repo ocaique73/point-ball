@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 24/09/2026 — v0.8.3 no ar — 2D finalizado (próximo passo: demos 3D em Three.js e Godot) em https://point-ball.onrender.com
+Última atualização: 24/09/2026 — v0.8.4 no ar — 2D finalizado (próximo passo: demos 3D em Three.js e Godot) em https://point-ball.onrender.com
 
 ---
 
@@ -257,6 +257,12 @@
 ## 8.18 v0.8.3 — queda no buraco animada
 - [x] Nave: quem cai no buraco é puxado girando até o meio, encolhe e escurece até sumir no espaço (0,9 s); não deixa marca de morto
 - [x] Durante a queda não controla nem leva tiro
+- [~] **Caique:** testar
+
+## 8.19 v0.8.4 — Rei da colina com prévia
+- [x] Cada área vale 30 s (era 40)
+- [x] Quando a área fecha: 3 s mostrando onde vai ser a próxima (contorno piscando + contagem), sem pontuar; só então passa a valer
+- [x] A próxima só é sorteada quando a atual fecha (nunca aparecem duas juntas)
 - [~] **Caique:** testar
 
 ## 10. 3D (demos para comparar)
