@@ -34,6 +34,8 @@ cadência/recarga de cada arma — ligar/desligar "você pode morrer" (os bots s
 
 Tem física 3D própria (`public/demo3d/sim3d.js`): tiro e granada seguem a mira, ricochete no muro e no chão, pulo duplo. 8 mapas e bots com 3 níveis.
 
+**Novidades da v0.23** (só no 3D): obra em octógono e fábrica em hexágono, minimapa, contador de vivos, sons por distância, granada segurando pra jogar longe, pulo duplo com botas douradas, editor com ícones e cor da pele, portais e cidade mais leves.
+
 **Novidades da v0.22** (só no 3D): mapas novos Canteiro de obras (bola de demolição) e Fábrica (pistões e esteiras), killcam seguindo o tiro, pirâmide gigante, casa na árvore com escadas de mão, trem de ida e volta, onda vindo do horizonte, prédios em volta da cidade e cratera enorme no vulcão.
 
 **Novidades da v0.21** (só no 3D): mapas novos Estação de metrô (trem passando) e Plataforma no mar (onda gigante, navio com torcida), varinha mágica, casa na árvore, pirâmides no deserto, mira reta, granada com arco de alcance e killcam com o boneco caindo.

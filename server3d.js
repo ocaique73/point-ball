@@ -41,7 +41,7 @@ const LOOK_CHARS = ['hood', 'rogue', 'knight', 'barbarian', 'mage'], LOOK_HATS =
 function cleanLook(l) {
   if (!l || typeof l !== 'object') return null;
   const o = { m: LOOK_CHARS.includes(l.m) ? l.m : 'hood', hat: LOOK_HATS.includes(l.hat) ? l.hat : 'none', cp: l.cp ? 1 : 0, o: l.o ? 1 : 0 };
-  for (const k of ['s', 'p', 'c', 'h', 'a', 'b', 'g', 'hr', 'hc']) { const v = Math.floor(Number(l[k])); o[k] = v >= 0 && v < 8 ? v : 0; }
+  for (const k of ['sk', 's', 'p', 'c', 'h', 'a', 'b', 'g', 'hr', 'hc']) { const v = Math.floor(Number(l[k])); o[k] = v >= 0 && v < 8 ? v : 0; }
   return o;
 }
 

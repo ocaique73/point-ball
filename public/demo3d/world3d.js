@@ -4,6 +4,7 @@
 import { PORTAL, PLAT, BORDER_H, CEILING_Y, forestTrees } from './sim3d.js';
 
 export const MAP_SCALE = 1.4;
+export const MAP_SCALE_OF = { deserto: 1.6 };
 
 const segRect = (s, W, H, t) => {
   const x1 = s[0] * W, y1 = s[1] * H, x2 = s[2] * W, y2 = s[3] * H;
@@ -30,7 +31,7 @@ function iglooBoxes(x, z, ang, k) {
 }
 
 // casa na árvore (meio da floresta): tronco no meio, plataforma redonda bem alta (sem parapeito) e 2 escadas de mão
-// presas no tronco — uma virada pra base de cada time — que sobem por um alçapão no chão e saem no meio da casinha.
+// presas no tronco — uma virada pra base de cada time — que sobem por um buraco no chão e saem no meio da casinha.
 // O furacão passa por ela e joga longe quem estiver lá em cima.
 export const TREEHOUSE = { r: 150, y: 380, th: 12, trunk: 34, hole: 64, holeW: 44, trunkTop: 620 };
 function treehouseBoxes(cx, cz) {
@@ -43,11 +44,9 @@ function treehouseBoxes(cx, cz) {
   const hx = trunk + hole, hwm = Math.sqrt(r * r - holeW * holeW);
   f(cx - hwm, cz - holeW, cx - hx, cz + holeW, { y0, top: y, thouse: 'floor' });
   f(cx + hx, cz - holeW, cx + hwm, cz + holeW, { y0, top: y, thouse: 'floor' });
-  // alçapão: tampa o buraco pra quem está em cima (quem está subindo a escada passa por ele)
-  f(cx - hx, cz - holeW, cx - trunk, cz + holeW, { y0, top: y, thouse: 'hatch', hatch: true });
-  f(cx + trunk, cz - holeW, cx + hx, cz + holeW, { y0, top: y, thouse: 'hatch', hatch: true });
+  // (os 2 buracos das escadas ficam abertos: quem chega lá em cima sai pro chão do lado do buraco)
   // escadas de mão: na face do tronco virada pra cada base (x), sobe do chão até o chão da casinha
-  const ladders = [{ x: cx - trunk, z: cz, nx: -1, nz: 0, half: 26, top: y }, { x: cx + trunk, z: cz, nx: 1, nz: 0, half: 26, top: y }];
+  const ladders = [{ x: cx - trunk, z: cz, nx: -1, nz: 0, half: 26, top: y, hole }, { x: cx + trunk, z: cz, nx: 1, nz: 0, half: 26, top: y, hole }];
   return { boxes: out, ladders, zone: { x0: cx - r, z0: cz - r, x1: cx + r, z1: cz + r } };
 }
 
@@ -112,71 +111,71 @@ export const MAPS3D = {
     id: 'metro', name: 'Estação de metrô', hazard: 'train', lanes: [0.42, 0.58],
     theme: { ground: '#8e9094', ground2: '#84868a', wall: '#ece6d4', wallEdge: '#a09478', border: '#d8cfb6', deco: 'none' },
     rects: mirR([
-      [0.2, 0.17, 0.022, 0.035, 330], [0.2, 0.39, 0.022, 0.035, 330], [0.2, 0.575, 0.022, 0.035, 330], [0.2, 0.795, 0.022, 0.035, 330], // pilares
-      [0.33, 0.23, 0.022, 0.035, 330], [0.33, 0.4825, 0.022, 0.035, 330], [0.33, 0.735, 0.022, 0.035, 330],
-      [0.11, 0.26, 0.012, 0.12, 120], [0.11, 0.62, 0.012, 0.12, 120], // muretas perto do nascimento
-      [0.265, 0.46, 0.03, 0.08, 130], // bilheteria
-      [0.25, 0.09, 0.05, 0.02, 60], [0.25, 0.89, 0.05, 0.02, 60], // bancos
-      [0.145, 0.1, 0.018, 0.05, 150], [0.145, 0.85, 0.018, 0.05, 150], // máquinas de bilhete
-      [0.37, 0.15, 0.01, 0.12, 100], [0.37, 0.44, 0.01, 0.12, 100], [0.37, 0.73, 0.01, 0.12, 100], // grades na beira do trilho
-      [0.27, 0.27, 0.035, 0.014, 90], [0.27, 0.716, 0.035, 0.014, 90] // caixas
+      // equilibrado: pilares grossos espalhados, 2 muretas, a bilheteria e uma grade no meio da beira do trilho
+      [0.2, 0.2, 0.03, 0.05, 330], [0.2, 0.75, 0.03, 0.05, 330], // pilares (mais grossos)
+      [0.325, 0.3, 0.03, 0.05, 330], [0.325, 0.65, 0.03, 0.05, 330],
+      [0.11, 0.24, 0.018, 0.17, 130], [0.11, 0.59, 0.018, 0.17, 130], // muretas perto do nascimento (maiores)
+      [0.255, 0.43, 0.045, 0.14, 140], // bilheteria (maior)
+      [0.37, 0.41, 0.014, 0.18, 110] // grade na beira do trilho
     ]).concat([ // ilha entre os 2 trilhos (no meio)
-      [0.47, 0.16, 0.06, 0.03, 130], [0.47, 0.81, 0.06, 0.03, 130], [0.488, 0.465, 0.024, 0.07, 330],
-      [0.475, 0.33, 0.05, 0.018, 60], [0.475, 0.652, 0.05, 0.018, 60]
+      [0.465, 0.15, 0.07, 0.05, 140], [0.465, 0.8, 0.07, 0.05, 140], [0.48, 0.43, 0.04, 0.14, 330]
     ])
   },
-  // plataforma no mar: pilhas de contêineres e caixotes (estilo porto de carga: dá pra subir de caixa em caixa e ficar lá em cima);
-  // ondas gigantes invadem por cima da borda (menos do lado do navio). [x, z, w, h, altura, cor, estilo]
+  // plataforma no mar: porto de carga (estilo Cargo): fileiras de contêineres com corredores; em vários lugares dá pra subir
+  // de caixote em contêiner e ficar lá em cima — a subida é sempre do lado do seu time, de frente pro nascimento inimigo.
+  // Ondas gigantes invadem por cima da borda (menos do lado do navio). [x, z, w, h, altura, cor, estilo, base]
   mar: {
     id: 'mar', name: 'Plataforma no mar', hazard: 'wave', ship: 'T',
     theme: { ground: '#9a7650', ground2: '#8a6844', wall: '#2f6f9f', wallEdge: '#1f4f75', border: '#8a939c', deco: 'none' },
     rects: mirR([
-      [0.14, 0.14, 0.1, 0.045, 100, '#b03a2e'], [0.14, 0.14, 0.05, 0.045, 150, '#2f6f9f', null, 100], [0.245, 0.14, 0.03, 0.045, 48, '#9a6b3f', 'wood'], // pilha em cima
-      [0.14, 0.815, 0.1, 0.045, 100, '#2f8f5b'], [0.19, 0.815, 0.05, 0.045, 150, '#d9822b', null, 100], [0.245, 0.815, 0.03, 0.045, 48, '#9a6b3f', 'wood'], // pilha embaixo
-      [0.26, 0.34, 0.03, 0.12, 100, '#d9822b'], [0.26, 0.54, 0.03, 0.12, 100, '#b03a2e'], [0.26, 0.475, 0.03, 0.05, 48, '#9a6b3f', 'wood'], // linha de contêineres no meio
-      [0.35, 0.22, 0.035, 0.03, 100, '#8a939c'], [0.35, 0.25, 0.035, 0.035, 48, '#9a6b3f', 'wood'], // caixote + contêiner (sobe de um pro outro)
-      [0.35, 0.715, 0.035, 0.035, 48, '#9a6b3f', 'wood'], [0.35, 0.75, 0.035, 0.03, 100, '#8a939c'],
-      [0.1, 0.44, 0.015, 0.12, 60, '#9a6b3f', 'wood'], // caixotes baixos perto do nascimento
-      [0.41, 0.1, 0.03, 0.03, 70, '#374151'], [0.41, 0.87, 0.03, 0.03, 70, '#374151'], // barris
-      [0.395, 0.45, 0.03, 0.1, 100, '#2f6f9f'] // contêiner em pé do lado do meio
+      [0.08, 0.3, 0.03, 0.12, 120, '#2f6f9f'], [0.08, 0.58, 0.03, 0.12, 120, '#b03a2e'], // contêineres em pé na frente do nascimento
+      // subida de cima: caixote -> contêiner -> contêiner empilhado (sobe andando pro lado do inimigo)
+      [0.2, 0.15, 0.03, 0.05, 48, '#9a6b3f', 'wood'], [0.23, 0.15, 0.1, 0.05, 100, '#b03a2e'], [0.28, 0.15, 0.05, 0.05, 150, '#2f6f9f', null, 100],
+      [0.2, 0.8, 0.03, 0.05, 48, '#9a6b3f', 'wood'], [0.23, 0.8, 0.1, 0.05, 100, '#2f8f5b'], [0.28, 0.8, 0.05, 0.05, 150, '#d9822b', null, 100],
+      [0.2, 0.24, 0.14, 0.05, 130, '#8a939c'], [0.2, 0.71, 0.14, 0.05, 130, '#8a939c'], // fileira de contêineres (corredor estreito)
+      [0.15, 0.36, 0.12, 0.05, 130, '#d9822b'], [0.15, 0.59, 0.12, 0.05, 130, '#2f6f9f'], // contêineres deitados no meio do lado
+      [0.4, 0.33, 0.05, 0.13, 130, '#2f8f5b'], [0.4, 0.54, 0.05, 0.13, 130, '#b03a2e'], // contêineres em pé perto do meio
+      [0.42, 0.47, 0.025, 0.06, 48, '#9a6b3f', 'wood'], [0.445, 0.47, 0.025, 0.06, 100, '#8a939c'] // subida pra cabine do meio (dos 2 lados)
     ]).concat([
-      [0.47, 0.46, 0.06, 0.08, 150, '#e5e7eb'], // cabine no meio
-      [0.45, 0.19, 0.1, 0.045, 100, '#2f8f5b'], [0.475, 0.19, 0.05, 0.045, 150, '#b03a2e', null, 100], // pilhas no meio, em cima e embaixo
-      [0.45, 0.765, 0.1, 0.045, 100, '#d9822b'], [0.475, 0.765, 0.05, 0.045, 150, '#2f6f9f', null, 100]
+      [0.47, 0.44, 0.06, 0.12, 150, '#e5e7eb'], // cabine no meio (dá pra subir dos 2 lados)
+      [0.44, 0.13, 0.12, 0.05, 130, '#2f8f5b'], [0.44, 0.82, 0.12, 0.05, 130, '#d9822b'] // contêineres atravessados em cima e embaixo
     ])
   },
-  // canteiro de obras (formato de octógono, com recortes): guindaste no meio; de 20 em 20 s a bola de demolição
-  // dá uma volta inteira em volta dele e arremessa quem estiver no caminho (o círculo no chão mostra por onde ela passa)
+  // canteiro de obras (formato de OCTÓGONO, cantos cortados em diagonal): guindaste no meio; de 20 em 20 s a bola de
+  // demolição dá 2 voltas em volta dele e arremessa quem estiver no caminho (o círculo no chão mostra por onde ela passa)
   obra: {
-    id: 'obra', name: 'Canteiro de obras', hazard: 'crane', voidTint: '#9ca3af', voidStyle: 'concrete',
+    id: 'obra', name: 'Canteiro de obras', hazard: 'crane',
     theme: { ground: '#8a7458', ground2: '#7a6448', wall: '#a3a3a3', wallEdge: '#6b6b6b', border: '#8f8f8f', deco: 'none' },
-    voids: mirR([[0, 0, 0.16, 0.12], [0, 0.12, 0.08, 0.1], [0, 0.78, 0.08, 0.1], [0, 0.88, 0.16, 0.12]]).concat([[0.43, 0, 0.14, 0.07], [0.43, 0.93, 0.14, 0.07]]),
+    shape: [[0.19, 0], [0.81, 0], [1, 0.3], [1, 0.7], [0.81, 1], [0.19, 1], [0, 0.7], [0, 0.3]],
     rects: mirR([
-      [0.13, 0.32, 0.05, 0.05, 70, '#a8a29e'], [0.13, 0.63, 0.05, 0.05, 70, '#a8a29e'], // blocos de concreto
-      [0.22, 0.2, 0.012, 0.14, 130, '#c08a3e', 'wood'], [0.22, 0.66, 0.012, 0.14, 130, '#c08a3e', 'wood'], // tapumes
-      [0.2, 0.46, 0.04, 0.08, 60, '#6b7280'], // pilha de canos
-      [0.3, 0.08, 0.08, 0.05, 120, '#e2b33c'], [0.3, 0.87, 0.08, 0.05, 120, '#e2b33c'], // contêiner do escritório
-      [0.26, 0.27, 0.03, 0.035, 90, '#9a6b3f', 'wood'], [0.26, 0.695, 0.03, 0.035, 90, '#9a6b3f', 'wood'], // caixotes
-      [0.1, 0.46, 0.012, 0.08, 100, '#a8a29e'] // mureta perto do nascimento
+      [0.07, 0.42, 0.02, 0.16, 130, '#a8a29e'], // mureta alta na frente do nascimento
+      [0.13, 0.33, 0.06, 0.07, 100, '#a8a29e'], [0.13, 0.6, 0.06, 0.07, 100, '#a8a29e'], // blocos de concreto
+      [0.21, 0.17, 0.02, 0.2, 150, '#c08a3e', 'wood'], [0.21, 0.63, 0.02, 0.2, 150, '#c08a3e', 'wood'], // tapumes compridos
+      [0.17, 0.46, 0.045, 0.08, 80, '#6b7280'], // pilha de canos
+      [0.3, 0.06, 0.12, 0.07, 150, '#e2b33c'], [0.3, 0.87, 0.12, 0.07, 150, '#e2b33c'], // contêiner do escritório
+      [0.23, 0.26, 0.04, 0.05, 100, '#9a6b3f', 'wood'], [0.23, 0.69, 0.04, 0.05, 100, '#9a6b3f', 'wood'] // caixotes
     ]).concat([
       [0.485, 0.465, 0.03, 0.07, 480, '#e2b33c'], // torre do guindaste
-      [0.45, 0.3, 0.1, 0.014, 100, '#a8a29e'], [0.45, 0.686, 0.1, 0.014, 100, '#a8a29e'] // muros perto do guindaste
+      [0.45, 0.33, 0.1, 0.02, 130, '#a8a29e'], [0.45, 0.65, 0.1, 0.02, 130, '#a8a29e'] // muros perto do guindaste
     ])
   },
-  // fábrica (formato de cruz, fechada com telhado): sem evento, mas o mapa se mexe sozinho —
-  // pistões gigantes sobem e descem (viram cobertura / lugar alto e somem de novo) e 2 esteiras levam quem pisa nelas
+  // fábrica (formato de HEXÁGONO, fechada com telhado): sem evento, mas o mapa se mexe sozinho — pistões gigantes sobem
+  // até a passarela do meio e até o alto das pilhas de estoque (e descem de novo), e 2 esteiras levam quem pisa nelas
   fabrica: {
-    id: 'fabrica', name: 'Fábrica', hazard: null, voidTint: '#7a4a38', voidStyle: 'brick',
+    id: 'fabrica', name: 'Fábrica', hazard: null,
     theme: { ground: '#6b6f76', ground2: '#62666d', wall: '#7a5a48', wallEdge: '#4b3a30', border: '#5a5f66', deco: 'none' },
-    voids: mirR([[0, 0, 0.17, 0.2], [0, 0.8, 0.17, 0.2]]).concat([[0.42, 0, 0.16, 0.1], [0.42, 0.9, 0.16, 0.1]]),
+    shape: [[0, 0.3], [0.5, 0], [1, 0.3], [1, 0.7], [0.5, 1], [0, 0.7]],
     rects: mirR([
-      [0.12, 0.3, 0.05, 0.09, 110, '#4b5563'], [0.12, 0.61, 0.05, 0.09, 110, '#4b5563'], // máquinas
-      [0.2, 0.22, 0.03, 0.05, 60, '#9a6b3f', 'wood'], [0.2, 0.73, 0.03, 0.05, 60, '#9a6b3f', 'wood'], // caixotes
-      [0.29, 0.44, 0.012, 0.12, 140, '#7a5a48'], // parede
-      [0.4, 0.18, 0.012, 0.12, 120, '#6b7280'], [0.4, 0.7, 0.012, 0.12, 120, '#6b7280'] // paredes de cano
-    ]).concat([[0.46, 0.2, 0.08, 0.03, 100, '#4b5563'], [0.46, 0.77, 0.08, 0.03, 100, '#4b5563']]),
-    // pistões [x, z, w, h, altura máx, fase 0..1]
-    pistons: mirR([[0.24, 0.28, 0.045, 0.07, 150, 0], [0.24, 0.65, 0.045, 0.07, 150, 0.5]]).concat([[0.47, 0.44, 0.06, 0.12, 170, 0.25]]),
+      [0.08, 0.36, 0.06, 0.1, 150, '#4b5563'], [0.08, 0.54, 0.06, 0.1, 150, '#4b5563'], // máquinas
+      [0.17, 0.26, 0.05, 0.07, 90, '#9a6b3f', 'wood'], [0.17, 0.67, 0.05, 0.07, 90, '#9a6b3f', 'wood'], // caixotes
+      [0.24, 0.2, 0.07, 0.1, 230, '#8a6a48', 'wood'], [0.24, 0.7, 0.07, 0.1, 230, '#8a6a48', 'wood'], // pilhas de estoque (dá pra subir pelo pistão)
+      [0.38, 0.22, 0.02, 0.18, 170, '#6b7280'], [0.38, 0.6, 0.02, 0.18, 170, '#6b7280'] // paredes de cano
+    ]).concat([
+      [0.45, 0.2, 0.1, 0.04, 150, '#4b5563'], [0.45, 0.76, 0.1, 0.04, 150, '#4b5563'],
+      [0.305, 0.475, 0.39, 0.05, 230, '#9aa3ae', null, 216] // passarela lá em cima cruzando o meio (sobe pelo pistão)
+    ]),
+    // pistões [x, z, w, h, altura máx, fase 0..1] — sobem até a altura da passarela / das pilhas (230)
+    pistons: mirR([[0.265, 0.45, 0.035, 0.1, 232, 0], [0.2, 0.215, 0.035, 0.07, 232, 0.5], [0.2, 0.715, 0.035, 0.07, 232, 0.25]]),
     // esteiras [x, z, w, h, velocidade em z] (a da esquerda desce, a da direita sobe)
     belts: [[0.33, 0.14, 0.05, 0.72, 115], [0.62, 0.14, 0.05, 0.72, -115]]
   }
@@ -187,13 +186,14 @@ function buildWalls3D(def, W, H, t, borderH) {
   for (const [x, z, w, h, top, tint, style, y0] of def.rects) walls.push(Object.assign({ x: x * W, y: z * H, w: w * W, h: h * H, top: top || 120 }, tint ? { tint } : {}, style ? { style } : {}, y0 ? { y0 } : {}));
   // recortes do formato (mapa irregular): blocos altos que ninguém atravessa
   for (const [x, z, w, h] of def.voids || []) walls.push(Object.assign({ x: x * W, y: z * H, w: w * W, h: h * H, top: borderH || 240, void: true }, def.voidTint ? { tint: def.voidTint, style: def.voidStyle } : {}));
-  for (const [x, z, w, h, hi, ph] of def.pistons || []) walls.push({ x: x * W, y: z * H, w: w * W, h: h * H, top: 4, piston: { lo: 4, hi, period: 9, phase: ph || 0 } });
+  for (const [x, z, w, h, hi, ph] of def.pistons || []) walls.push({ x: x * W, y: z * H, w: w * W, h: h * H, top: 4, piston: { lo: 4, hi, period: 10, phase: ph || 0 } });
   return walls;
 }
 
 export function world3D(mapId, G, MAPS, CFG) {
   if (MAPS3D[mapId] && !MAPS[mapId]) MAPS = Object.assign({}, MAPS, MAPS3D);
-  const W = Math.round(CFG.mapWidth * MAP_SCALE), H = Math.round(CFG.mapHeight * MAP_SCALE), t = CFG.wallThickness;
+  const SC = MAP_SCALE_OF[mapId] || MAP_SCALE; // (deserto um pouco maior)
+  const W = Math.round(CFG.mapWidth * SC), H = Math.round(CFG.mapHeight * SC), t = CFG.wallThickness;
   const cfg = Object.assign({}, CFG, { mapWidth: W, mapHeight: H });
   const out = { mapId, W, H, t, cfg, walls: [], portalSlots: [], lamps: null, holes: null, safeZones: [], cave: null, igloos: [], doors: [],
     terrain: mapId === 'deserto' ? 'dunes' : null, ceilingY: CEILING_Y[mapId] || null, borderH: BORDER_H[mapId] || null, hazard: MAPS[mapId] ? MAPS[mapId].hazard : null };
@@ -206,17 +206,26 @@ export function world3D(mapId, G, MAPS, CFG) {
   if (mapId === 'metro') {
     out.lanes = MAPS3D.metro.lanes.map((f) => f * W);
     // mezanino alto em cada base + 2 escadas de degraus (norte e sul) encostadas na parede de trás
-    const LH = 216, n = 10, sh = LH / n, sd = 24, lw = 150, sw = 80, z0 = 0.42 * H, z1 = 0.58 * H;
+    // escada mais larga e com parapeito só nela (em cima fica só o mezanino)
+    const LH = 216, n = 10, sh = LH / n, sd = 24, lw = 160, sw = 120, pw = 12, z0 = 0.42 * H, z1 = 0.58 * H;
     for (const mir of [0, 1]) {
       const X = (x, w) => (mir ? W - x - w : x);
       walls.push({ x: X(t, lw), y: z0, w: lw, h: z1 - z0, y0: LH - 18, top: LH, mezz: true });
       for (let k = 1; k <= n; k++) {
-        walls.push({ x: X(t, sw), y: z0 - (n - k + 1) * sd, w: sw, h: sd, top: sh * k, mstep: true });
-        walls.push({ x: X(t, sw), y: z1 + (n - k) * sd, w: sw, h: sd, top: sh * k, mstep: true });
+        for (const zz of [z0 - (n - k + 1) * sd, z1 + (n - k) * sd]) {
+          walls.push({ x: X(t, sw), y: zz, w: sw, h: sd, top: sh * k, mstep: true });
+          walls.push({ x: X(t + sw, pw), y: zz, w: pw, h: sd, top: sh * k + 44, mrail: true });
+        }
       }
     }
   }
   if (mapId === 'mar') out.ship = MAPS3D.mar.ship;
+  // formato irregular: cada lado do contorno que não é a borda retangular vira parede em diagonal
+  if (MAPS3D[mapId] && MAPS3D[mapId].shape) {
+    const P = MAPS3D[mapId].shape.map(([x, z]) => [x * W, z * H]); out.shape = P; out.segs = [];
+    const BH = BORDER_H[mapId] || 240, onEdge = (a, b) => (a[0] === b[0] && (a[0] <= 0.5 || a[0] >= W - 0.5)) || (a[1] === b[1] && (a[1] <= 0.5 || a[1] >= H - 0.5));
+    for (let i = 0; i < P.length; i++) { const A = P[i], B = P[(i + 1) % P.length]; if (!onEdge(A, B)) out.segs.push({ ax: A[0], az: A[1], bx: B[0], bz: B[1], t: t / 2 + 4, top: BH, inf: true, border: true }); }
+  }
   if (MAPS3D[mapId] && MAPS3D[mapId].belts) out.belts = MAPS3D[mapId].belts.map(([x, z, w, h, v]) => ({ x0: x * W, z0: z * H, x1: (x + w) * W, z1: (z + h) * H, vx: 0, vz: v }));
   const del = (seg) => { for (const s of [seg, mirrorSeg(seg)]) { const i = findSeg(walls, s, W, H, t); if (i >= 0) walls.splice(i, 1); } };
   const setTop = (seg, top) => { for (const s of [seg, mirrorSeg(seg)]) { const i = findSeg(walls, s, W, H, t); if (i >= 0) walls[i].top = top; } };
@@ -227,10 +236,19 @@ export function world3D(mapId, G, MAPS, CFG) {
     out.portalSlots = pw.slots; out.bridgeGap = pw.gap;
   } else if (mapId === 'floresta') {
     del([0.39, 0.5, 0.44, 0.5]); // tira os tocos do meio pra caber a casa na árvore
+    // caminho reto do meio da base até a escada da árvore: abre um vão no meio das paredes que ficavam na frente
+    for (const seg of [[0.19, 0.42, 0.19, 0.58], [0.39, 0.36, 0.39, 0.64]]) {
+      for (const sg of [seg, mirrorSeg(seg)]) {
+        const i = findSeg(walls, sg, W, H, t); if (i < 0) continue;
+        walls.splice(i, 1);
+        const gap = 0.045;
+        walls.push(segRect([sg[0], sg[1], sg[2], 0.5 - gap], W, H, t), segRect([sg[0], 0.5 + gap, sg[2], sg[3]], W, H, t));
+      }
+    }
     const th = treehouseBoxes(W / 2, H / 2);
     walls = walls.concat(th.boxes);
     out.treehouse = { x: W / 2, z: H / 2, zone: th.zone }; out.ladders = th.ladders;
-    walls = walls.concat(forestTrees(W, H, walls, [th.zone]));
+    walls = walls.concat(forestTrees(W, H, walls, [th.zone, { x0: 0, x1: W, z0: H / 2 - 40, z1: H / 2 + 40 }]));
   } else if (mapId === 'neve') {
     // 2 iglus grandes no MEIO do mapa (um em cima e um embaixo), com as entradas viradas pra base de cada time
     for (const seg of [[0.42, 0.12, 0.42, 0.24], [0.42, 0.76, 0.42, 0.88]]) del(seg);
@@ -282,6 +300,12 @@ export function world3D(mapId, G, MAPS, CFG) {
     del([0.36, 0.5, 0.42, 0.5]);
     { const i = findSeg(walls, [0.5, 0.36, 0.5, 0.64], W, H, t); if (i >= 0) walls.splice(i, 1); }
     out.pyramids = [{ x: W / 2, z: H / 2, half: 330, top: 34, h: 390 }];
+    // dunas mais pros cantos: afasta cada crista do meio do mapa (a base da pirâmide fica livre, em volta fica baixinho)
+    for (const R of walls) {
+      if (R.border) continue;
+      const cx = R.x + R.w / 2, cz = R.y + R.h / 2, nx = cx + (cx - W / 2) * 0.35, nz = cz + (cz - H / 2) * 0.3;
+      R.x = Math.max(t + 40, Math.min(W - t - 40 - R.w, nx - R.w / 2)); R.y = Math.max(t + 40, Math.min(H - t - 40 - R.h, nz - R.h / 2));
+    }
   } else if (mapId === 'cidade') {
     // postes grudados nas pontas dos muros (menos postes, braço virado pra rua)
     // cada pedaço do mapa tem UM poste (apagou = aquele lugar fica escuro de verdade), e o mapa todo tem luz (base também)
@@ -299,5 +323,5 @@ export function world3D(mapId, G, MAPS, CFG) {
 
 // opções do Sim3D a partir do mundo montado
 export function simOptions(w) {
-  return { cfg: w.cfg, hazard: w.hazard, portalSlots: w.portalSlots, holes: w.holes, terrain: w.terrain, ceilingY: w.ceilingY, borderH: w.borderH, lamps: w.lamps, safeZones: w.safeZones, pyramids: w.pyramids, lanes: w.lanes, ship: w.ship, ladders: w.ladders, belts: w.belts };
+  return { cfg: w.cfg, hazard: w.hazard, portalSlots: w.portalSlots, holes: w.holes, terrain: w.terrain, ceilingY: w.ceilingY, borderH: w.borderH, lamps: w.lamps, safeZones: w.safeZones, pyramids: w.pyramids, lanes: w.lanes, ship: w.ship, ladders: w.ladders, belts: w.belts, segs: w.segs, shape: w.shape };
 }
