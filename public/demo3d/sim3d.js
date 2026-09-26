@@ -7,7 +7,7 @@ export const WEAPONS = {
   lancador:   { name: 'Lançador de borracha', speed: 900, grav: 0, r: 5, bounces: 3, cd: 0.9, mag: 20, mags: 4, reload: 1.5, rest: 1.0, model: 'blaster', arms: '1H' },
   estilingue: { name: 'Estilingue', speed: 780, grav: 520, r: 6, bounces: 4, cd: 0.65, mag: 12, mags: 5, reload: 1.2, rest: 0.9, model: 'sling', arms: '1H' },
   mao:        { name: 'Bolinha na mão', speed: 560, grav: 900, r: 8, bounces: 5, cd: 0.45, mag: 6, mags: 8, reload: 0.9, rest: 0.85, model: 'hand', arms: 'throw' },
-  arco:       { name: 'Besta (flecha de borracha)', speed: 1500, minSpeed: 650, grav: 380, r: 5, bounces: 2, cd: 0.25, mag: 10, mags: 4, reload: 1.6, rest: 0.8, model: 'bow', arms: '2H', charge: 0.8, arrow: true },
+  arco:       { name: 'Besta (flecha de borracha)', speed: 1500, minSpeed: 650, grav: 380, r: 5, bounces: 2, cd: 0.25, mag: 10, mags: 4, reload: 1.6, rest: 0.8, model: 'bow', arms: '2H', arrow: true }, // besta: já sai na força máxima (sem segurar pra carregar)
   varinha:    { name: 'Varinha mágica', speed: 1650, grav: 0, r: 4, bounces: 3, cd: 0.5, mag: 8, mags: 5, reload: 1.3, rest: 0.95, model: 'wand', arms: '1H', ray: true },
   disco:      { name: 'Disco de borracha', speed: 620, grav: 0, r: 11, bounces: 7, cd: 1.1, mag: 8, mags: 4, reload: 1.8, rest: 1.0, model: 'disc', arms: 'throw', flat: true }
 };
@@ -112,22 +112,33 @@ export function pickPortalPairs3D(slots, prev, rnd) {
 
 // ---------- alturas por mapa ----------
 // mapas fechados (sala escura, portais, base na Lua): parede de borda até o teto; o teto ricocheteia tiro
-export const CEILING_Y = { floresta: 360, nave: 360, escuro: 360, portal: 660, metro: 330 };
-export const BORDER_H = { nave: 360, escuro: 360, portal: 660, metro: 330, mar: 100 };
+export const CEILING_Y = { floresta: 700, nave: 360, escuro: 360, portal: 660, metro: 330, fabrica: 400 };
+export const BORDER_H = { nave: 360, escuro: 360, portal: 660, metro: 330, mar: 100, fabrica: 400, obra: 240 };
 // portais: andar de cima (passarelas e pontes); só dá pra subir por um portal
 export const PLAT = { y: 300, th: 14, walk: 115, corner: 190, cornerLen: 190, bridge: 70, gapZ: 390, gap: 115 }; // cantos = quadrados largos
 // poste da cidade: altura da lâmpada, distância dela pro poste e o raio que o tiro acerta
 export const LAMP = { h: 128, off: 20, hitR: 30 };
 // árvores da floresta: tronco alto (bate tiro e gente), copa lá em cima pra não atrapalhar a visão
-export const TREE = { top: 235, r: 11 };
+export const TREE = { top: 470, r: 11 }; // copas bem altas (não atrapalham mirar pra baixo lá da casa na árvore)
 // eventos de mapa: igual ao 2D, o primeiro só acontece 25 s depois do começo e repete a cada 25 s
-export const TORNADO = { r: 210, speed: 330, spin: 1.6, turns: 2, rise: 430, throwD: 480, air: 0.9 }; // gira 2 voltas subindo até o topo e é lançado
+export const TORNADO = { r: 265, speed: 410, spin: 1.6, turns: 2, rise: 430, throwD: 480, air: 0.9 }; // gira 2 voltas subindo até o topo e é lançado
 // neve: tempestade congelante = faixa de vento gelado que atravessa o mapa de ponta a ponta (nunca no nascimento)
 export const FROST = { w: 140, slow: 0.45, time: 1.2, push: 150, spawnX: 280 };
-export const ERUPT = { r: 84, max: 2 }; // vulcão: 2 erupções = 4 buracos (2 de cada lado)
+export const ERUPT = { r: 110, max: 2 }; // (30% maior) // vulcão: 2 erupções = 4 buracos (2 de cada lado)
 // nave: meteoro cai do céu, fura o vidro do teto e fica dentro (pedra fixa que tampa visão/passagem)
 // metrô: trem passando numa linha (de cima pra baixo ou ao contrário); quem estiver no trilho é arremessado
-export const TRAIN = { half: 72, len: 900, speed: 1500, push: 650, up: 380 };
+// trem: bem comprido (tampa a visão de um lado pro outro); vai por um trilho e volta pelo outro (gap = pausa entre ida e volta)
+// fábrica: altura do pistão no tempo t (sobe, fica um pouco lá em cima, desce, fica um pouco embaixo)
+export function pistonTop(pz, t) {
+  const u = ((t + pz.phase * pz.period) % pz.period) / pz.period, k = Math.max(0, Math.min(1, 0.5 - 0.5 * Math.cos(u * Math.PI * 2)) * 1.25 - 0.125);
+  return pz.lo + (pz.hi - pz.lo) * Math.max(0, Math.min(1, k));
+}
+// canteiro de obras: bola de demolição presa no guindaste do meio, dá uma volta inteira no mapa varrendo quem estiver no caminho
+export const CRANE = { R: 440, ball: 62, y: 96, dur: 3.6, push: 620, up: 330, parkY: 340 };
+export function craneAngle(c, t) { const u = Math.max(0, Math.min(1, (t - c.t2) / CRANE.dur)), e = u * u * (3 - 2 * u); return c.a0 + c.dir * Math.PI * 2 * e; }
+export const DOOR_HOLD = 3.5; // nave: a porta fica aberta 3,5 s depois que ninguém está perto
+export const TRAIN = { half: 72, len: 1400, speed: 1650, push: 650, up: 380, gap: 0.5 };
+export const trainLegT = (H) => (H + TRAIN.len * 1.4) / TRAIN.speed; // quanto tempo o trem leva pra passar inteiro
 // mar: onda gigante que atravessa o mapa e arrasta junto quem ela pegar
 export const WAVE = { band: 240, speed: 760, carry: 0.92, lift: 140 };
 export const METEOR = { r: 95, box: 70, top: 175, hitR: 135, max: 2 }; // pedra grande
@@ -150,7 +161,7 @@ export function forestTrees(W, H, walls, avoid) {
 
 // ---------- vulcão: o mapa flutua em cima de um vulcão gigante; a erupção fura o chão ----------
 // depth = grossura da laje; quem cai passa dela e morre ao chegar em -kill
-export const HOLE = { depth: 90, kill: 300, far: 1400 };
+export const HOLE = { depth: 90, kill: 300, far: 1500 };
 // sorteia 3 pares de buracos espelhados, longe das paredes e do meio (onde ficam as áreas de reabastecer)
 export function makeLavaHoles(W, H, walls, rnd) {
   rnd = rnd || Math.random;
@@ -164,7 +175,7 @@ export function makeLavaHoles(W, H, walls, rnd) {
   };
   for (let i = 0; i < 3; i++) {
     for (let tries = 0; tries < 60; tries++) {
-      const r = 58 + rnd() * 24;
+      const r = (58 + rnd() * 24) * 1.3; // buracos 30% maiores
       const x = W * 0.17 + rnd() * (W * 0.24), z = 100 + rnd() * (H - 200);
       if (!free(x, z, r + 22) || !free(W - x, z, r + 22)) continue;
       const seed = Math.floor(rnd() * 1e6);
@@ -196,12 +207,13 @@ export class DuneField {
       const bx = horiz ? R.x + R.w - t / 2 : R.x + R.w / 2, bz = horiz ? R.y + R.h / 2 : R.y + R.h - t / 2;
       const len = Math.hypot(bx - ax, bz - az);
       // cada duna é de um tipo (igual nos 2 lados do mapa): larga e baixinha, média, ou montanha alta
-      const type = [0, 2, 1, 0, 2, 1, 2][Math.floor(this.segs.length / 2) % 7]; // as paredes vêm em pares espelhados
-      const [hk, wk] = [[0.42, 1.9], [0.8, 1.75], [1.3, 2.1]][type]; // bem mais largas que altas: dá pra subir andando
+      // 0 = larga e baixinha, 1 = média, 2 = alta, 3 = montanha bem alta (nem todas iguais)
+      const type = [1, 3, 0, 2, 3, 1, 0][Math.floor(this.segs.length / 2) % 7]; // as paredes vêm em pares espelhados
+      const [hk, wk] = [[0.42, 1.9], [0.85, 1.8], [1.4, 2.2], [2.2, 2.7]][type]; // bem mais largas que altas: dá pra subir andando
       const h = DUNE.h * hk * clamp(0.8 + len / 1400, 0.8, 1.1);
       this.segs.push({ ax, az, bx, bz, h, w: DUNE.w * wk });
     }
-    // pirâmides perto de cada nascimento (altas, fáceis de subir, com topo reto pra atirar)
+    // pirâmide (no meio do mapa: enorme, com topo reto pra atirar)
     this.pyr = (opts && opts.pyramids) || [];
     const c = DUNE.cell;
     this.nx = Math.ceil(W / c) + 1; this.nz = Math.ceil(H / c) + 1;
@@ -260,13 +272,19 @@ export class Sim3D {
     this.godIds = new Set(opts.godIds || (opts.godMode ? ['me'] : []));
     // deserto: as paredes do meio viram montanhas de areia (terreno), só a borda continua sendo muro
     this.dunes = opts.terrain === 'dunes' ? new DuneField(walls, mapW, mapH, { pyramids: opts.pyramids }) : null;
-    const all = walls.filter((R) => !R.space && !(this.dunes && DuneField.isDune(R))).map((R) => ({ x0: R.x, z0: R.y, x1: R.x + R.w, z1: R.y + R.h, y0: R.y0 || 0, top: R.top != null ? R.top : R.border ? this.P.borderH : this.P.wallH, slot: R.slotDoor, door: R.door3d }));
+    const all = walls.filter((R) => !R.space && !(this.dunes && DuneField.isDune(R))).map((R) => ({ x0: R.x, z0: R.y, x1: R.x + R.w, z1: R.y + R.h, y0: R.y0 || 0, top: R.top != null ? R.top : R.border ? this.P.borderH : this.P.wallH, slot: R.slotDoor, door: R.door3d, hatch: !!R.hatch, piston: R.piston || null }));
     // caixas fixas + as que mudam (porta do portal fechada, porta automática da nave, meteoro caído)
     this.staticBoxes = all.filter((b) => b.slot == null && b.door == null);
     this.slotBoxes = all.filter((b) => b.slot != null);
     // nave: portas automáticas que abrem pro lado quando alguém chega perto
     this.doors = all.filter((b) => b.door != null).sort((a, b) => a.door - b.door).map((b) => ({ box: b, cx: (b.x0 + b.x1) / 2, cz: (b.z0 + b.z1) / 2, open: 0, until: 0, solid: true }));
     this.meteorBoxes = [];
+    // fábrica: pistões que sobem e descem sozinhos (carregam quem está em cima) e esteiras que levam quem pisa nelas
+    this.pistons = this.staticBoxes.filter((b) => b.piston);
+    for (const b of this.pistons) b.top = pistonTop(b.piston, 0);
+    this.belts = opts.belts || [];
+    // canteiro de obras: guindaste no meio com a bola de demolição
+    this.crane = null;
     // áreas onde o furacão não entra (caverna da floresta)
     this.safeZones = opts.safeZones || [];
     this.wallT = (opts.cfg && opts.cfg.wallThickness) || 24;
@@ -287,13 +305,14 @@ export class Sim3D {
     // [intervalo, aviso, duração] — mesmo ciclo do 2D (espera -> aviso -> efeito -> repete); no 3D todos a cada 20 s
     this.hz = {
       sand: [E, v(c.sandWarn, 2), 9],
-      tornado: [E, v(c.tornadoGrow, 2), v(c.tornadoActive, 4.5)],
+      tornado: [E, v(c.tornadoGrow, 2), 6.5], // 3D: base maior, dura mais e anda mais rápido
       storm: [E, 2, v(c.stormDuration, 3.5)],
-      dark: [E, v(c.lightsFlicker, 1), v(c.lightsOffDuration, 1)],
+      dark: [E, v(c.lightsFlicker, 1), 4.5], // 3D: a luz fica apagada mais tempo
       lava: [E, v(c.meteorWarn, 2), 0.4],
       meteor: [E, v(c.meteorWarn, 2) + 0.6, 0.6],
-      train: [E, 2.5, 3.2],
-      wave: [E, 3, 3.6]
+      train: [E, 2.5, 2 * trainLegT(this.H) + TRAIN.gap + 0.1], // ida + volta
+      crane: [E, 2.5, CRANE.dur],
+      wave: [E, 3.5, 3.6] // 3,5 s de aviso: a onda vem crescendo lá do horizonte
     };
     this.tornado = null; this.storm = null;
     this.sandActive = false; this.sandK = 0; this.sandS = 0;
@@ -306,6 +325,7 @@ export class Sim3D {
     // nave: meteoros caídos e furos no vidro do teto
     this.meteors = []; this.meteorFall = null; this.meteorsDone = 0; this.ceilHoles = [];
     this.lanes = opts.lanes || []; this.train = null; // metrô
+    this.ladders = opts.ladders || []; // escadas de mão (casa na árvore)
     this.shipSide = opts.ship || null; this.wave = null; // mar
     // teto que ricocheteia tiro (folhas da floresta / vidro da nave), null = sem teto
     this.ceilingY = opts.ceilingY != null ? opts.ceilingY : null;
@@ -364,7 +384,7 @@ export class Sim3D {
         if (Math.hypot(p.x - d.cx, p.z - d.cz) < 130) near = true;
         if (this.circleBox(p.x, p.z, this.radius(p) + 2, d.box)) inside = true;
       }
-      if (near || inside) { if (d.open < 0.05 && d.until < this.time) this.events.push({ type: 'door_open', x: d.cx, z: d.cz }); d.until = this.time + 3.5; }
+      if (near || inside) { if (d.open < 0.05 && d.until < this.time) this.events.push({ type: 'door_open', x: d.cx, z: d.cz }); d.until = this.time + DOOR_HOLD; }
       const target = this.time < d.until ? 1 : 0;
       d.open = clamp(d.open + (target ? 1 : -1) * dt / 0.4, 0, 1);
       const solid = d.open < 0.35 && !inside;
@@ -442,7 +462,7 @@ export class Sim3D {
     p.nades = 1; p.smokes = 1; p.potions = 1; p.reloadUntil = 0; p.charge0 = 0;
     p.protectUntil = this.time + this.P.protect; p.invulnUntil = 0;
     p.yaw = p.team === 'A' ? 0 : Math.PI;
-    p.lastHitBy = {}; p.spin = null; p.slowUntil = 0; p.aiming = false; p.aimT0 = 0; p.drinkUntil = 0;
+    p.lastHitBy = {}; p.spin = null; p.ladder = null; p.slowUntil = 0; p.aiming = false; p.aimT0 = 0; p.drinkUntil = 0;
   }
   weaponDef(p) { return this.WEAPONS[p.primary]; }
   // troca a arma principal (menu Esc)
@@ -471,6 +491,7 @@ export class Sim3D {
   }
   jump(p) {
     if (!p.alive) return;
+    if (p.ladder) { const L = p.ladder; p.ladder = null; p.vy = 260; p.vx = L.nx * 200; p.vz = L.nz * 200; p.jumps = 1; this.events.push({ type: 'jump', id: p.id }); return; } // pula pra fora da escada
     if (p.grounded) { // pulo normal: sem limite, vai para onde você está andando
       p.vy = this.P.jumpV; p.grounded = false; p.jumps = 1;
       this.events.push({ type: 'jump', id: p.id });
@@ -590,6 +611,7 @@ export class Sim3D {
     this.time += dt;
     this.updatePhase();
     if (this.phase === 'matchEnd') { const ev = this.events; this.events = []; return ev; }
+    this.updatePistons();
     for (const p of this.players.values()) this.updatePlayer(p, dt);
     this.updateBullets(dt);
     this.updateNades(dt);
@@ -614,7 +636,7 @@ export class Sim3D {
         nades: p.nades, smokes: p.smokes, potions: p.potions, djReadyAt: p.djReadyAt || 0,
         k: p.k, d: p.d, a: p.a, charge0: p.charge0 || 0, fireReady: p.fireReady || 0,
         protectUntil: p.protectUntil || 0, respawnAt: p.respawnAt || 0, deadAt: p.deadAt || 0, lastHitBy: p.lastHitBy || {},
-        look: p.look, slowUntil: p.slowUntil || 0, spin: !!p.spin, sprinting: !!p.sprinting, aiming: !!p.aiming, aimT0: p.aimT0 || 0, drinkUntil: p.drinkUntil || 0 });
+        look: p.look, slowUntil: p.slowUntil || 0, spin: !!p.spin, climb: !!p.ladder, sprinting: !!p.sprinting, aiming: !!p.aiming, aimT0: p.aimT0 || 0, drinkUntil: p.drinkUntil || 0 });
     }
     return {
       time: this.time, players,
@@ -626,11 +648,12 @@ export class Sim3D {
       hazard: this.hazard, sandK: this.sandK, lightOn: this.lightOn, lightS: this.lightS,
       tornado: this.tornado ? { x: this.tornado.x, z: this.tornado.z, s: this.tornado.s, k: this.tornado.k } : null,
       storm: this.storm ? { x: this.storm.x, w: this.storm.w, dir: this.storm.dir, s: this.storm.s, k: this.storm.k } : null,
-      train: this.train ? { x: this.train.x, dir: this.train.dir, t2: this.train.t2, s: this.train.s, k: this.train.k } : null,
+      train: this.train ? { x: this.train.x, dir: this.train.dir, t2: this.train.t2, lt: this.train.lt, on: this.train.on, xb: this.train.xb, leg: this.train.leg, s: this.train.s, k: this.train.k } : null,
+      crane: this.crane ? { a0: this.crane.a0, dir: this.crane.dir, t2: this.crane.t2, s: this.crane.s, k: this.crane.k } : null,
       wave: this.wave ? { side: this.wave.side, t2: this.wave.t2, s: this.wave.s, k: this.wave.k } : null,
       holes: this.holes, erupt: this.erupt && !this.erupt.done ? { pts: this.erupt.pts, r: this.erupt.r } : null,
       lamps: this.lamps.map((l) => ({ i: l.i, x: l.x, z: l.z, dx: l.dx, dz: l.dz, offUntil: l.offUntil })),
-      portalPairs: this.portalPairs, portalN: this.portalN, doors: this.doors.map((d) => Math.round(d.open * 100) / 100),
+      portalPairs: this.portalPairs, portalN: this.portalN, doors: this.doors.map((d) => Math.round(d.open * 100) / 100), doorsT: this.doors.map((d) => Math.max(0, Math.round((d.until - this.time) * 20) / 20)),
       meteors: this.meteors, meteorFall: this.meteorFall, ceilHoles: this.ceilHoles, lastKill: this.lastKill,
       mode: this.mode, phase: this.phase, phaseUntil: this.phaseUntil, hzStart: this.hzStart, score: this.score, round: this.round,
       totalRounds: this.totalRounds, killLimit: this.killLimit, hillTarget: this.hillTarget, matchTime: this.matchTime,
@@ -676,9 +699,12 @@ export class Sim3D {
     const r = this.radius(p);
     // horizontal: bate nos muros que estão na altura do corpo
     p.x += p.vx * dt; p.z += p.vz * dt;
+    // esteira da fábrica: quem está pisando nela é levado junto
+    if (this.belts.length && p.grounded && p.y < 2) for (const B of this.belts) if (p.x > B.x0 && p.x < B.x1 && p.z > B.z0 && p.z < B.z1) { p.x += B.vx * dt; p.z += B.vz * dt; break; }
     for (let it = 0; it < 3; it++) {
       for (const b of this.boxes) {
         if (p.y >= b.top - 2 || p.y + this.heightOf(p) <= b.y0 + 0.5) continue; // em cima do muro / por baixo (parede acima do portal, plataforma)
+        if (b.hatch && p.ladder) continue; // subindo a escada: passa pelo alçapão
         // degrau baixinho (escada): sobe andando
         if (p.grounded && b.top - p.y <= 22 && b.y0 <= p.y + 1 && this.circleBox(p.x, p.z, r, b)) { p.y = b.top; continue; }
         const o = this.pushOut(p.x, p.z, r, b);
@@ -705,6 +731,8 @@ export class Sim3D {
       const dx = p.x - pit.x, dz = p.z - pit.z, d = Math.hypot(dx, dz), lim = holeEdgeR(pit, Math.atan2(dz, dx)) - r * 0.5;
       if (d > lim && d > 0) { p.x = pit.x + dx / d * lim; p.z = pit.z + dz / d * lim; }
     }
+    // escada de mão: andando pra frente de cara pra escada, sobe; pra trás, desce; pulo solta
+    if (this.ladders.length && this.updateLadder(p, dt, r)) { this.fireInput(p); return; }
     // vertical: gravidade, chão (areia / buraco) e topo dos muros
     const y0 = p.y, ph = this.heightOf(p);
     p.vy -= this.P.gravity * dt; p.y += p.vy * dt;
@@ -723,10 +751,43 @@ export class Sim3D {
     } else p.grounded = false;
     // lá embaixo é lava
     if (this.holes && p.y < -HOLE.kill) { this.lavaFall(p); return; }
-    // atirar / usar
+    this.fireInput(p);
+  }
+  // atirar / usar
+  fireInput(p) {
     if (!this.canAct() || p.sprinting || this.time < p.sprintOut) { if (p.charge0 && !p.input.fire) p.charge0 = 0; }
     else if (p.input.fire) this.useWeapon(p, false);
     else if (p.charge0) this.useWeapon(p, true); // soltou o botão do arco
+  }
+  // escada de mão presa no tronco: devolve true enquanto está pendurado nela
+  updateLadder(p, dt, r) {
+    const CLIMB = 210;
+    let L = p.ladder;
+    if (!L) {
+      if (!p.input.fwd) return false;
+      for (const q of this.ladders) {
+        const dx = p.x - q.x, dz = p.z - q.z, out = dx * q.nx + dz * q.nz, lat = -dx * q.nz + dz * q.nx;
+        if (out < 0 || out > r + 16 || Math.abs(lat) > q.half) continue;
+        if (-(Math.cos(p.yaw) * q.nx + Math.sin(p.yaw) * q.nz) < 0.3) continue; // precisa estar de frente pra escada
+        // embaixo: W sobe; lá em cima (no alçapão): S desce
+        const up = p.input.fwd > 0 && p.y >= -2 && p.y < q.top - 4, down = p.input.fwd < 0 && p.grounded && Math.abs(p.y - q.top) < 3;
+        if (!up && !down) continue;
+        if (down) p.y = q.top - 6;
+        L = q; break;
+      }
+      if (!L) return false;
+      p.ladder = L; this.events.push({ type: 'ladder', id: p.id });
+    }
+    const lat = Math.max(-8, Math.min(8, -(p.x - L.x) * L.nz + (p.z - L.z) * L.nx));
+    p.x = L.x + L.nx * (r + 3) - L.nz * lat; p.z = L.z + L.nz * (r + 3) + L.nx * lat;
+    p.vx = p.vz = 0; p.vy = 0; p.grounded = false; p.sprinting = false;
+    p.y += CLIMB * dt * Math.sign(p.input.fwd);
+    if (p.y >= L.top) { // chegou lá em cima: sai pelo alçapão e fica em pé no chão da casinha
+      p.y = L.top; p.ladder = null; p.vy = 0; p.grounded = true; p.djUsed = false; p.jumps = 0;
+      return false;
+    }
+    if (p.y <= 0) { p.y = 0; p.ladder = null; p.grounded = true; return false; }
+    return true;
   }
 
   useWeapon(p, released) {
@@ -764,7 +825,7 @@ export class Sim3D {
   }
   muzzleAndTarget(p) {
     const [dx, dy, dz] = this.aimDir(p);
-    const ex = p.x, ey = p.y + this.P.eye * (this.radius(p) / this.P.radius > 0.9 ? 1 : 0.8), ez = p.z; // mesma altura da câmera
+    const ex = p.x, ey = p.y + this.P.eye * (this.radius(p) / this.P.radius), ez = p.z; // mesma altura da câmera (segue o tamanho)
     const eye = p.camPos || [ex, ey, ez]; // na 3ª pessoa a mira sai da câmera
     const t = this.raycast(eye[0], eye[1], eye[2], dx, dy, dz, 4000, p.id);
     const tx = eye[0] + dx * t, ty = eye[1] + dy * t, tz = eye[2] + dz * t;
@@ -824,6 +885,7 @@ export class Sim3D {
     else if (this.hazard === 'meteor') this.updateMeteor();
     else if (this.hazard === 'train') this.updateTrain();
     else if (this.hazard === 'wave') this.updateWave(dt);
+    else if (this.hazard === 'crane') this.updateCrane();
   }
   // vulcão: caiu na lava = morreu (o abate vai pra quem acertou por último, se foi há pouco)
   lavaFall(p) {
@@ -900,7 +962,7 @@ export class Sim3D {
       const dx = p.x - T.x, dz = p.z - T.z;
       if (dx * dx + dz * dz < (R + this.radius(p)) ** 2) {
         T.hit.add(p.id);
-        p.spin = { t0: this.time, ang: Math.atan2(dz, dx), r0: Math.hypot(dx, dz), y0: p.y };
+        p.ladder = null; p.spin = { t0: this.time, ang: Math.atan2(dz, dx), r0: Math.hypot(dx, dz), y0: p.y };
         this.events.push({ type: 'caught', id: p.id });
       }
     }
@@ -914,7 +976,7 @@ export class Sim3D {
     const e = k * k * (3 - 2 * k), ang = S.ang + k * Math.PI * 2 * TORNADO.turns;
     const rr = S.r0 * (1 - e) + TORNADO.r * (0.45 + 0.55 * Math.max(0, e - 0.4) / 0.6) * e;
     p.x = S.cx + Math.cos(ang) * rr; p.z = S.cz + Math.sin(ang) * rr;
-    p.y = S.y0 + TORNADO.rise * e; p.vx = p.vz = p.vy = 0; p.grounded = false;
+    p.y = Math.min(S.y0 + TORNADO.rise * e, this.ceilingY != null ? this.ceilingY - 80 : 1e9); p.vx = p.vz = p.vy = 0; p.grounded = false;
     p.yaw += dt * 9; p.input.fire = false;
     if (k < 1) return;
     // joga longe: escolhe uma direção que cai dentro do mapa (e fora de buraco)
@@ -1021,7 +1083,7 @@ export class Sim3D {
   // de onde sai e com que velocidade a granada (a mão vai pra frente e um pouco pra cima; o navegador desenha o arco com isso)
   nadeLaunch(p) {
     const [dx, dy, dz] = this.aimDir(p), h = Math.hypot(dx, dz) || 1;
-    const ox = p.x + dx / h * 26, oy = p.y + this.P.eye * (this.radius(p) / this.P.radius > 0.9 ? 1 : 0.8) + 6, oz = p.z + dz / h * 26;
+    const ox = p.x + dx / h * 26, oy = p.y + this.P.eye * (this.radius(p) / this.P.radius) + 6, oz = p.z + dz / h * 26;
     return [ox, oy, oz, dx * this.P.nadeSpeed + p.vx * 0.4, dy * this.P.nadeSpeed + this.P.nadeUp + Math.max(0, p.vy) * 0.3, dz * this.P.nadeSpeed + p.vz * 0.4];
   }
   // prevê onde a granada vai parar (pra mostrar o arco e a área da explosão antes de jogar)
@@ -1044,14 +1106,20 @@ export class Sim3D {
     const cy = this.cycle('train');
     if (cy.s === 0) { if (this.train) { this.train = null; this.events.push({ type: 'train_end' }); } return; }
     if (!this.train || this.train.idx !== cy.idx) {
-      const x = this.lanes[Math.floor(Math.random() * this.lanes.length)], dir = Math.random() < 0.5 ? 1 : -1;
-      const [interval, , dur] = this.hz.train, t2 = this.hzStart + cy.idx * (interval + dur) + interval;
-      this.train = { idx: cy.idx, x, dir, t2, s: cy.s, k: 0, hit: [] };
+      // sorteia por qual trilho começa e pra que lado; na volta vem pelo outro trilho, no sentido contrário
+      const i0 = Math.floor(Math.random() * this.lanes.length), x = this.lanes[i0], x2 = this.lanes.length > 1 ? this.lanes[(i0 + 1) % this.lanes.length] : x, dir = Math.random() < 0.5 ? 1 : -1;
+      const [interval] = this.hz.train, dur = this.hz.train[2], t2 = this.hzStart + cy.idx * (interval + dur) + interval;
+      this.train = { idx: cy.idx, x, dir, xa: x, xb: x2, dir0: dir, t2, lt: t2, leg: 0, s: cy.s, k: 0, hit: [], on: false };
       this.events.push({ type: 'train_warn', x, dir });
     }
     const T = this.train; T.s = cy.s; T.k = cy.k;
     if (cy.s !== 2) return;
-    const front = (T.dir > 0 ? -TRAIN.len * 0.2 : this.H + TRAIN.len * 0.2) + T.dir * TRAIN.speed * (this.time - T.t2), back = front - T.dir * TRAIN.len;
+    const legT = trainLegT(this.H), el = this.time - T.t2;
+    const leg = el < legT ? 0 : el >= legT + TRAIN.gap ? 1 : -1;
+    if (leg === 1 && T.leg !== 1) { T.leg = 1; T.x = T.xb; T.dir = -T.dir0; T.lt = T.t2 + legT + TRAIN.gap; T.hit = []; this.events.push({ type: 'train_back', x: T.x, dir: T.dir }); }
+    T.on = leg >= 0;
+    if (!T.on) return;
+    const front = (T.dir > 0 ? -TRAIN.len * 0.2 : this.H + TRAIN.len * 0.2) + T.dir * TRAIN.speed * (this.time - T.lt), back = front - T.dir * TRAIN.len;
     T.front = front;
     for (const p of this.players.values()) {
       if (!p.alive || T.hit.includes(p.id) || Math.abs(p.x - T.x) > TRAIN.half + this.radius(p) || p.y > 150) continue;
@@ -1061,6 +1129,41 @@ export class Sim3D {
       p.vx = side * TRAIN.push; p.vz = T.dir * TRAIN.push * 0.7; p.vy = TRAIN.up; p.grounded = false;
       this.events.push({ type: 'train_hit', id: p.id, x: p.x, z: p.z });
       this.damage(p, null, 'train');
+    }
+  }
+  // fábrica: move os pistões; quem estava em pé em cima vai junto
+  updatePistons() {
+    if (!this.pistons.length) return;
+    for (const b of this.pistons) {
+      const old = b.top; b.top = pistonTop(b.piston, this.time);
+      if (b.top === old) continue;
+      for (const p of this.players.values()) {
+        if (!p.alive || !p.grounded || Math.abs(p.y - old) > 3 || !this.circleBox(p.x, p.z, this.radius(p) * 0.7, b)) continue;
+        p.y = b.top;
+      }
+    }
+  }
+  // canteiro de obras: a bola de demolição dá uma volta inteira em volta do guindaste e arremessa quem estiver no caminho
+  updateCrane() {
+    const cy = this.cycle('crane');
+    if (cy.s === 0) { if (this.crane) { this.crane.s = 0; } return; }
+    if (!this.crane || this.crane.idx !== cy.idx) {
+      const [interval] = this.hz.crane, dur = this.hz.crane[2], t2 = this.hzStart + cy.idx * (interval + dur) + interval;
+      this.crane = { idx: cy.idx, a0: Math.random() * Math.PI * 2, dir: Math.random() < 0.5 ? 1 : -1, t2, s: cy.s, k: 0, hit: [] };
+      this.events.push({ type: 'crane_warn' });
+    }
+    const C = this.crane; C.s = cy.s; C.k = cy.k;
+    if (cy.s !== 2) return;
+    const a = craneAngle(C, this.time), bx = this.W / 2 + Math.cos(a) * CRANE.R, bz = this.H / 2 + Math.sin(a) * CRANE.R;
+    for (const p of this.players.values()) {
+      if (!p.alive || C.hit.includes(p.id)) continue;
+      const r = this.radius(p), dx = p.x - bx, dz = p.z - bz;
+      if (dx * dx + dz * dz > (CRANE.ball + r) ** 2 || p.y > CRANE.y + CRANE.ball || p.y + this.heightOf(p) < CRANE.y - CRANE.ball) continue;
+      C.hit.push(p.id); p.ladder = null;
+      const tx = -Math.sin(a) * C.dir, tz = Math.cos(a) * C.dir, rx = Math.cos(a), rz = Math.sin(a);
+      p.vx = tx * CRANE.push + rx * 200; p.vz = tz * CRANE.push + rz * 200; p.vy = CRANE.up; p.grounded = false;
+      this.events.push({ type: 'crane_hit', id: p.id, x: p.x, z: p.z });
+      this.damage(p, null, 'crane');
     }
   }
   // mar: a onda vem de um lado sorteado (menos o do navio), passa por cima da borda e arrasta quem pegar
@@ -1161,7 +1264,7 @@ export class Sim3D {
           if (!q.alive || !this.hostile(b.owner, b.team, q) || this.time < q.protectUntil) continue;
           const r = this.radius(q), h = this.heightOf(q);
           const cy = clamp(b.y, q.y + r * 0.5, q.y + h - r * 0.4);
-          if ((b.x - q.x) ** 2 + (b.z - q.z) ** 2 + (b.y - cy) ** 2 < (r + b.r) ** 2) { this.damage(q, b.owner, b.kind); dead = true; break; }
+          if ((b.x - q.x) ** 2 + (b.z - q.z) ** 2 + (b.y - cy) ** 2 < (r + b.r) ** 2) { this.damage(q, b.owner, b.kind, b); dead = true; break; }
         }
         // cidade à noite: atirar no poste apaga a luz por um tempo
         if (!dead) for (const L of this.lamps) {
@@ -1214,7 +1317,7 @@ export class Sim3D {
     }
   }
 
-  damage(v, by, weapon) {
+  damage(v, by, weapon, bullet) {
     if (!v.alive || this.time < v.invulnUntil || this.time < v.protectUntil) return;
     if (this.godIds.has(v.id)) { // sala de teste / modo teste: você não morre, só mostra o marcador de acerto
       v.invulnUntil = this.time + this.P.invuln;
@@ -1230,7 +1333,8 @@ export class Sim3D {
       for (const id in v.lastHitBy) if (id !== by && this.time - v.lastHitBy[id] < 10) { const h = this.players.get(id); if (h) h.a++; }
       // lápide com o nome no lugar da morte (o corpo some)
       this.tombs.push({ id: this.nextId++, x: v.x, y: v.y, z: v.z, name: v.name, team: v.team, until: this.time + this.P.tombTime, t0: this.time });
-      this.lastKill = { killer: by || null, victim: v.id, t: this.time };
+      // (killcam: qual tiro matou, quando saiu e se quem atirou estava em 1ª pessoa)
+      this.lastKill = { killer: by || null, victim: v.id, t: this.time, bid: bullet ? bullet.id : null, bt0: bullet ? bullet.t0 : null, fp: a ? !!a.fp : false };
       this.events.push({ type: 'kill', killer: by, victim: v.id, weapon });
     } else this.events.push({ type: 'hit', by, victim: v.id, weapon });
   }
@@ -1253,7 +1357,7 @@ export class Sim3D {
     this.round++;
     this.bullets = []; this.nades = []; this.smokes = []; this.tombs = [];
     if (this.holes) { this.holes = []; this.erupted = 0; this.erupt = null; }
-    this.tornado = null; this.storm = null; this.train = null; this.wave = null; this.sandK = 0; this.sandS = 0; this.sandActive = false; this.lightOn = true; this.lightS = 0;
+    this.tornado = null; this.storm = null; this.train = null; this.wave = null; this.crane = null; this.sandK = 0; this.sandS = 0; this.sandActive = false; this.lightOn = true; this.lightS = 0;
     for (const L of this.lamps) L.offUntil = 0;
     this.meteors = []; this.meteorBoxes = []; this.ceilHoles = []; this.meteorsDone = 0; this.meteorFall = null;
     for (const d of this.doors) { d.open = 0; d.until = 0; d.solid = true; }

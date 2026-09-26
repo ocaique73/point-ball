@@ -275,7 +275,7 @@ async function setup3D(io, CFG) {
       const p = room.sim.players.get(m.pid); if (!p || !p.alive) return;
       p.input.fwd = Math.max(-1, Math.min(1, Number(d.fwd) || 0));
       p.input.side = Math.max(-1, Math.min(1, Number(d.side) || 0));
-      p.input.fire = !!d.fire; p.input.sprint = !!d.sprint; p.input.aim = !!d.aim;
+      p.input.fire = !!d.fire; p.input.sprint = !!d.sprint; p.input.aim = !!d.aim; p.fp = !!d.fp; // fp = está em 1ª pessoa (killcam)
       if (Number.isFinite(d.yaw)) p.yaw = Number(d.yaw);
       if (Number.isFinite(d.pitch)) p.pitch = Math.max(-1.5, Math.min(1.5, Number(d.pitch)));
     });
