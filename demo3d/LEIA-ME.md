@@ -34,6 +34,8 @@ cadência/recarga de cada arma — ligar/desligar "você pode morrer" (os bots s
 
 Tem física 3D própria (`public/demo3d/sim3d.js`): tiro e granada seguem a mira, ricochete no muro e no chão, pulo duplo. 8 mapas e bots com 3 níveis.
 
+**Novidades da v0.22** (só no 3D): mapas novos Canteiro de obras (bola de demolição) e Fábrica (pistões e esteiras), killcam seguindo o tiro, pirâmide gigante, casa na árvore com escadas de mão, trem de ida e volta, onda vindo do horizonte, prédios em volta da cidade e cratera enorme no vulcão.
+
 **Novidades da v0.21** (só no 3D): mapas novos Estação de metrô (trem passando) e Plataforma no mar (onda gigante, navio com torcida), varinha mágica, casa na árvore, pirâmides no deserto, mira reta, granada com arco de alcance e killcam com o boneco caindo.
 
 **Novidades da v0.20** (só no 3D): mapas 40% maiores e redesenhados (`public/demo3d/world3d.js`), portais que abrem/fecham sozinhos com andar de cima, meteoros e portas na nave, caverna na floresta, iglus na neve, tempestade congelante, lava furando o chão, mira com botão direito (zoom + barra de força), besta na 1ª pessoa, killcam final com efeito de lente, animação da poção e a aba **Personagem** (5 personagens, roupas e cores por tons do time — `public/demo3d/looks3d.js`). Os bonecos são do KayKit Adventurers (Kay Lousberg, CC0).
