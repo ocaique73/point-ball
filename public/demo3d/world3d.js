@@ -1,10 +1,50 @@
 // Monta o mundo da versão 3D a partir dos mapas do 2D (servidor e navegador usam isto, pra ficar igual).
 // Os mapas do 3D são 40% maiores e têm coisas só deles: casa na árvore na floresta, iglus na neve, portas automáticas
 // na nave, andar de cima no mapa dos portais, postes nas pontas dos muros da cidade, paredes mais altas etc.
-import { PORTAL, PLAT, BORDER_H, CEILING_Y, forestTrees } from './sim3d.js';
+import { PORTAL, PLAT, BORDER_H, CEILING_Y, forestTrees, TREE } from './sim3d.js';
+import BAKED_EDITS from './edits3d.js';
+
+// ---------- editor de mapa: os ajustes salvos (edits3d.js) e, só no navegador de quem edita, o rascunho do editor ----------
+let EDIT_OVERRIDE = null;
+export function setEditOverride(o) { EDIT_OVERRIDE = o && typeof o === 'object' ? o : null; }
+export function activeEdits() { return EDIT_OVERRIDE || BAKED_EDITS || {}; }
+export const bakedEdits = () => BAKED_EDITS;
+// o que o editor pode mexer: muros/caixas soltos, paredes diagonais, montanhas de areia, pirâmides e árvores
+// (as peças especiais — iglu, casa na árvore, torres, portas, navio... — ficam fixas)
+const SPECIAL = ['border', 'space', 'igloo', 'thouse', 'door3d', 'doorFrame', 'pframe', 'plat', 'slotDoor', 'mezz', 'mstep', 'mrail', 'piston', 'mast', 'keep', 'kroof', 'merlon', 'tpillar', 'cdeck', 'cabin', 'crail', 'sstep', 'smast', 'rail', 'bridge', 'void', 'hatch'];
+export function isEditable(R) { return !SPECIAL.some((k) => R[k] != null && R[k] !== false); }
+const r4 = (v) => Math.round(v * 10000) / 10000;
+export function editableItems(w) {
+  const W = w.W, H = w.H, out = [];
+  for (const R of w.walls) {
+    if (!isEditable(R)) continue;
+    if (R.crest) out.push({ t: 'dune', ax: r4(R.crest[0] / W), az: r4(R.crest[1] / H), bx: r4(R.crest[2] / W), bz: r4(R.crest[3] / H), hk: R.dune[0], wk: R.dune[1] });
+    else if (R.tree) out.push({ t: 'tree', x: r4((R.x + R.w / 2) / W), z: r4((R.y + R.h / 2) / H) });
+    else out.push(Object.assign({ t: 'box', x: r4(R.x / W), z: r4(R.y / H), w: r4(R.w / W), h: r4(R.h / H), top: Math.round(R.top != null ? R.top : 120) }, R.y0 ? { y0: Math.round(R.y0) } : {}, R.tint ? { tint: R.tint } : {}, R.style ? { style: R.style } : {}));
+  }
+  for (const S of w.segs || []) if (S.user) out.push({ t: 'wall2', ax: r4(S.ax / W), az: r4(S.az / H), bx: r4(S.bx / W), bz: r4(S.bz / H), th: Math.round(S.t * 2), top: Math.round(S.top) });
+  for (const q of w.pyramids || []) out.push({ t: 'pyr', x: r4(q.x / W), z: r4(q.z / H), half: q.half, top: q.top, h: q.h });
+  return out;
+}
+function applyMapEdits(mapId, out, walls, W, H) {
+  const E = activeEdits().maps && activeEdits().maps[mapId];
+  if (!E || !Array.isArray(E.items)) return walls;
+  const keep = walls.filter((R) => !isEditable(R)), n = (v, d) => (Number.isFinite(+v) ? +v : d);
+  const pyr = [];
+  for (const it of E.items) {
+    if (it.t === 'box') keep.push(Object.assign({ x: n(it.x, 0) * W, y: n(it.z, 0) * H, w: Math.max(4, n(it.w, 0.02) * W), h: Math.max(4, n(it.h, 0.02) * H), top: n(it.top, 120) }, it.y0 ? { y0: n(it.y0, 0) } : {}, it.tint ? { tint: String(it.tint).slice(0, 9) } : {}, it.style ? { style: String(it.style).slice(0, 12) } : {}));
+    else if (it.t === 'tree') keep.push({ x: n(it.x, 0.5) * W - TREE.r, y: n(it.z, 0.5) * H - TREE.r, w: TREE.r * 2, h: TREE.r * 2, tree: true, top: TREE.top });
+    else if (it.t === 'dune') { const ax = n(it.ax, 0) * W, az = n(it.az, 0) * H, bx = n(it.bx, 0) * W, bz = n(it.bz, 0) * H; keep.push({ x: Math.min(ax, bx) - 12, y: Math.min(az, bz) - 12, w: Math.abs(bx - ax) + 24, h: Math.abs(bz - az) + 24, top: 120, crest: [ax, az, bx, bz], dune: [n(it.hk, 1), n(it.wk, 2)] }); }
+    else if (it.t === 'wall2') { out.segs = out.segs || []; out.segs.push({ ax: n(it.ax, 0) * W, az: n(it.az, 0) * H, bx: n(it.bx, 0) * W, bz: n(it.bz, 0) * H, t: Math.max(4, n(it.th, 24)) / 2, top: n(it.top, 120), user: true }); }
+    else if (it.t === 'pyr') pyr.push({ x: n(it.x, 0.5) * W, z: n(it.z, 0.5) * H, half: n(it.half, 230), top: n(it.top, 26), h: n(it.h, 270) });
+  }
+  if (mapId === 'deserto' || pyr.length) out.pyramids = pyr;
+  return keep;
+}
+
 
 export const MAP_SCALE = 1.4;
-export const MAP_SCALE_OF = { deserto: 1.6 };
+export const MAP_SCALE_OF = { deserto: 1.6, castelo: 1.7 };
 
 const segRect = (s, W, H, t) => {
   const x1 = s[0] * W, y1 = s[1] * H, x2 = s[2] * W, y2 = s[3] * H;
@@ -14,14 +54,13 @@ const same = (a, b) => Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5 &&
 function findSeg(walls, seg, W, H, t) { const r = segRect(seg, W, H, t); return walls.findIndex((R) => !R.border && same(R, r)); }
 const mirrorSeg = (s) => [1 - s[0], s[1], 1 - s[2], s[3]];
 
-// iglu: anel de blocos (redondo por fora) com 2 entradas opostas e um teto em cima
-export const IGLOO = { r: 250, wall: 160, roof: 46, seg: 44, door: 12 * Math.PI / 180, open: 50 }; // o dobro do tamanho; open = meia largura da porta (visual)
+// iglu: anel de blocos (redondo por fora) com 3 entradas em triângulo (120° uma da outra: nenhuma dá visão direta pra outra) e um teto em cima
+export const IGLOO = { r: 250, wall: 160, roof: 46, seg: 44, door: 12 * Math.PI / 180, open: 50, doors: [0, 2 * Math.PI / 3, -2 * Math.PI / 3] }; // o dobro do tamanho; open = meia largura da porta (visual)
 function iglooBoxes(x, z, ang, k) {
   const out = [], R = IGLOO.r, N = IGLOO.seg, s = 2 * R * Math.sin(Math.PI / N) + 6, rr = R - s / 2;
   for (let i = 0; i < N; i++) {
     const a = (i + 0.5) / N * Math.PI * 2;
-    let d1 = Math.abs(Math.atan2(Math.sin(a - ang), Math.cos(a - ang))), d2 = Math.abs(Math.atan2(Math.sin(a - ang - Math.PI), Math.cos(a - ang - Math.PI)));
-    if (Math.min(d1, d2) < IGLOO.door) continue; // entrada
+    if (IGLOO.doors.some((k) => Math.abs(Math.atan2(Math.sin(a - ang - k), Math.cos(a - ang - k))) < IGLOO.door)) continue; // entrada
     const cx = x + Math.cos(a) * rr, cz = z + Math.sin(a) * rr;
     out.push({ x: cx - s / 2, y: cz - s / 2, w: s, h: s, top: IGLOO.wall, igloo: k });
   }
@@ -30,10 +69,42 @@ function iglooBoxes(x, z, ang, k) {
   return out;
 }
 
+// ---------- peças redondas (paredes em anel feitas de pedacinhos de parede reta) ----------
+// anel de parede: n pedaços; "cut(a)" diz, pra cada pedaço (ângulo do meio), as faixas de altura [y0, top] que existem
+function ringSegs(cx, cz, R, half, n, cut) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const a0 = i / n * Math.PI * 2, a1 = (i + 1) / n * Math.PI * 2, am = (a0 + a1) / 2;
+    for (const [y0, top] of cut(am)) if (top - y0 > 1) out.push({ ax: cx + Math.cos(a0) * R, az: cz + Math.sin(a0) * R, bx: cx + Math.cos(a1) * R, bz: cz + Math.sin(a1) * R, t: half, y0, top, ring: true });
+  }
+  return out;
+}
+const angDist = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+// torre do castelo: parede redonda, coluna no meio e rampa em espiral por dentro (2 voltas) até a sacada lá em cima.
+// Embaixo 2 portas; lá em cima a rampa chega num patamar com uma porta aberta pra sacada em volta da torre (sem parapeito).
+export const TOWER = { R: 112, half: 8, n: 28, pillar: 22, r0: 32, r1: 100, top: 300, turns: 2, wallTop: 420, door: 48, lintel: 130, bal: 72, balDoor: 100 };
+function towerParts(cx, cz, a0, dir) {
+  const T = TOWER, segs = [], discs = [], spirals = [], boxes = [];
+  const gd = [a0 - dir * 0.2, a0 - dir * 1.9], bd = a0 + dir * 0.42; // portas de baixo (logo antes do começo da rampa e mais pro lado) e da sacada
+  const dh = T.door / T.R; // meia largura da porta em ângulo
+  segs.push(...ringSegs(cx, cz, T.R, T.half, T.n, (am) => {
+    if (gd.some((g) => angDist(am, g) < dh)) return [[T.lintel, T.wallTop]]; // porta embaixo (com verga em cima)
+    if (angDist(am, bd) < dh * 1.1) return [[0, T.top], [T.top + T.balDoor, T.wallTop]]; // porta da sacada
+    return [[0, T.wallTop]];
+  }));
+  boxes.push({ x: cx - T.pillar, y: cz - T.pillar, w: T.pillar * 2, h: T.pillar * 2, top: T.wallTop, tpillar: true });
+  spirals.push({ cx, cz, r0: T.r0, r1: T.r1, y0: 0, y1: T.top, a0, turns: T.turns, dir, th: 10 });
+  const la = dir > 0 ? [a0 - 0.05, a0 + 0.95] : [a0 - 0.95, a0 + 0.05];
+  discs.push({ cx, cz, r0: T.r0 - 4, r1: T.R, y0: T.top - 12, top: T.top, a0: la[0], a1: la[1], landing: true }); // patamar lá em cima
+  discs.push({ cx, cz, r0: T.R - 2, r1: T.R + T.bal, y0: T.top - 14, top: T.top, balcony: true }); // sacada em volta (sem parapeito)
+  discs.push({ cx, cz, r0: 0, r1: T.R + 6, y0: T.wallTop, top: T.wallTop + 12, roof: true }); // teto da torre
+  return { segs, discs, spirals, boxes, tower: { x: cx, z: cz, a0, dir, gd, bd } };
+}
+
 // casa na árvore (meio da floresta): tronco no meio, plataforma redonda bem alta (sem parapeito) e 2 escadas de mão
 // presas no tronco — uma virada pra base de cada time — que sobem por um buraco no chão e saem no meio da casinha.
 // O furacão passa por ela e joga longe quem estiver lá em cima.
-export const TREEHOUSE = { r: 150, y: 380, th: 12, trunk: 34, hole: 64, holeW: 44, trunkTop: 620 };
+export const TREEHOUSE = { r: 150, y: 380, th: 12, trunk: 34, hole: 64, holeW: 44, trunkTop: 620, tilt: 34 };
 function treehouseBoxes(cx, cz) {
   const { r, y, th, trunk, hole, holeW, trunkTop } = TREEHOUSE, out = [], y0 = y - th;
   const f = (x0, z0, x1, z1, extra) => out.push(Object.assign({ x: x0, y: z0, w: x1 - x0, h: z1 - z0 }, extra));
@@ -44,9 +115,13 @@ function treehouseBoxes(cx, cz) {
   const hx = trunk + hole, hwm = Math.sqrt(r * r - holeW * holeW);
   f(cx - hwm, cz - holeW, cx - hx, cz + holeW, { y0, top: y, thouse: 'floor' });
   f(cx + hx, cz - holeW, cx + hwm, cz + holeW, { y0, top: y, thouse: 'floor' });
-  // (os 2 buracos das escadas ficam abertos: quem chega lá em cima sai pro chão do lado do buraco)
+  // os 2 buracos das escadas têm TAMPA (alçapão): ninguém cai lá de cima; quem sobe sai em cima da tampa e,
+  // pra descer, fica em cima da tampa de costas pra fora e aperta S (desce pela escada)
+  f(cx - hx, cz - holeW, cx - trunk, cz + holeW, { y0, top: y, thouse: 'hatch' });
+  f(cx + trunk, cz - holeW, cx + hx, cz + holeW, { y0, top: y, thouse: 'hatch' });
   // escadas de mão: na face do tronco virada pra cada base (x), sobe do chão até o chão da casinha
-  const ladders = [{ x: cx - trunk, z: cz, nx: -1, nz: 0, half: 26, top: y, hole }, { x: cx + trunk, z: cz, nx: 1, nz: 0, half: 26, top: y, hole }];
+  // (a escada é um pouco inclinada: o pé fica afastado do tronco, que é mais largo embaixo)
+  const ladders = [{ x: cx - trunk, z: cz, nx: -1, nz: 0, half: 26, top: y, hole, tilt: 34 }, { x: cx + trunk, z: cz, nx: 1, nz: 0, half: 26, top: y, hole, tilt: 34 }];
   return { boxes: out, ladders, zone: { x0: cx - r, z0: cz - r, x1: cx + r, z1: cz + r } };
 }
 
@@ -101,6 +176,22 @@ function portalWorld(W, H, t) {
   return { walls, slots, gap: out3.gap };
 }
 
+// deserto: cristas de areia [ax, az, bx, bz, altura (x108), largura (x150), no meio?] e pirâmides [x, z, meia-base, topo, altura]
+// (cada uma aparece de novo girada no outro lado do mapa, menos as marcadas "no meio")
+export const DESERT_LAYOUT = {
+  pyramids: [[0.14, 0.22, 230, 26, 270]],
+  dunes: [
+    [0.5, 0.33, 0.5, 0.67, 2.35, 2.5, 1], // montanha alta bem no meio (tampa a visão de lado a lado)
+    [0.5, 0.06, 0.5, 0.2, 1.3, 2.0], // no meio em cima (e embaixo, girada)
+    [0.37, 0.24, 0.42, 0.38, 1.7, 2.2], // montanhas médias/altas em volta do meio
+    [0.37, 0.62, 0.43, 0.76, 1.2, 2.1],
+    [0.28, 0.44, 0.28, 0.58, 0.9, 1.8], // no meio do caminho entre a base e o meio
+    [0.3, 0.86, 0.4, 0.9, 0.5, 1.9], // larga e baixinha
+    [0.13, 0.72, 0.2, 0.84, 0.85, 1.8], // no canto da base sem pirâmide
+    [0.3, 0.1, 0.36, 0.16, 0.45, 1.7] // baixinha perto da pirâmide
+  ]
+};
+
 // ---------- mapas só do 3D ----------
 // retângulos normalizados [x, z, w, h, top?] (espelhados no x pro outro time)
 const mirR = (list) => list.concat(list.map(([x, z, w, h, top, col, st, y0]) => [1 - x - w, z, w, h, top, col, st, y0]));
@@ -112,13 +203,13 @@ export const MAPS3D = {
     theme: { ground: '#8e9094', ground2: '#84868a', wall: '#ece6d4', wallEdge: '#a09478', border: '#d8cfb6', deco: 'none' },
     rects: mirR([
       // equilibrado: pilares grossos espalhados, 2 muretas, a bilheteria e uma grade no meio da beira do trilho
-      [0.2, 0.2, 0.03, 0.05, 330], [0.2, 0.75, 0.03, 0.05, 330], // pilares (mais grossos)
-      [0.325, 0.3, 0.03, 0.05, 330], [0.325, 0.65, 0.03, 0.05, 330],
+      [0.2, 0.2, 0.03, 0.05, 480], [0.2, 0.75, 0.03, 0.05, 480], // pilares (mais grossos)
+      [0.325, 0.3, 0.03, 0.05, 480], [0.325, 0.65, 0.03, 0.05, 480],
       [0.11, 0.24, 0.018, 0.17, 130], [0.11, 0.59, 0.018, 0.17, 130], // muretas perto do nascimento (maiores)
       [0.255, 0.43, 0.045, 0.14, 140], // bilheteria (maior)
       [0.37, 0.41, 0.014, 0.18, 110] // grade na beira do trilho
     ]).concat([ // ilha entre os 2 trilhos (no meio)
-      [0.465, 0.15, 0.07, 0.05, 140], [0.465, 0.8, 0.07, 0.05, 140], [0.48, 0.43, 0.04, 0.14, 330]
+      [0.465, 0.15, 0.07, 0.05, 140], [0.465, 0.8, 0.07, 0.05, 140], [0.48, 0.43, 0.04, 0.14, 480]
     ])
   },
   // plataforma no mar: porto de carga (estilo Cargo): fileiras de contêineres com corredores; em vários lugares dá pra subir
@@ -178,6 +269,41 @@ export const MAPS3D = {
     pistons: mirR([[0.265, 0.45, 0.035, 0.1, 232, 0], [0.2, 0.215, 0.035, 0.07, 232, 0.5], [0.2, 0.715, 0.035, 0.07, 232, 0.25]]),
     // esteiras [x, z, w, h, velocidade em z] (a da esquerda desce, a da direita sobe)
     belts: [[0.33, 0.14, 0.05, 0.72, 115], [0.62, 0.14, 0.05, 0.72, -115]]
+  },
+  // castelo de magia (estilo escola de bruxos): castelo grande no meio com um salão, terraço em cima e 4 torres redondas —
+  // dentro de cada torre uma rampa em espiral sobe até uma sacada em volta dela (sem parapeito), pra atirar lá de cima
+  castelo: {
+    id: 'castelo', name: 'Castelo', hazard: null,
+    theme: { ground: '#6f8a4c', ground2: '#647d44', wall: '#a6a6a2', wallEdge: '#6e6e6a', border: '#96968f', deco: 'none' },
+    keep: [0.39, 0.33, 0.61, 0.67], // salão do meio [x0, z0, x1, z1]
+    rects: mirR([
+      [0.1, 0.2, 0.025, 0.16, 100, '#4e7a3a', 'hedge'], [0.1, 0.64, 0.025, 0.16, 100, '#4e7a3a', 'hedge'], // cercas vivas na frente do nascimento
+      [0.19, 0.44, 0.035, 0.12, 120, '#a6a6a2', 'stone'], // mureta de pedra no meio do lado
+      [0.2, 0.1, 0.07, 0.05, 130, '#8f897c', 'stone'], [0.2, 0.85, 0.07, 0.05, 130, '#8f897c', 'stone'], // ruínas nos cantos
+      [0.27, 0.27, 0.03, 0.045, 150, '#b7b0a2', 'stone'], [0.27, 0.685, 0.03, 0.045, 150, '#b7b0a2', 'stone'], // pedestais de estátua
+      [0.3, 0.46, 0.022, 0.08, 70, '#6b4a2a', 'wood'], // carroça de feno
+      [0.44, 0.39, 0.016, 0.03, 228, '#8a847a', 'stone'], [0.44, 0.58, 0.016, 0.03, 228, '#8a847a', 'stone'] // colunas do salão
+    ]).concat([
+      [0.465, 0.1, 0.07, 0.05, 120, '#8f897c', 'stone'], [0.465, 0.85, 0.07, 0.05, 120, '#8f897c', 'stone'], // poços / portões
+      [0.47, 0.47, 0.06, 0.06, 60, '#5a3f2a', 'wood'] // mesa grande no meio do salão
+    ])
+  },
+  // navio antigo de bruxos numa tempestade: fora do casco é mar (caiu, morreu); o navio balança e inclina (mexe no pulo),
+  // de 20 em 20 s vem uma onda grande de lado e ele inclina forte (tudo escorrega). Castelo de popa e de proa com cabine
+  // por dentro, 3 mastros com escada de corda até o cesto lá em cima.
+  navio: {
+    id: 'navio', name: 'Navio na tempestade', hazard: 'swell',
+    theme: { ground: '#7a5634', ground2: '#6e4c2d', wall: '#5e3f25', wallEdge: '#3f2a18', border: '#4a3220', deco: 'none' },
+    hull: [[0.02, 0.5], [0.08, 0.3], [0.17, 0.21], [0.83, 0.21], [0.92, 0.3], [0.98, 0.5], [0.92, 0.7], [0.83, 0.79], [0.17, 0.79], [0.08, 0.7]],
+    rects: mirR([
+      [0.265, 0.34, 0.035, 0.05, 56, '#7a5a38', 'wood'], [0.265, 0.61, 0.035, 0.05, 56, '#7a5a38', 'wood'], // caixotes
+      [0.29, 0.38, 0.02, 0.035, 38, '#6b4a2a', 'barrel'], [0.29, 0.59, 0.02, 0.035, 38, '#6b4a2a', 'barrel'], // barris
+      [0.36, 0.225, 0.035, 0.03, 34, '#2d2d2d', 'cannon'], [0.36, 0.745, 0.035, 0.03, 34, '#2d2d2d', 'cannon'], // canhões na borda
+      [0.42, 0.225, 0.035, 0.03, 34, '#2d2d2d', 'cannon'], [0.42, 0.745, 0.035, 0.03, 34, '#2d2d2d', 'cannon'],
+      [0.39, 0.44, 0.028, 0.12, 74, '#7a5a38', 'wood'] // pilha de caixotes no meio do lado
+    ]).concat([
+      [0.46, 0.42, 0.08, 0.16, 22, '#4a3220', 'grate'] // escotilha grande no meio (dá pra subir)
+    ])
   }
 };
 function buildWalls3D(def, W, H, t, borderH) {
@@ -205,18 +331,19 @@ export function world3D(mapId, G, MAPS, CFG) {
   let walls = MAPS3D[mapId] ? buildWalls3D(MAPS3D[mapId], W, H, t, BORDER_H[mapId]) : G.buildWalls(mapId, cfg, 0);
   if (mapId === 'metro') {
     out.lanes = MAPS3D.metro.lanes.map((f) => f * W);
-    // mezanino alto em cada base + 2 escadas de degraus (norte e sul) encostadas na parede de trás
-    // escada mais larga e com parapeito só nela (em cima fica só o mezanino)
-    const LH = 216, n = 10, sh = LH / n, sd = 24, lw = 160, sw = 120, pw = 12, z0 = 0.42 * H, z1 = 0.58 * H;
+    // mezanino alto em cada base + 2 RAMPAS (norte e sul) encostadas na parede de trás, com parapeito só na rampa
+    // (a física usa degrauzinhos bem baixos = sobe liso, sem a câmera pular; o desenho é uma rampa inteira)
+    const LH = 216, run = 330, lw = 160, sw = 120, pw = 12, z0 = 0.42 * H, z1 = 0.58 * H;
+    out.ramps = []; out.slopes = [];
     for (const mir of [0, 1]) {
       const X = (x, w) => (mir ? W - x - w : x);
       walls.push({ x: X(t, lw), y: z0, w: lw, h: z1 - z0, y0: LH - 18, top: LH, mezz: true });
-      for (let k = 1; k <= n; k++) {
-        for (const zz of [z0 - (n - k + 1) * sd, z1 + (n - k) * sd]) {
-          walls.push({ x: X(t, sw), y: zz, w: sw, h: sd, top: sh * k, mstep: true });
-          walls.push({ x: X(t + sw, pw), y: zz, w: pw, h: sd, top: sh * k + 44, mrail: true });
-        }
-      }
+      // rampa lisa (a física calcula a altura certinha em cada ponto) + parapeito inclinado só nela
+      const rx = X(t, sw), px = X(t + sw, pw);
+      out.slopes.push({ x0: rx, x1: rx + sw, z0: z0 - run, z1: z0, axis: 'z', h0: 0, h1: LH }, { x0: rx, x1: rx + sw, z0: z1, z1: z1 + run, axis: 'z', h0: LH, h1: 0 });
+      out.slopes.push({ x0: px, x1: px + pw, z0: z0 - run, z1: z0, axis: 'z', h0: 44, h1: LH + 44, rail: true }, { x0: px, x1: px + pw, z0: z1, z1: z1 + run, axis: 'z', h0: LH + 44, h1: 44, rail: true });
+      // desenho: [x, largura, z do pé, z do topo, altura]
+      out.ramps.push({ x: rx, w: sw, rx: px, rw: pw, zf: z0 - run, zt: z0, h: LH }, { x: rx, w: sw, rx: px, rw: pw, zf: z1 + run, zt: z1, h: LH });
     }
   }
   if (mapId === 'mar') out.ship = MAPS3D.mar.ship;
@@ -250,12 +377,13 @@ export function world3D(mapId, G, MAPS, CFG) {
     out.treehouse = { x: W / 2, z: H / 2, zone: th.zone }; out.ladders = th.ladders;
     walls = walls.concat(forestTrees(W, H, walls, [th.zone, { x0: 0, x1: W, z0: H / 2 - 40, z1: H / 2 + 40 }]));
   } else if (mapId === 'neve') {
-    // 2 iglus grandes no MEIO do mapa (um em cima e um embaixo), com as entradas viradas pra base de cada time
+    // 2 iglus grandes no MEIO do mapa (um em cima e um embaixo): 1 entrada virada pro meio do mapa e 2 viradas pros lados
     for (const seg of [[0.42, 0.12, 0.42, 0.24], [0.42, 0.76, 0.42, 0.88]]) del(seg);
     for (const seg of [[0.5, 0.26, 0.5, 0.38], [0.5, 0.62, 0.5, 0.74]]) { const i = findSeg(walls, seg, W, H, t); if (i >= 0) walls.splice(i, 1); }
     [0.255, 0.745].forEach((nz, k) => {
-      walls = walls.concat(iglooBoxes(W / 2, nz * H, 0, k));
-      out.igloos.push({ x: W / 2, z: nz * H, ang: 0, k });
+      const ang = k ? -Math.PI / 2 : Math.PI / 2; // a entrada principal aponta pro meio do mapa
+      walls = walls.concat(iglooBoxes(W / 2, nz * H, ang, k));
+      out.igloos.push({ x: W / 2, z: nz * H, ang, k });
     });
   } else if (mapId === 'nave') {
     // layout próprio do 3D: a baia de nascimento de cada time e a sala do meio são fechadas;
@@ -286,6 +414,58 @@ export function world3D(mapId, G, MAPS, CFG) {
     }
     wallDoors([0.4, 0.22, 0.6, 0.22], [0.5]); wallDoors([0.4, 0.78, 0.6, 0.78], [0.5]); // em cima e embaixo da sala do meio
     walls.push(segRect([0.5, 0.42, 0.5, 0.58], W, H, t)); // cobertura no meio da sala
+  } else if (mapId === 'castelo') {
+    // salão do meio: paredes grossas com 4 portas (verga em cima), terraço no telhado com ameias, e as 4 torres nos cantos
+    const [kx0, kz0, kx1, kz1] = MAPS3D.castelo.keep.map((v, i) => v * (i % 2 ? H : W)), kt = 26, KH = 240, dw = 55;
+    const kcx = (kx0 + kx1) / 2, kcz = (kz0 + kz1) / 2;
+    const kw = (x, y, w, h, extra) => walls.push(Object.assign({ x, y, w, h, top: KH, keep: true, tint: '#a6a6a2', style: 'stone' }, extra));
+    for (const x of [kx0, kx1 - kt]) { kw(x, kz0, kt, kcz - dw - kz0); kw(x, kcz + dw, kt, kz1 - kcz - dw); kw(x, kcz - dw, kt, dw * 2, { y0: 150 }); }
+    for (const z of [kz0, kz1 - kt]) { kw(kx0 + kt, z, kcx - dw - kx0 - kt, kt); kw(kcx + dw, z, kx1 - kt - kcx - dw, kt); kw(kcx - dw, z, dw * 2, kt, { y0: 150 }); }
+    walls.push({ x: kx0, y: kz0, w: kx1 - kx0, h: kz1 - kz0, y0: KH - 12, top: KH, kroof: true, tint: '#7d776b' }); // terraço (telhado reto)
+    // ameias em volta do terraço (dá pra se esconder atrás)
+    const mer = (x, y, w, h) => walls.push({ x, y, w, h, y0: KH, top: KH + 26, merlon: true, tint: '#a6a6a2', style: 'stone' });
+    for (let x = kx0 + 30; x < kx1 - 60; x += 78) { mer(x, kz0, 34, 16); mer(x, kz1 - 16, 34, 16); }
+    for (let z = kz0 + 30; z < kz1 - 60; z += 78) { mer(kx0, z, 16, 34); mer(kx1 - 16, z, 16, 34); }
+    // 4 torres (uma em cada canto, um pouco pra fora): a porta de baixo virada pra base do time daquele lado
+    out.segs = []; out.discs = []; out.spirals = []; out.towers = [];
+    const o = 85;
+    for (const [cx, cz, a0, dir] of [[kx0 - o, kz0 - o, Math.PI + 0.2, 1], [kx0 - o, kz1 + o, Math.PI - 0.2, -1], [kx1 + o, kz0 - o, -0.2, -1], [kx1 + o, kz1 + o, 0.2, 1]]) {
+      const T = towerParts(cx, cz, a0, dir);
+      out.segs.push(...T.segs); out.discs.push(...T.discs); out.spirals.push(...T.spirals); walls = walls.concat(T.boxes); out.towers.push(T.tower);
+    }
+  } else if (mapId === 'navio') {
+    // navio: sem muro de borda (em volta é mar); a amurada é baixinha (dá pra pular e cair no mar)
+    walls = walls.filter((R) => !R.border);
+    const P = MAPS3D.navio.hull.map(([x, z]) => [x * W, z * H]);
+    out.deck = { poly: P, kill: -140 }; out.shape = P; out.spawnX = [0.12 * W, 0.31 * W]; out.segs = []; out.discs = []; out.ladders = []; out.masts = [];
+    for (let i = 0; i < P.length; i++) { const A = P[i], B = P[(i + 1) % P.length]; out.segs.push({ ax: A[0], az: A[1], bx: B[0], bz: B[1], t: 7, y0: 0, top: 30, rail: true }); }
+    // castelo de popa (time A) e de proa (time B): cabine por dentro, convés em cima com amurada e 2 escadas de frente
+    const CH = 110, CY0 = 96;
+    for (const mir of [0, 1]) {
+      const X = (x, w) => (mir ? W - x - w : x), xa = 0.105 * W, xb = 0.225 * W, za = 0.28 * H, zb = 0.72 * H, zc = 0.5 * H, dz = 0.04 * H;
+      walls.push({ x: X(xa, xb - xa), y: za, w: xb - xa, h: zb - za, y0: CY0, top: CH, cdeck: true, tint: '#7a5634', style: 'plank' });
+      // paredes da cabine (porta no meio da frente)
+      walls.push({ x: X(xa, xb - xa), y: za, w: xb - xa, h: 12, top: CY0, cabin: true, tint: '#5e3f25', style: 'plank' }, { x: X(xa, xb - xa), y: zb - 12, w: xb - xa, h: 12, top: CY0, cabin: true, tint: '#5e3f25', style: 'plank' });
+      walls.push({ x: X(xa, 12), y: za, w: 12, h: zb - za, top: CY0, cabin: true, tint: '#5e3f25', style: 'plank' });
+      walls.push({ x: X(xb - 12, 12), y: za, w: 12, h: zc - dz - za, top: CY0, cabin: true, tint: '#5e3f25', style: 'plank' }, { x: X(xb - 12, 12), y: zc + dz, w: 12, h: zb - zc - dz, top: CY0, cabin: true, tint: '#5e3f25', style: 'plank' }, { x: X(xb - 12, 12), y: zc - dz, w: 12, h: dz * 2, y0: 80, top: CY0, cabin: true, tint: '#5e3f25', style: 'plank' });
+      // amurada do convés de cima (menos onde as escadas chegam)
+      const rail = (x, y, w, h) => walls.push({ x, y, w, h, y0: CH, top: CH + 26, crail: true, tint: '#4a3220', style: 'plank' });
+      rail(X(xa, xb - xa), za, xb - xa, 8); rail(X(xa, xb - xa), zb - 8, xb - xa, 8); rail(X(xa, 8), za, 8, zb - za);
+      const s1 = [0.36 * H, 0.44 * H], s2 = [0.56 * H, 0.64 * H];
+      rail(X(xb - 8, 8), za, 8, s1[0] - za); rail(X(xb - 8, 8), s1[1], 8, s2[0] - s1[1]); rail(X(xb - 8, 8), s2[1], 8, zb - s2[1]);
+      // escadas (degraus baixinhos) subindo da frente pro convés de cima
+      const n = 11, run = 0.08 * W, sd = run / n;
+      for (const [z0, z1] of [s1, s2]) for (let k = 1; k <= n; k++) walls.push({ x: X(xb + (n - k) * sd, sd + 0.01), y: z0, w: sd + 0.01, h: z1 - z0, top: CH * k / n, sstep: true, tint: '#6e4c2d', style: 'plank' });
+    }
+    // 3 mastros com cesto lá em cima (escada de corda dos 2 lados)
+    for (const [fx, ny] of [[0.34, 330], [0.5, 410], [0.66, 330]]) {
+      const mx = fx * W, mz = 0.5 * H, mr = 15, nr = fx === 0.5 ? 72 : 62;
+      walls.push({ x: mx - mr, y: mz - mr, w: mr * 2, h: mr * 2, top: 820, smast: true });
+      out.discs.push({ cx: mx, cz: mz, r0: 0, r1: nr, y0: ny - 12, top: ny, nest: true });
+      out.segs.push(...ringSegs(mx, mz, nr + 2, 4, 18, () => [[ny, ny + 24]]));
+      for (const nz of [-1, 1]) out.ladders.push({ x: mx, z: mz + nz * mr, nx: 0, nz, half: 20, top: ny, hole: 14, rope: true });
+      out.masts.push({ x: mx, z: mz, r: mr, nest: ny, nr });
+    }
   } else if (mapId === 'obra') {
     for (const R of walls) if (R.top === 480) R.mast = true; // torre do guindaste (a treliça é desenhada à parte)
   } else if (mapId === 'escuro') {
@@ -296,16 +476,16 @@ export function world3D(mapId, G, MAPS, CFG) {
     // todas as paredes com a mesma altura
     out.holes = [];
   } else if (mapId === 'deserto') {
-    // uma pirâmide só, ENORME, no meio do mapa (tira as paredes/dunas do meio pra caber)
-    del([0.36, 0.5, 0.42, 0.5]);
-    { const i = findSeg(walls, [0.5, 0.36, 0.5, 0.64], W, H, t); if (i >= 0) walls.splice(i, 1); }
-    out.pyramids = [{ x: W / 2, z: H / 2, half: 330, top: 34, h: 390 }];
-    // dunas mais pros cantos: afasta cada crista do meio do mapa (a base da pirâmide fica livre, em volta fica baixinho)
-    for (const R of walls) {
-      if (R.border) continue;
-      const cx = R.x + R.w / 2, cz = R.y + R.h / 2, nx = cx + (cx - W / 2) * 0.35, nz = cz + (cz - H / 2) * 0.3;
-      R.x = Math.max(t + 40, Math.min(W - t - 40 - R.w, nx - R.w / 2)); R.y = Math.max(t + 40, Math.min(H - t - 40 - R.h, nz - R.h / 2));
+    // uma pirâmide em cada base (no canto, com areia baixinha em volta) e as montanhas de areia no meio;
+    // a mais alta fica bem no meio pra tampar a visão de um lado a outro. Simetria girando o mapa (cada time igual).
+    walls = walls.filter((R) => R.border);
+    const D = DESERT_LAYOUT, rot = ([ax, az, bx, bz, hk, wk]) => [1 - ax, 1 - az, 1 - bx, 1 - bz, hk, wk];
+    const list = D.dunes.concat(D.dunes.filter((d) => !d[6]).map(rot));
+    for (const [ax, az, bx, bz, hk, wk] of list) {
+      const x0 = Math.min(ax, bx) * W, x1 = Math.max(ax, bx) * W, z0 = Math.min(az, bz) * H, z1 = Math.max(az, bz) * H;
+      walls.push({ x: x0 - 12, y: z0 - 12, w: x1 - x0 + 24, h: z1 - z0 + 24, top: 120, crest: [ax * W, az * H, bx * W, bz * H], dune: [hk, wk] });
     }
+    out.pyramids = D.pyramids.concat(D.pyramids.map(([x, z, ...r]) => [1 - x, 1 - z, ...r])).map(([x, z, half, top, h]) => ({ x: x * W, z: z * H, half, top, h }));
   } else if (mapId === 'cidade') {
     // postes grudados nas pontas dos muros (menos postes, braço virado pra rua)
     // cada pedaço do mapa tem UM poste (apagou = aquele lugar fica escuro de verdade), e o mapa todo tem luz (base também)
@@ -317,11 +497,13 @@ export function world3D(mapId, G, MAPS, CFG) {
     out.lamps = L.concat(L.map(([x, z, dx, dz]) => [W - x, z, -dx, dz]))
       .concat([[0.5 * W, 0.17 * H, 0, 1], [0.5 * W, 0.83 * H, 0, -1], [0.5 * W, 0.5 * H - o, 0, -1]]); // no meio do mapa (em cima, embaixo e no centro)
   }
+  walls = applyMapEdits(mapId, out, walls, W, H);
   out.walls = walls;
   return out;
 }
 
 // opções do Sim3D a partir do mundo montado
 export function simOptions(w) {
-  return { cfg: w.cfg, hazard: w.hazard, portalSlots: w.portalSlots, holes: w.holes, terrain: w.terrain, ceilingY: w.ceilingY, borderH: w.borderH, lamps: w.lamps, safeZones: w.safeZones, pyramids: w.pyramids, lanes: w.lanes, ship: w.ship, ladders: w.ladders, belts: w.belts, segs: w.segs, shape: w.shape };
+  const E = activeEdits();
+  return { weapons: E.weapons || undefined, params: Object.keys(E.player || {}).length ? E.player : undefined, nade: E.nade || undefined, cfg: w.cfg, hazard: w.hazard, portalSlots: w.portalSlots, holes: w.holes, terrain: w.terrain, ceilingY: w.ceilingY, borderH: w.borderH, lamps: w.lamps, safeZones: w.safeZones, pyramids: w.pyramids, lanes: w.lanes, ship: w.ship, ramps: w.ramps, discs: w.discs, spirals: w.spirals, slopes: w.slopes, deck: w.deck, spawnX: w.spawnX, ladders: w.ladders, belts: w.belts, segs: w.segs, shape: w.shape };
 }

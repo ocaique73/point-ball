@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Editor de mapa · Point Ball 3D</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect x=%222%22 y=%222%22 width=%2212%22 height=%2212%22 rx=%222%22 fill=%22%23ffcc33%22/%3E%3C/svg%3E">
+<style>
+  :root { --bg: #0b0f17; --panel: #121a27; --panel2: #0f1622; --line: #243044; --acc: #ffcc33; --text: #e5e7eb; --muted: #94a3b8; --blue: #3b82f6; --red: #ef4444; --ok: #86efac; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.35 "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+  button, select, input { font: inherit; color: var(--text); }
+  button { background: #1c2636; border: 1px solid #2d3a52; border-radius: 7px; padding: 6px 10px; cursor: pointer; white-space: nowrap; }
+  button:hover { border-color: #3f5170; background: #213047; }
+  button.acc { background: var(--acc); color: #1b1300; border-color: var(--acc); font-weight: 700; }
+  button.on { border-color: var(--acc); color: var(--acc); }
+  select, input[type=number], input[type=text], input[type=password] { background: #0c121c; border: 1px solid #2d3a52; border-radius: 6px; padding: 5px 7px; }
+  input[type=number] { width: 84px; }
+  input[type=range] { width: 100%; accent-color: var(--acc); }
+  #app { display: grid; grid-template-rows: auto 1fr; height: 100%; }
+  header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel2); }
+  header h1 { font-size: 15px; margin: 0 8px 0 0; color: var(--acc); }
+  header .sp { flex: 1; }
+  #status { color: var(--muted); font-size: 12px; max-width: 420px; }
+  #status.ok { color: var(--ok); } #status.err { color: #fca5a5; }
+  .tabs { display: flex; gap: 4px; }
+  .tabs button { border-radius: 7px 7px 0 0; }
+  main { display: grid; grid-template-columns: 52px 1fr 300px; min-height: 0; }
+  main.fullpane { grid-template-columns: 1fr; }
+  #tools { display: flex; flex-direction: column; gap: 6px; padding: 8px 6px; border-right: 1px solid var(--line); background: var(--panel2); }
+  #tools button { width: 40px; height: 40px; padding: 0; font-size: 18px; }
+  #tools .sep { height: 1px; background: var(--line); margin: 4px 0; }
+  #center { position: relative; min-width: 0; min-height: 0; display: grid; }
+  #center.split { grid-template-rows: 1fr 1fr; }
+  #cv { width: 100%; height: 100%; display: block; background: #070a10; cursor: crosshair; touch-action: none; }
+  #pv { width: 100%; height: 100%; border: 0; border-top: 1px solid var(--line); display: none; background: #000; }
+  #center.split #pv { display: block; }
+  #hint { position: absolute; left: 10px; bottom: 10px; color: var(--muted); font-size: 11px; background: rgba(7,10,16,.8); padding: 6px 8px; border-radius: 6px; pointer-events: none; max-width: 70%; }
+  #coord { position: absolute; right: 10px; bottom: 10px; color: var(--muted); font-size: 11px; background: rgba(7,10,16,.8); padding: 4px 8px; border-radius: 6px; pointer-events: none; }
+  aside { border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 10px 12px; }
+  aside h3 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  aside h3:first-child { margin-top: 0; }
+  .row { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; margin: 5px 0; }
+  .row label { color: #cbd5e1; }
+  .row2 { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .pane { display: none; overflow: auto; padding: 14px 18px; }
+  .pane.on { display: block; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .card h4 { margin: 0 0 8px; font-size: 13px; color: var(--acc); display: flex; justify-content: space-between; align-items: center; }
+  .f { display: grid; grid-template-columns: 1fr 90px 74px; gap: 8px; align-items: center; margin: 6px 0; }
+  .f label { color: #cbd5e1; font-size: 12px; }
+  .f .def { color: var(--muted); font-size: 11px; }
+  .f input.changed { border-color: var(--acc); color: var(--acc); }
+  .swatches { display: flex; flex-wrap: wrap; gap: 4px; }
+  .sw { width: 20px; height: 20px; border-radius: 4px; border: 1px solid #0006; cursor: pointer; }
+  #modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 5; }
+  #modal .box { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; width: min(420px, 92vw); }
+  #modal textarea { width: 100%; height: 160px; background: #0c121c; color: var(--text); border: 1px solid #2d3a52; border-radius: 6px; font: 11px monospace; }
+  kbd { background: #1c2636; border: 1px solid #2d3a52; border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; font-size: 11px; }
+  @media (max-width: 800px) { main { grid-template-columns: 44px 1fr; } aside { display: none; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>🛠️ Editor de mapa</h1>
+    <div class="tabs"><button class="on" data-pane="map">Mapa</button><button data-pane="shot">Tiro e boneco</button><button data-pane="fx">Efeitos</button></div>
+    <label>Mapa <select id="map"></select></label>
+    <button id="undo" title="Desfazer (Ctrl+Z)">↶</button><button id="redo" title="Refazer (Ctrl+Y)">↷</button>
+    <button id="mirror" class="on" title="Mexe junto no item igual do outro lado do mapa">⇋ Espelhar lados</button>
+    <button id="snap" class="on" title="Encaixa de 10 em 10">▦ Grade</button>
+    <button id="prev" title="Mostra o mapa em 3D embaixo (dá pra andar dentro)">🎮 Prévia 3D</button>
+    <label title="Seu jogo (sozinho, neste navegador) usa o rascunho do editor"><input type="checkbox" id="useme"> usar no meu jogo</label>
+    <span class="sp"></span>
+    <span id="status"></span>
+    <button id="copy" title="Copia o código dos ajustes (dá pra colar no chat)">📋 Copiar código</button>
+    <button id="paste" title="Cola um código de ajustes">📥 Colar</button>
+    <button id="load" title="Carrega o último que foi salvo no servidor">⬇ Carregar</button>
+    <button id="save" class="acc" title="Salva no servidor (precisa da senha do editor)">💾 Salvar</button>
+  </header>
+  <main id="main">
+    <div id="tools">
+      <button data-tool="select" class="on" title="Selecionar e mover (V)">🖱️</button>
+      <button data-tool="box" title="Muro / caixa (B) — clique no mapa">🧱</button>
+      <button data-tool="wall2" title="Parede em diagonal (L) — arraste de uma ponta à outra">📐</button>
+      <button data-tool="tree" title="Árvore (T)">🌳</button>
+      <button data-tool="dune" title="Montanha de areia (D) — arraste">⛰️</button>
+      <button data-tool="pyr" title="Pirâmide (P)">🔺</button>
+      <div class="sep"></div>
+      <button id="dup" title="Duplicar (Ctrl+D)">⧉</button>
+      <button id="del" title="Apagar (Delete)">🗑️</button>
+      <button id="fit" title="Ver o mapa todo (F)">⤢</button>
+      <div class="sep"></div>
+      <button id="reset" title="Volta ESTE mapa ao padrão do jogo">⟲</button>
+    </div>
+    <div id="center">
+      <canvas id="cv"></canvas>
+      <iframe id="pv" title="Prévia 3D"></iframe>
+      <div id="hint"></div>
+      <div id="coord"></div>
+    </div>
+    <aside id="props"></aside>
+    <div class="pane" id="p-shot"></div>
+    <div class="pane" id="p-fx"></div>
+  </main>
+</div>
+<div id="modal"><div class="box" id="mbox"></div></div>
+<script src="/js/common.js"></script>
+<script src="/shared/config.js"></script>
+<script src="/shared/maps.js"></script>
+<script src="/shared/game.js"></script>
+<script type="module" src="/demo3d/editor.js"></script>
+</body>
+</html>

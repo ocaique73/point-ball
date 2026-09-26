@@ -61,6 +61,8 @@
   #menu header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px 0; }
   #menu h2 { margin: 0; color: var(--acc); font-size: 20px; }
   .tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 18px 0; }
+  .tablink { margin-left: auto; padding: 7px 12px; border-radius: 8px; color: var(--acc); text-decoration: none; font-weight: 600; border: 1px solid #3a3320; }
+  .tablink:hover { background: rgba(255,204,51,.12); }
   .tab { padding: 7px 12px; border-radius: 8px 8px 0 0; border: 1px solid #2b3a55; border-bottom: none; cursor: pointer; color: var(--muted); }
   .tab.on { color: var(--text); background: #16203a; }
   .pane { display: none; padding: 14px 18px; border-top: 1px solid #2b3a55; }
@@ -117,10 +119,11 @@
     <div class="tab" data-pane="p-keys">Controles</div>
     <div class="tab" data-pane="p-test">Sala de teste</div>
     <div class="tab" data-pane="p-mp">Multiplayer</div>
+    <a class="tablink" href="/demo3d/editor.html" target="_blank" title="Abre o editor de mapa e de efeitos numa aba nova">🛠️ Editor de mapa</a>
   </div>
   <div class="pane on" id="p-game">
     <label class="field"><span>Câmera</span><select id="o-cam"><option value="1">1ª pessoa</option><option value="3">3ª pessoa (por trás)</option></select><span></span></label>
-    <label class="field"><span>Mapa</span><select id="o-map"><option value="deserto">Deserto</option><option value="neve">Neve</option><option value="floresta">Floresta</option><option value="nave">Nave espacial (base lunar)</option><option value="portal">Portais</option><option value="vulcao">Vulcão</option><option value="escuro">Sala escura</option><option value="cidade">Cidade à noite</option><option value="metro">Estação de metrô</option><option value="mar">Plataforma no mar</option><option value="obra">Canteiro de obras</option><option value="fabrica">Fábrica</option><option value="teste">Sala de teste</option></select><span></span></label>
+    <label class="field"><span>Mapa</span><select id="o-map"><option value="deserto">Deserto</option><option value="neve">Neve</option><option value="floresta">Floresta</option><option value="nave">Nave espacial (base lunar)</option><option value="portal">Portais</option><option value="vulcao">Vulcão</option><option value="escuro">Sala escura</option><option value="cidade">Cidade à noite</option><option value="metro">Estação de metrô</option><option value="mar">Plataforma no mar</option><option value="obra">Canteiro de obras</option><option value="fabrica">Fábrica</option><option value="castelo">Castelo</option><option value="navio">Navio na tempestade</option><option value="teste">Sala de teste</option></select><span></span></label>
     <label class="field"><span>Modo de jogo</span><select id="o-mode"><option value="tdm">Mata-mata em equipe</option><option value="rounds">Rounds (eliminação)</option><option value="ffa">Mata-mata cada um por si</option><option value="koth">Rei da colina</option><option value="livre">Treino livre (sem fim)</option></select><span></span></label>
     <label class="field" id="f-kills"><span>Abates pra vencer</span><select id="o-kills"><option>20</option><option>25</option><option>30</option><option>50</option></select><span></span></label>
     <label class="field" id="f-rounds"><span>Rounds</span><select id="o-rounds"><option>1</option><option>2</option><option>3</option><option>5</option><option>7</option></select><span></span></label>
