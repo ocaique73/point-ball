@@ -6,7 +6,7 @@
 export const WEAPONS = {
   lancador:   { name: 'Lançador de borracha', speed: 900, grav: 0, r: 5, bounces: 3, cd: 0.9, mag: 20, mags: 4, reload: 1.5, rest: 1.0, model: 'blaster', arms: '1H' },
   estilingue: { name: 'Estilingue', speed: 1050, grav: 520, r: 6, bounces: 4, cd: 0.65, mag: 12, mags: 5, reload: 1.2, rest: 0.9, model: 'sling', arms: '1H' },
-  mao:        { name: 'Bolinha na mão', speed: 760, grav: 900, r: 8, bounces: 5, cd: 0.45, mag: 6, mags: 8, reload: 0.9, rest: 0.85, model: 'hand', arms: 'throw' },
+  mao:        { name: 'Bolinha na mão', speed: 1520, grav: 900, r: 8, bounces: 5, cd: 0.45, mag: 6, mags: 8, reload: 0.9, rest: 0.85, model: 'hand', arms: 'throw' },
   arco:       { name: 'Besta (flecha de borracha)', speed: 2700, minSpeed: 650, grav: 380, r: 5, bounces: 2, cd: 0.25, mag: 10, mags: 4, reload: 1.6, rest: 0.8, model: 'bow', arms: '2H', arrow: true }, // besta: sai sempre na força máxima de antes (como se tivesse carregado tudo)
   varinha:    { name: 'Varinha mágica', speed: 1650, grav: 0, r: 4, bounces: 3, cd: 0.5, mag: 8, mags: 5, reload: 1.3, rest: 0.95, model: 'wand', arms: '1H', ray: true },
   disco:      { name: 'Disco de borracha', speed: 620, grav: 0, r: 11, bounces: 7, cd: 1.1, mag: 8, mags: 4, reload: 1.8, rest: 1.0, model: 'disc', arms: 'throw', flat: true }
@@ -79,19 +79,36 @@ export function portalLayout(walls, list, pairs, W, H, t) {
   return { walls: out, portals };
 }
 
-// portais 3D: ciclo do evento (começa aberto 2,5 s; fecha 6; abre 5; depois fecha 6 / abre 6 até o fim)
+// portais 3D: ciclo do evento (começa aberto 3,2 s; fecha 7; abre 6; depois fecha 7 / abre 7 até o fim)
+export const PORTAL_T = { start: 3.2, close: 7, open1: 6, open: 7 };
 export function portalPhase(el) {
+  const T = PORTAL_T, a = T.start, b = a + T.close, c = b + T.open1, per = T.close + T.open;
   if (el < 0) return { open: false, idx: -1, n: -el };
-  if (el < 2.5) return { open: true, idx: 0, n: 2.5 - el };
-  if (el < 8.5) return { open: false, idx: 0, n: 8.5 - el };
-  if (el < 13.5) return { open: true, idx: 1, n: 13.5 - el };
-  const t = el - 13.5, k = Math.floor(t / 12), r = t - k * 12;
-  return r < 6 ? { open: false, idx: 1 + k, n: 6 - r } : { open: true, idx: 2 + k, n: 12 - r };
+  if (el < a) return { open: true, idx: 0, n: a - el };
+  if (el < b) return { open: false, idx: 0, n: b - el };
+  if (el < c) return { open: true, idx: 1, n: c - el };
+  const t = el - c, k = Math.floor(t / per), r = t - k * per;
+  return r < T.close ? { open: false, idx: 1 + k, n: T.close - r } : { open: true, idx: 2 + k, n: per - r };
 }
 // sorteia 2 pares de portais: cada par tem pelo menos 1 portal embaixo (nunca um par todo em cima),
 // e nunca 2 portais abertos na mesma parede no mesmo andar (em cima + embaixo na mesma parede pode)
-export function pickPortalPairs3D(slots, prev, rnd) {
+export function pickPortalPairs3D(slots, prev, rnd, start) {
   rnd = rnd || Math.random;
+  // começo do round (igual ao 2D): um par liga a parede de trás de uma base com a parede de trás da outra (um portal
+  // em cada base, embaixo) e o segundo par fica fora das paredes de trás das bases — os times invadem rápido
+  if (start) {
+    const one = (list) => list[Math.floor(rnd() * list.length)];
+    const L = slots.filter((q) => q.s === 'L' && !q.up), R = slots.filter((q) => q.s === 'R' && !q.up);
+    if (L.length && R.length) {
+      const p1 = [one(L).i, one(R).i], rest = slots.filter((q) => q.s !== 'L' && q.s !== 'R');
+      for (let tries = 0; tries < 100; tries++) {
+        const a = one(rest), b = one(rest);
+        if (a === b || (a.s === b.s && a.up === b.up) || (a.up && b.up)) continue;
+        return [p1, [a.i, b.i]];
+      }
+      return [p1];
+    }
+  }
   const key = (pr) => pr.map((q) => q.slice().sort((a, b) => a - b).join('-')).sort().join('|');
   const clash = (a, b) => a.s === b.s && a.up === b.up;
   let fallback = null;
@@ -112,7 +129,7 @@ export function pickPortalPairs3D(slots, prev, rnd) {
 
 // ---------- alturas por mapa ----------
 // mapas fechados (sala escura, portais, base na Lua): parede de borda até o teto; o teto ricocheteia tiro
-export const CEILING_Y = { floresta: 700, nave: 360, escuro: 360, portal: 660, metro: 480, fabrica: 400 };
+export const CEILING_Y = { nave: 360, escuro: 360, portal: 660, metro: 480, fabrica: 400 };
 export const BORDER_H = { nave: 360, escuro: 360, portal: 660, metro: 480, mar: 100, fabrica: 400, obra: 240, castelo: 200 };
 // portais: andar de cima (passarelas e pontes); só dá pra subir por um portal
 export const PLAT = { y: 300, th: 14, walk: 115, corner: 190, cornerLen: 190, bridge: 70, gapZ: 390, gap: 115 }; // cantos = quadrados largos
@@ -165,7 +182,10 @@ export function forestTrees(W, H, walls, avoid) {
 // depth = grossura da laje; quem cai passa dela e morre ao chegar em -kill
 export const HOLE = { depth: 90, kill: 300, far: 1500 };
 // navio: balanço (graus em radianos) e quanto isso empurra quem está em cima
-export const SWAY = { roll: 0.07, pitch: 0.025, heave: 10, big: 0.19, slide: 700, air: 380 };
+// castelo: o dragão voa de uma ponta à outra do mapa (em z) cuspindo fogo numa faixa de largura 2*half; quem está
+// debaixo de telhado (salão, torre, sacada) não pega fogo
+export const DRAGON = { dur: 4, half: 105, reach: 230, y: 520 };
+export const SWAY = { roll: 0.07, pitch: 0.025, heave: 10, big: 0.23, slide: 700, air: 380 };
 // sorteia 3 pares de buracos espelhados, longe das paredes e do meio (onde ficam as áreas de reabastecer)
 export function makeLavaHoles(W, H, walls, rnd) {
   rnd = rnd || Math.random;
@@ -337,7 +357,8 @@ export class Sim3D {
       train: [E, 2.5, 2 * trainLegT(this.H) + TRAIN.gap + 0.1], // ida + volta
       crane: [E, 2.5, CRANE.dur],
       wave: [E, 3.5, 3.6], // 3,5 s de aviso: a onda vem crescendo lá do horizonte
-      swell: [E, 2.5, 5] // navio: onda grande de lado (o navio inclina forte e tudo escorrega)
+      swell: [E, 2.5, 5], // navio: onda grande de lado (o navio inclina forte e tudo escorrega)
+      dragon: [E, 3, DRAGON.dur] // castelo: dragão passa cuspindo fogo numa faixa
     };
     this.tornado = null; this.storm = null;
     this.sandActive = false; this.sandK = 0; this.sandS = 0;
@@ -351,6 +372,7 @@ export class Sim3D {
     this.meteors = []; this.meteorFall = null; this.meteorsDone = 0; this.ceilHoles = [];
     this.lanes = opts.lanes || []; this.train = null; // metrô
     this.ladders = opts.ladders || []; // escadas de mão (casa na árvore)
+    this.rooms = opts.rooms || []; // salas fechadas com porta (bot sai/entra pela porta pra achar quem está do outro lado)
     this.shipSide = opts.ship || null; this.wave = null; // mar
     // teto que ricocheteia tiro (folhas da floresta / vidro da nave), null = sem teto
     this.ceilingY = opts.ceilingY != null ? opts.ceilingY : null;
@@ -394,7 +416,7 @@ export class Sim3D {
     if (want === this.portalIdx) return;
     this.portalIdx = want;
     if (want < 0) { if (this.portalPairs) { this.applyPortalPairs(null); this.events.push({ type: 'portals_close' }); } return; }
-    this.applyPortalPairs(pickPortalPairs3D(this.slots, this.portalPairs || this.lastPairs));
+    this.applyPortalPairs(pickPortalPairs3D(this.slots, this.portalPairs || this.lastPairs, null, want === 0));
     this.lastPairs = this.portalPairs;
     this.events.push({ type: 'portals_open', pairs: this.portalPairs });
   }
@@ -755,6 +777,7 @@ export class Sim3D {
       crane: this.crane ? { a0: this.crane.a0, dir: this.crane.dir, t2: this.crane.t2, s: this.crane.s, k: this.crane.k, rest: this.crane.rest } : null,
       wave: this.wave ? { side: this.wave.side, t2: this.wave.t2, s: this.wave.s, k: this.wave.k } : null,
       sway: this.deck ? this.swayState : null,
+      dragon: this.dragon ? { x: this.dragon.x, dir: this.dragon.dir, z: this.dragon.z, s: this.dragon.s, k: this.dragon.k } : null,
       holes: this.holes, erupt: this.erupt && !this.erupt.done ? { pts: this.erupt.pts, r: this.erupt.r } : null,
       lamps: this.lamps.map((l) => ({ i: l.i, x: l.x, z: l.z, dx: l.dx, dz: l.dz, offUntil: l.offUntil })),
       portalPairs: this.portalPairs, portalN: this.portalN, doors: this.doors.map((d) => Math.round(d.open * 100) / 100), doorsT: this.doors.map((d) => Math.max(0, Math.round((d.until - this.time) * 20) / 20)),
@@ -902,7 +925,7 @@ export class Sim3D {
         if (out < 0 || out > r + 16 || Math.abs(lat) > q.half) continue;
         if (-(Math.cos(p.yaw) * q.nx + Math.sin(p.yaw) * q.nz) < 0.3) continue; // precisa estar de frente pra escada
         // de frente pra escada, W sobe (S desce enquanto está nela; pra descer de lá de cima, é só cair pelo buraco)
-        const up = p.input.fwd > 0 && p.y >= -2 && p.y < q.top - 4;
+        const up = p.input.fwd > 0 && p.y >= (q.base || 0) - 2 && p.y < q.top - 4;
         if (!up) continue;
         L = q; break;
       }
@@ -917,7 +940,7 @@ export class Sim3D {
       p.ladder = L; this.events.push({ type: 'ladder', id: p.id });
     }
     const lat = Math.max(-8, Math.min(8, -(p.x - L.x) * L.nz + (p.z - L.z) * L.nx));
-    const off = r + 3 + (L.tilt || 0) * Math.max(0, 1 - p.y / L.top); // escada inclinada: embaixo fica mais longe do tronco
+    const off = r + 3 + (L.tilt || 0) * Math.max(0, 1 - (p.y - (L.base || 0)) / (L.top - (L.base || 0))); // escada inclinada: embaixo fica mais longe do tronco
     p.x = L.x + L.nx * off - L.nz * lat; p.z = L.z + L.nz * off + L.nx * lat;
     p.vx = p.vz = 0; p.vy = 0; p.grounded = false; p.sprinting = false;
     p.y += CLIMB * dt * Math.sign(p.input.fwd);
@@ -927,7 +950,7 @@ export class Sim3D {
       p.y = L.top; p.ladder = null; p.vy = 0; p.grounded = true; p.djUsed = false; p.jumps = 0;
       return false;
     }
-    if (p.y <= 0) { p.y = 0; p.ladder = null; p.grounded = true; return false; }
+    if (p.y <= (L.base || 0)) { p.y = L.base || 0; p.ladder = null; p.grounded = true; return false; } // (escada que começa em cima do teto: desce até ele)
     return true;
   }
 
@@ -1031,6 +1054,7 @@ export class Sim3D {
     else if (this.hazard === 'train') this.updateTrain();
     else if (this.hazard === 'wave') this.updateWave(dt);
     else if (this.hazard === 'swell') this.updateSwell();
+    else if (this.hazard === 'dragon') this.updateDragon();
     else if (this.hazard === 'crane') this.updateCrane();
   }
   // vulcão: caiu na lava = morreu (o abate vai pra quem acertou por último, se foi há pouco)
@@ -1337,6 +1361,24 @@ export class Sim3D {
     S.pitch = SWAY.pitch * Math.sin(t * 2 * Math.PI / 9.1 + 1.3);
     const w = 2 * Math.PI / 5.2; S.heave = SWAY.heave * Math.sin(t * w); S.ah = -SWAY.heave * w * w * Math.sin(t * w); S.vh = SWAY.heave * w * Math.cos(t * w);
   }
+  updateDragon() {
+    const cy = this.cycle('dragon');
+    if (!this.dragon || this.dragon.idx !== cy.idx) {
+      const x = this.W * (0.3 + Math.random() * 0.4), dir = Math.random() < 0.5 ? 1 : -1;
+      this.dragon = { idx: cy.idx, x, dir, s: 0, k: 0, warned: false, z: dir > 0 ? -400 : this.H + 400 };
+    }
+    const D = this.dragon; D.s = cy.s; D.k = cy.k;
+    if (cy.s >= 1 && !D.warned) { D.warned = true; this.events.push({ type: 'dragon_warn', x: D.x, dir: D.dir }); }
+    if (cy.s !== 2) return;
+    const L = this.H + 800; D.z = D.dir > 0 ? -400 + L * cy.k : this.H + 400 - L * cy.k;
+    for (const p of this.players.values()) {
+      if (!p.alive || p.dragonIdx === D.idx || Math.abs(p.x - D.x) > DRAGON.half) continue;
+      const behind = (D.z - p.z) * D.dir; // o fogo cai logo atrás da cabeça
+      if (behind < 20 || behind > DRAGON.reach) continue;
+      if (this.segBlocked(p.x, p.y + 50, p.z, p.x, p.y + 900, p.z)) continue; // tem telhado em cima
+      p.dragonIdx = D.idx; this.events.push({ type: 'dragon_hit', id: p.id, x: p.x, z: p.z }); this.damage(p, null, 'dragon');
+    }
+  }
   updateSwell() {
     const cy = this.cycle('swell');
     if (!this.swell || this.swell.idx !== cy.idx) this.swell = { idx: cy.idx, side: Math.random() < 0.5 ? -1 : 1, s: 0, k: 0, warned: false, started: false };
@@ -1558,7 +1600,7 @@ export class Sim3D {
     this.round++;
     this.bullets = []; this.nades = []; this.smokes = []; this.tombs = [];
     if (this.holes) { this.holes = []; this.erupted = 0; this.erupt = null; }
-    this.tornado = null; this.storm = null; this.train = null; this.wave = null; this.crane = null; this.craneRest = 0; this.sandK = 0; this.sandS = 0; this.sandActive = false; this.lightOn = true; this.lightS = 0;
+    this.tornado = null; this.storm = null; this.dragon = null; this.train = null; this.wave = null; this.crane = null; this.craneRest = 0; this.sandK = 0; this.sandS = 0; this.sandActive = false; this.lightOn = true; this.lightS = 0;
     for (const L of this.lamps) L.offUntil = 0;
     this.meteors = []; this.meteorBoxes = []; this.ceilHoles = []; this.meteorsDone = 0; this.meteorFall = null;
     for (const d of this.doors) { d.open = 0; d.until = 0; d.solid = true; }
@@ -1634,6 +1676,20 @@ export class Sim3D {
   }
 
   // ---------- bots ----------
+  roomOf(x, z, y) {
+    for (let i = 0; i < this.rooms.length; i++) { const R = this.rooms[i]; if (y > R.top) continue; if (R.r ? Math.hypot(x - R.cx, z - R.cz) < R.r : x > R.x0 && x < R.x1 && z > R.z0 && z < R.z1) return i; }
+    return -1;
+  }
+  // caminho pela porta: devolve o ponto pra onde o bot anda (na frente da porta; já na frente, atravessa)
+  roomNav(p, q) {
+    const a = this.roomOf(p.x, p.z, p.y), b = this.roomOf(q.x, q.z, q.y);
+    if (a === b) return null;
+    const R = this.rooms[a >= 0 ? a : b], s = a >= 0 ? -1 : 1;
+    let D = null, bd = 1e9;
+    for (const d of R.doors) { const c = Math.hypot(d[0] - p.x, d[1] - p.z) + Math.hypot(d[0] - q.x, d[1] - q.z); if (c < bd) { bd = c; D = d; } }
+    const px = D[0] + D[2] * 50 * s, pz = D[1] + D[3] * 50 * s;
+    return Math.hypot(px - p.x, pz - p.z) < 45 ? [D[0] - D[2] * 70 * s, D[1] - D[3] * 70 * s] : [px, pz];
+  }
   botThink(p, dt) {
     const L = BOT_LEVELS[p.level] || BOT_LEVELS.amador, ai = p.ai;
     ai.t = (ai.t || 0) - dt; ai.aimT = (ai.aimT || 0) - dt;
@@ -1650,7 +1706,11 @@ export class Sim3D {
       let fwd = 1, side = 0;
       if (Math.random() < L.idle) fwd = 0;
       else if (target && sees) { fwd = dist > 350 ? 0.6 : dist < 150 ? -0.4 : 0; side = Math.random() < 0.5 ? 1 : -1; }
-      else if (target) { fwd = 1; side = (Math.random() - 0.5) * 0.8; ai.wander = Math.atan2(target.z - p.z, target.x - p.x) + (Math.random() - 0.5) * 1.2; }
+      else if (target) {
+        fwd = 1; side = (Math.random() - 0.5) * 0.8; ai.wander = Math.atan2(target.z - p.z, target.x - p.x) + (Math.random() - 0.5) * 1.2;
+        const nav = this.rooms.length ? this.roomNav(p, target) : null; // um dentro da sala e o outro fora: vai pela porta
+        if (nav) { ai.wander = Math.atan2(nav[1] - p.z, nav[0] - p.x); side = 0; ai.t = 0.3; }
+      }
       else { ai.wander = Math.random() * Math.PI * 2; }
       // rei da colina: sem inimigo à vista, vai pra colina (e fica rondando lá dentro)
       if (this.mode === 'koth' && this.hill && !this.hill.pv && !(target && sees)) {
@@ -1666,6 +1726,12 @@ export class Sim3D {
     ai.stuck = moved < 1 && (ai.fwd || ai.side) ? (ai.stuck || 0) + dt : 0;
     ai.lx = p.x; ai.lz = p.z;
     if (ai.stuck > 0.3) { if (p.grounded) this.jump(p); else if (p.vy < 50) this.jump(p); ai.wander = Math.random() * Math.PI * 2; ai.t = 0.5; ai.stuck = 0; }
+    // preso num canto (fica raspando na parede sem sair do lugar): a cada 1,2 s vê se andou; se não, sai pra outro lado por mais tempo
+    ai.pt = (ai.pt || 0) + dt;
+    if (ai.pt > 1.2) {
+      if (ai.fwd && !(target && sees) && Math.hypot(p.x - (ai.px ?? p.x + 99), p.z - (ai.pz ?? p.z)) < 30) { ai.wander = p.yaw + Math.PI * (0.6 + Math.random() * 0.8); ai.t = 1.1 + Math.random() * 0.6; ai.fwd = 1; ai.side = 0; if (p.grounded) this.jump(p); }
+      ai.pt = 0; ai.px = p.x; ai.pz = p.z;
+    }
     if (target && sees) {
       if (ai.aimT <= 0) { // mira com reação e erro
         ai.aimT = L.react;

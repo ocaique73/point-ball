@@ -7,7 +7,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Sim3D, WEAPONS, WEAPON_IDS, P, PORTAL, HOLE, DuneField, holeEdgeR, TRAIN, WAVE, CEILING_Y, LAMP, TREE, TORNADO, FROST, METEOR, PLAT, AIM, DRINK, DOOR_HOLD, CRANE, craneAngle, pistonTop } from '/demo3d/sim3d.js';
-import { world3D, simOptions, IGLOO, TREEHOUSE, MAPS3D, TOWER, setEditOverride, activeEdits } from '/demo3d/world3d.js';
+import { world3D, simOptions, IGLOO, TREEHOUSE, MAPS3D, TOWER, SHIP, setEditOverride, activeEdits } from '/demo3d/world3d.js';
 import { FX_DEFAULT } from '/demo3d/fx3d.js';
 import { CHARS, TEAM_PAL, LEATHER, HAIR, SKIN, HATS, SLOTS, LOOK_DEFAULT, normLook, botLook, dressModel } from '/demo3d/looks3d.js';
 
@@ -88,6 +88,32 @@ const SFX = (() => {
     const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(Math.max(0.001, vol), t0 + (opts.attack || 0.004)); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     src.connect(filt); out(filt, opts).connect(g); g.connect(opts.far && farBus ? farBus : master);
     src.start(t0); src.stop(t0 + dur + 0.02);
+  }
+  // voz de gente (bem simples): dente de serra com a nota subindo um pouco + 2 filtros de vogal "é"
+  function voice(f0, dur, vol, opts) {
+    opts = opts || {}; const t0 = ctx.currentTime + (opts.delay || 0);
+    const osc = ctx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.setValueAtTime(f0, t0); osc.frequency.linearRampToValueAtTime(f0 * 1.25, t0 + dur * 0.35); osc.frequency.linearRampToValueAtTime(f0 * 0.95, t0 + dur);
+    const vib = ctx.createOscillator(), vg = ctx.createGain(); vib.frequency.value = 5 + Math.random() * 2; vg.gain.value = f0 * 0.03; vib.connect(vg); vg.connect(osc.frequency);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(Math.max(0.001, vol), t0 + 0.25); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    const f1 = ctx.createBiquadFilter(); f1.type = 'bandpass'; f1.frequency.value = 600; f1.Q.value = 4;
+    const f2 = ctx.createBiquadFilter(); f2.type = 'bandpass'; f2.frequency.value = 1900; f2.Q.value = 5; const g2 = ctx.createGain(); g2.gain.value = 0.5;
+    osc.connect(f1); osc.connect(f2); f2.connect(g2); out(f1, opts).connect(g); out(g2, opts).connect(g); g.connect(opts.far && farBus ? farBus : master);
+    osc.start(t0); vib.start(t0); osc.stop(t0 + dur + 0.05); vib.stop(t0 + dur + 0.05);
+  }
+  // som de fundo contínuo (chuva, mar): chiado em loop passando por um filtro; o volume muda devagar
+  const beds = {};
+  function bed(key, type, freq, q) {
+    if (!ctx) return null; if (beds[key]) return beds[key];
+    const n = ctx.sampleRate * 3, buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+    const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; if (q) f.Q.value = q;
+    const g = ctx.createGain(); g.gain.value = 0; src.connect(f); f.connect(g); g.connect(master); src.start();
+    return (beds[key] = { g, f });
+  }
+  function setBed(key, v, type, freq, q) {
+    if (!ctx || S.mute === '1') v = 0;
+    const b = beds[key] || (v > 0 ? bed(key, type, freq, q) : null); if (!b) return;
+    b.g.gain.setTargetAtTime(Math.max(0, v), ctx.currentTime, 0.4);
   }
   const O = (o, extra) => Object.assign({}, o, extra);
   const LP = (f) => ({ type: 'lowpass', freq: f }), BP = (f, q) => ({ type: 'bandpass', freq: f, q: q || 1.2 }), HP = (f) => ({ type: 'highpass', freq: f });
@@ -175,8 +201,9 @@ const SFX = (() => {
       ['Rolha + gole', (v, o) => { tone(900, 0.04, 'square', 0.12 * v, o); for (let i = 0; i < 3; i++) tone(200, 0.12, 'triangle', 0.25 * v, O(o, { delay: 0.25 + i * 0.22, slideTo: 120 })); }]
     ],
     magic: [
-      ['Zap', (v, o) => { tone(900, 0.12, 'sawtooth', 0.18 * v, O(o, { slideTo: 2400 })); noise(0.1, 0.15 * v, O(o, HP(3000))); }],
-      ['Raio grave', (v, o) => { tone(300, 0.2, 'square', 0.16 * v, O(o, { slideTo: 1200 })); noise(0.15, 0.2 * v, O(o, BP(1500, 2))); }],
+      ['Raio grave (vuum)', (v, o) => { tone(170, 0.22, 'triangle', 0.3 * v, O(o, { slideTo: 60 })); tone(85, 0.26, 'sine', 0.3 * v, O(o, { slideTo: 40 })); noise(0.16, 0.18 * v, O(o, { type: 'lowpass', freq: 900, sweep: 250 })); }],
+      ['Trovãozinho', (v, o) => { tone(120, 0.18, 'sawtooth', 0.12 * v, O(o, { slideTo: 50 })); noise(0.2, 0.25 * v, O(o, LP(600))); }],
+      ['Zap (agudo)', (v, o) => { tone(900, 0.12, 'sawtooth', 0.18 * v, O(o, { slideTo: 2400 })); noise(0.1, 0.15 * v, O(o, HP(3000))); }],
       ['Brilho', (v, o) => { tone(1300, 0.18, 'sine', 0.25 * v, O(o, { slideTo: 2600 })); tone(1950, 0.2, 'sine', 0.12 * v, O(o, { delay: 0.03, slideTo: 3900 })); }],
       ['Laser', (v, o) => tone(1800, 0.14, 'square', 0.14 * v, O(o, { slideTo: 300 }))],
       ['Mágico (swish)', (v, o) => noise(0.2, 0.28 * v, O(o, { type: 'bandpass', freq: 800, sweep: 5000, q: 3 }))]
@@ -195,7 +222,11 @@ const SFX = (() => {
       ['Mudo', () => {}]
     ],
     cheer: [
-      ['Torcida', (v, o) => { noise(2.4, 0.3 * v, O(o, Object.assign(BP(1100, 0.8), { attack: 0.5 }))); for (let i = 0; i < 5; i++) tone(380 + Math.random() * 380, 0.5 + Math.random() * 0.5, 'sawtooth', 0.025 * v, O(o, Object.assign({ delay: Math.random() * 1.4, attack: 0.15, slideTo: 300 + Math.random() * 600 }))); }],
+      ['Torcida gritando', (v, o) => { // "êêêêh!": várias vozes (grossas e finas) passando por filtros de vogal, mais o chiado do povo
+        noise(2.2, 0.22 * v, O(o, Object.assign(BP(900, 0.9), { attack: 0.35 }))); noise(2.0, 0.12 * v, O(o, Object.assign(BP(2200, 1.2), { attack: 0.4 })));
+        for (let i = 0; i < 9; i++) { const f0 = (i % 2 ? 190 : 120) * (0.9 + Math.random() * 0.35), d = Math.random() * 0.35; voice(f0, 1.1 + Math.random() * 0.7, 0.05 * v, O(o, { delay: d })); }
+      }],
+      ['Torcida (antiga)', (v, o) => { noise(2.4, 0.3 * v, O(o, Object.assign(BP(1100, 0.8), { attack: 0.5 }))); for (let i = 0; i < 5; i++) tone(380 + Math.random() * 380, 0.5 + Math.random() * 0.5, 'sawtooth', 0.025 * v, O(o, Object.assign({ delay: Math.random() * 1.4, attack: 0.15, slideTo: 300 + Math.random() * 600 }))); }],
       ['Torcida baixinha', (v, o) => noise(2.4, 0.15 * v, O(o, Object.assign(BP(900, 0.7), { attack: 0.6 })))],
       ['Mudo', () => {}]
     ],
@@ -205,8 +236,22 @@ const SFX = (() => {
       ['Trovão de água', (v, o) => { noise(1.5, 0.5 * v, O(o, LP(250))); tone(50, 1.2, 'sine', 0.3 * v, o); }],
       ['Sirene de navio', (v, o) => tone(150, 1.4, 'triangle', 0.3 * v, O(o, { slideTo: 120 }))]
     ],
+    dragon: [
+      ['Rugido de dragão', (v, o) => { tone(95, 1.3, 'sawtooth', 0.22 * v, O(o, { slideTo: 55, attack: 0.15 })); tone(142, 1.1, 'sawtooth', 0.12 * v, O(o, { slideTo: 70, attack: 0.2 })); noise(1.4, 0.3 * v, O(o, { type: 'lowpass', freq: 700, sweep: 200, attack: 0.1 })); }],
+      ['Rugido curto', (v, o) => { tone(120, 0.7, 'sawtooth', 0.2 * v, O(o, { slideTo: 60 })); noise(0.8, 0.25 * v, O(o, LP(600))); }],
+      ['Mudo', () => {}]
+    ],
+    fire: [
+      ['Fogo (vuush)', (v, o) => noise(1.6, 0.35 * v, O(o, { type: 'bandpass', freq: 900, sweep: 300, q: 0.7, attack: 0.1 }))],
+      ['Mudo', () => {}]
+    ],
+    wash: [
+      ['Água batendo no casco', (v, o) => { noise(1.6, 0.22 * v, O(o, { type: 'lowpass', freq: 380, sweep: 1400, attack: 0.35 })); noise(1.2, 0.08 * v, O(o, { type: 'highpass', freq: 1800, delay: 0.5, attack: 0.3 })); }],
+      ['Mudo', () => {}]
+    ],
     thunder: [
-      ['Trovão longe', (v, o) => { noise(2.6, 0.55 * v, O(o, { type: 'lowpass', freq: 420, sweep: 90, attack: 0.05 })); noise(0.4, 0.3 * v, O(o, LP(900))); tone(42, 2.2, 'sine', 0.25 * v, o); }],
+      ['Trovão rolando longe', (v, o) => { noise(3.4, 0.42 * v, O(o, { type: 'lowpass', freq: 240, sweep: 70, attack: 0.5 })); tone(38, 2.6, 'sine', 0.12 * v, O(o, { attack: 0.6 })); }],
+      ['Trovão longe (antigo)', (v, o) => { noise(2.6, 0.55 * v, O(o, { type: 'lowpass', freq: 420, sweep: 90, attack: 0.05 })); noise(0.4, 0.3 * v, O(o, LP(900))); tone(42, 2.2, 'sine', 0.25 * v, o); }],
       ['Trovão estalando', (v, o) => { noise(0.25, 0.5 * v, O(o, HP(600))); noise(2.2, 0.5 * v, O(o, { type: 'lowpass', freq: 300, sweep: 70, delay: 0.1 })); }],
       ['Mudo', () => {}]
     ],
@@ -224,9 +269,9 @@ const SFX = (() => {
       ['Fogo', (v, o) => noise(0.6, 0.45 * v, O(o, { type: 'lowpass', freq: 1400, sweep: 200 }))]
     ]
   };
-  const NAMES = { thunder: 'Trovão (navio)', shot: 'Tiro', hit: 'Acerto', kill: 'Abate', jump: 'Pulo', land: 'Aterrissar', knife: 'Faca', reload: 'Recarregar', throw: 'Arremesso (granada)', explode: 'Explosão', bounce: 'Ricochete na parede', portal: 'Portal', splash: 'Cair na lava', drink: 'Beber poção', door: 'Porta da nave', magic: 'Raio da varinha', horn: 'Trem chegando (buzina)', train: 'Trem passando', cheer: 'Torcida do navio', wave: 'Onda gigante' };
+  const NAMES = { wash: 'Água no casco (navio)', dragon: 'Dragão (castelo)', fire: 'Fogo do dragão', thunder: 'Trovão (navio)', shot: 'Tiro', hit: 'Acerto', kill: 'Abate', jump: 'Pulo', land: 'Aterrissar', knife: 'Faca', reload: 'Recarregar', throw: 'Arremesso (granada)', explode: 'Explosão', bounce: 'Ricochete na parede', portal: 'Portal', splash: 'Cair na lava', drink: 'Beber poção', door: 'Porta da nave', magic: 'Raio da varinha', horn: 'Trem chegando (buzina)', train: 'Trem passando', cheer: 'Torcida do navio', wave: 'Onda gigante' };
   return {
-    init, LIB, NAMES,
+    init, LIB, NAMES, setBed, beds: () => beds,
     play(kind, vol, opts) {
       if (!ctx || S.mute === '1') return;
       const list = LIB[kind]; if (!list) return;
@@ -626,7 +671,8 @@ const NOISE_GLSL = `
 float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(h21(i), h21(i + vec2(1.0, 0.0)), f.x), mix(h21(i + vec2(0.0, 1.0)), h21(i + vec2(1.0, 1.0)), f.x), f.y); }
-float fbm(vec2 p){ float v = 0.0, a = 0.5; for (int k = 0; k < 5; k++) { v += a * vn(p); p = p * 2.03 + 11.7; a *= 0.5; } return v; }`;
+float fbm(vec2 p){ float v = 0.0, a = 0.5; for (int k = 0; k < 5; k++) { v += a * vn(p); p = p * 2.03 + 11.7; a *= 0.5; } return v; }
+float fbm3(vec2 p){ float v = 0.0, a = 0.5; for (int k = 0; k < 3; k++) { v += a * vn(p); p = p * 2.03 + 11.7; a *= 0.5; } return v * 1.14; }`;
 const LAVA_FRAG = `uniform float uTime; uniform float uScale; varying vec2 vP; ${NOISE_GLSL}
 void main(){
   vec2 p = vP * uScale;
@@ -665,11 +711,23 @@ function buildVolcanoWorld(th, W, H) {
   // borda: murinho de pedra baixo + uma barreira quase invisível (calor) até a altura da parede — assim dá pra ver
   // lá embaixo a boca do vulcão, a encosta e os rios de lava
   const parM = new THREE.MeshStandardMaterial({ map: wallTexture('#3b3431', 'basalt'), roughness: 1 });
-  const hazeM = new THREE.MeshBasicMaterial({ color: 0xff8a50, transparent: true, opacity: 0.05, depthWrite: false, side: THREE.DoubleSide });
+  // vidro de verdade (dá pra ver que tem parede ali e o tiro bate): um pouco mais forte embaixo, reflexos em diagonal e friso em cima
+  const HEAT_GLASS = canvasTex(128, 256, (g) => {
+    const gr = g.createLinearGradient(0, 0, 0, 256); gr.addColorStop(0, 'rgba(255,196,150,.34)'); gr.addColorStop(0.5, 'rgba(255,170,120,.2)'); gr.addColorStop(1, 'rgba(255,140,90,.36)');
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 256);
+    g.strokeStyle = 'rgba(255,236,214,.28)'; g.lineWidth = 7; for (const x of [30, 52]) { g.beginPath(); g.moveTo(x, 256); g.lineTo(x + 70, 0); g.stroke(); }
+    g.fillStyle = 'rgba(255,226,196,.55)'; g.fillRect(0, 0, 128, 5);
+  });
+  HEAT_GLASS.wrapS = THREE.RepeatWrapping;
+  const hazeM = new THREE.MeshBasicMaterial({ map: HEAT_GLASS, color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide });
+  const capM = new THREE.MeshStandardMaterial({ color: 0x2a2320, roughness: 0.7, metalness: 0.3 });
   for (const R of mapWalls) if (R.border) {
     const ph = 38, bh = (R.top != null ? R.top : P.borderH);
     const par = new THREE.Mesh(new THREE.BoxGeometry(R.w, ph, R.h), parM); par.position.set(R.x + R.w / 2, ph / 2, R.y + R.h / 2); par.castShadow = par.receiveShadow = true; mapGroup.add(par);
-    const hz = new THREE.Mesh(new THREE.BoxGeometry(R.w, bh - ph, R.h), hazeM); hz.position.set(R.x + R.w / 2, ph + (bh - ph) / 2, R.y + R.h / 2); mapGroup.add(hz);
+    const along = R.w > R.h, L = along ? R.w : R.h, hm = hazeM.clone(); hm.map = HEAT_GLASS.clone(); hm.map.repeat.set(Math.max(1, Math.round(L / 260)), 1); hm.map.needsUpdate = true;
+    const hz = new THREE.Mesh(new THREE.BoxGeometry(R.w, bh - ph, R.h), hm); hz.position.set(R.x + R.w / 2, ph + (bh - ph) / 2, R.y + R.h / 2); mapGroup.add(hz);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(R.w + 4, 5, R.h + 4), capM); cap.position.set(R.x + R.w / 2, bh, R.y + R.h / 2); mapGroup.add(cap);
+    for (let u = 0; u <= L + 1; u += 260) { const post = new THREE.Mesh(new THREE.BoxGeometry(7, bh - ph, 7), capM); post.position.set(along ? R.x + Math.min(u, L) : R.x + R.w / 2, ph + (bh - ph) / 2, along ? R.y + R.h / 2 : R.y + Math.min(u, L)); mapGroup.add(post); }
   }
   // pedras penduradas embaixo (ilha flutuando)
   const rnd = seeded(931);
@@ -1442,12 +1500,20 @@ function updateMetroFx(now) {
 }
 // ---------- canteiro de obras: guindaste no meio (a bola de demolição dá a volta), prédios em construção em volta ----------
 let obraFx = null;
+const CRANE_TOP = 640; // altura da lança do guindaste (acima do prédio em construção)
 function buildObra(w) {
   const W = w.W, H = w.H, cx = W / 2, cz = H / 2, yel = mat(0xe2b33c, { roughness: 0.6 }), dk = mat(0x2b2b2b), steel = mat(0x6b7280, { metalness: 0.6, roughness: 0.4 });
   // torre treliçada
-  const mastH = 520, mast = new THREE.Group();
+  const mastH = CRANE_TOP, mast = new THREE.Group();
   for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const c = new THREE.Mesh(new THREE.BoxGeometry(5, mastH, 5), yel); c.position.set(sx * 30, mastH / 2, sz * 30); mast.add(c); }
-  for (let y = 20; y < mastH; y += 40) for (const [a, b, rot] of [[0, -30, 0], [0, 30, 0], [-30, 0, 1], [30, 0, 1]]) { const d = new THREE.Mesh(new THREE.BoxGeometry(rot ? 3 : 64, 3, rot ? 64 : 3), yel); d.position.set(a, y, b); mast.add(d); const x2 = new THREE.Mesh(new THREE.BoxGeometry(rot ? 3 : 88, 3, rot ? 88 : 3), yel); x2.position.set(a, y + 20, b); x2.rotation[rot ? 'x' : 'z'] = 0.62; mast.add(x2); }
+  { // barras da treliça: um desenho só (InstancedMesh) em vez de centenas de peças
+    const bars = [], o = new THREE.Object3D();
+    for (let y = 20; y < mastH; y += 40) for (const [a, b, rot] of [[0, -30, 0], [0, 30, 0], [-30, 0, 1], [30, 0, 1]]) {
+      o.rotation.set(0, 0, 0); o.position.set(a, y, b); o.scale.set(rot ? 3 : 64, 3, rot ? 64 : 3); o.updateMatrix(); bars.push(o.matrix.clone());
+      o.position.set(a, y + 20, b); o.scale.set(rot ? 3 : 88, 3, rot ? 88 : 3); o.rotation[rot ? 'x' : 'z'] = 0.62; o.updateMatrix(); bars.push(o.matrix.clone());
+    }
+    const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), yel, bars.length); bars.forEach((m, i) => im.setMatrixAt(i, m)); mast.add(im);
+  }
   mast.position.set(cx, 0, cz); mapGroup.add(mast);
   // lança (gira) com o carrinho, o cabo e a bola
   const jib = new THREE.Group(); jib.position.set(cx, mastH, cz); mapGroup.add(jib);
@@ -1464,12 +1530,13 @@ function buildObra(w) {
   const ringM = new THREE.MeshBasicMaterial({ color: 0xff3b1f, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide });
   const ring = new THREE.Mesh(new THREE.RingGeometry(CRANE.R - CRANE.ball, CRANE.R + CRANE.ball, 96), ringM); ring.rotation.x = -Math.PI / 2; ring.position.set(cx, 1.4, cz); mapGroup.add(ring);
   // lá fora: prédios em construção (colunas e lajes), cercas e um outro guindaste longe
-  const conc = mat(0xa8a29e), rnd = seeded(303);
+  const conc = mat(0xa8a29e), rnd = seeded(303), oslabs = [], ocols = [];
   scatterOutside(W, H, 22, 260, 1500, 61, (x, z) => {
     const fl = 2 + Math.floor(rnd() * 6), fw = 220 + rnd() * 200, fd = 180 + rnd() * 160, fh = 90;
-    for (let f = 0; f <= fl; f++) { const slab = new THREE.Mesh(new THREE.BoxGeometry(fw, 10, fd), conc); slab.position.set(x, f * fh, z); mapGroup.add(slab); }
-    for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1], [0, 1]]) { const c = new THREE.Mesh(new THREE.BoxGeometry(12, fl * fh, 12), conc); c.position.set(x + a * (fw / 2 - 8), fl * fh / 2, z + b * (fd / 2 - 8)); mapGroup.add(c); }
+    for (let f = 0; f <= fl; f++) oslabs.push([x, f * fh, z, fw, 10, fd]);
+    for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1], [0, 1]]) ocols.push([x + a * (fw / 2 - 8), fl * fh / 2, z + b * (fd / 2 - 8), 12, fl * fh, 12]);
   });
+  instanced(new THREE.BoxGeometry(1, 1, 1), conc, oslabs); instanced(new THREE.BoxGeometry(1, 1, 1), conc, ocols); // (um desenho só pra cada)
   // a cidade em volta (de dia): prédios com janelas, bem mais longe que a obra
   const dayMats = ['#c9c2b4', '#b7c3cc', '#d8cdb8', '#a9b3bd'].map((c, v) => new THREE.MeshStandardMaterial({ roughness: 0.85, map: canvasTex(256, 512, (g) => {
     g.fillStyle = c; g.fillRect(0, 0, 256, 512); const r2 = seeded(900 + v);
@@ -1495,7 +1562,7 @@ function updateObraFx(now, dt) {
   } else a = C && C.rest != null ? C.rest : 0; // parada: a lança fica onde a bola parou (é de lá que ela começa a próxima volta)
   F.a = a;
   F.jib.rotation.y = -a; // o x da lança aponta pro ângulo a
-  const drop = 520 - y; F.cable.scale.y = drop - CRANE.ball; F.cable.position.set(CRANE.R, -(drop - CRANE.ball) / 2, 0);
+  const drop = CRANE_TOP - y; F.cable.scale.y = drop - CRANE.ball; F.cable.position.set(CRANE.R, -(drop - CRANE.ball) / 2, 0);
   F.ball.position.set(CRANE.R, -drop, 0); F.hook.position.set(CRANE.R, -drop + CRANE.ball + 6, 0);
   F.ringM.opacity += (show - F.ringM.opacity) * Math.min(1, dt * 8);
 }
@@ -1547,16 +1614,9 @@ function buildSea(w) {
   for (const [x, z, sw, sd] of [[W / 2, -8, W + 16, 16], [W / 2, H + 8, W + 16, 16], [-8, H / 2, 16, H + 32], [W + 8, H / 2, 16, H + 32]]) { const b = new THREE.Mesh(new THREE.BoxGeometry(sw, 60, sd), side); b.position.set(x, -30, z); mapGroup.add(b); }
   for (let x = 0; x <= W; x += W / 8) for (const z of [0, H]) { const c = new THREE.Mesh(new THREE.CylinderGeometry(16, 20, 260, 10), pil); c.position.set(x, -150, z); mapGroup.add(c); }
   for (let z = H / 6; z < H; z += H / 6) for (const x of [0, W]) { const c = new THREE.Mesh(new THREE.CylinderGeometry(16, 20, 260, 10), pil); c.position.set(x, -150, z); mapGroup.add(c); }
-  // borda de vidro (dá pra ver o mar e a onda vindo lá de longe) com colunas e corrimão de metal
-  const glassM = new THREE.MeshPhysicalMaterial({ color: 0xbfe6ff, transparent: true, opacity: 0.16, roughness: 0.05, metalness: 0, depthWrite: false, side: THREE.DoubleSide });
-  const postM = mat(0x9aa4ae, { metalness: 0.7, roughness: 0.35 }), BH = w.borderH || 100;
-  for (const R of w.walls) if (R.border) {
-    const g = new THREE.Mesh(new THREE.BoxGeometry(R.w, BH - 14, R.h), glassM); g.position.set(R.x + R.w / 2, 14 + (BH - 14) / 2, R.y + R.h / 2); mapGroup.add(g);
-    const base = new THREE.Mesh(new THREE.BoxGeometry(R.w, 14, R.h), mat(0x5a4330)); base.position.set(R.x + R.w / 2, 7, R.y + R.h / 2); mapGroup.add(base);
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(R.w + 4, 6, R.h + 4), postM); rail.position.set(R.x + R.w / 2, BH, R.y + R.h / 2); mapGroup.add(rail);
-    const along = R.w > R.h, L = along ? R.w : R.h;
-    for (let u = 0; u <= L; u += 140) { const post = new THREE.Mesh(new THREE.BoxGeometry(8, BH, 8), postM); post.position.set(along ? R.x + u : R.x + R.w / 2, BH / 2, along ? R.y + R.h / 2 : R.y + u); mapGroup.add(post); }
-  }
+  // borda: só o murinho baixo de madeira (sem vidro) — a parede continua lá, invisível, pra ninguém cair no mar
+  const parM = mat(0x5a4330);
+  for (const R of w.walls) if (R.border) { const base = new THREE.Mesh(new THREE.BoxGeometry(R.w, 14, R.h), parM); base.position.set(R.x + R.w / 2, 7, R.y + R.h / 2); mapGroup.add(base); }
   // ralos na base da borda (a água da onda sai por eles)
   const drainM = new THREE.MeshBasicMaterial({ color: 0x111418 }), drains = [];
   for (let x = 120; x < W - 60; x += 160) for (const [z, ry] of [[w.t + 0.7, 0], [H - w.t - 0.7, Math.PI]]) { const d = new THREE.Mesh(new THREE.PlaneGeometry(46, 14), drainM); d.position.set(x, 9, z); d.rotation.y = ry; mapGroup.add(d); drains.push([x, z, 0, ry === 0 ? -1 : 1]); }
@@ -1574,31 +1634,52 @@ function buildSea(w) {
   ship.position.set(W / 2, 0, -560); mapGroup.add(ship);
   // torcida no convés: centenas de torcedores bem leves (pontinhos com desenho, num só desenho da placa de vídeo),
   // metade de cada time, pulando e balançando os braços
-  const FAN_TEX = canvasTex(128, 64, (g) => {
-    for (const [ox, up] of [[0, 0], [64, 1]]) { // 2 quadros: braços meio pra cima / lá em cima
-      g.fillStyle = '#ff0000'; g.beginPath(); g.moveTo(ox + 20, 62); g.lineTo(ox + 44, 62); g.lineTo(ox + 42, 30); g.lineTo(ox + 22, 30); g.fill(); // corpo (camisa do time)
-      g.lineWidth = 7; g.lineCap = 'round'; g.strokeStyle = '#ff0000';
-      for (const sd of [-1, 1]) { g.beginPath(); g.moveTo(ox + 32 + sd * 9, 34); g.lineTo(ox + 32 + sd * (up ? 14 : 20), up ? 6 : 20); g.stroke(); }
-      g.fillStyle = '#00ff00'; g.beginPath(); g.arc(ox + 32, 22, 9, 0, 7); g.fill(); // cabeça (pele)
+  // cada canal de cor do desenho é uma parte: vermelho = camisa, verde = pele, azul = cabelo/boné, roxo = calça
+  const FAN_TEX = canvasTex(256, 128, (g) => {
+    for (const [ox, up] of [[0, 0], [128, 1]]) { // 2 quadros: braços meio pra cima / lá em cima
+      const cx = ox + 64;
+      g.fillStyle = '#ff00ff'; g.fillRect(cx - 15, 92, 13, 36); g.fillRect(cx + 2, 92, 13, 36); // pernas (calça)
+      g.fillStyle = '#ff0000'; g.beginPath(); g.moveTo(cx - 20, 96); g.lineTo(cx + 20, 96); g.lineTo(cx + 22, 58); g.quadraticCurveTo(cx + 20, 46, cx + 10, 45); g.lineTo(cx - 10, 45); g.quadraticCurveTo(cx - 20, 46, cx - 22, 58); g.closePath(); g.fill(); // camisa
+      g.lineCap = 'round'; g.lineWidth = 10;
+      for (const sd of [-1, 1]) { // braços (manga da camisa + mão)
+        const ex = cx + sd * (up ? 22 : 30), ey = up ? 26 : 40, hx = cx + sd * (up ? 24 : 36), hy = up ? 8 : 24;
+        g.strokeStyle = '#ff0000'; g.beginPath(); g.moveTo(cx + sd * 16, 52); g.lineTo(ex, ey); g.stroke();
+        g.strokeStyle = '#00ff00'; g.lineWidth = 8; g.beginPath(); g.moveTo(ex, ey); g.lineTo(hx, hy); g.stroke(); g.lineWidth = 10;
+        g.fillStyle = '#00ff00'; g.beginPath(); g.arc(hx, hy, 5, 0, 7); g.fill();
+      }
+      g.fillStyle = '#00ff00'; g.fillRect(cx - 5, 36, 10, 10); g.beginPath(); g.ellipse(cx, 28, 12, 13, 0, 0, 7); g.fill(); // pescoço e rosto
+      g.fillStyle = '#0000ff'; g.beginPath(); g.ellipse(cx, 22, 13, 9, 0, Math.PI, 0); g.fill(); g.fillRect(cx - 13, 20, 4, 8); g.fillRect(cx + 9, 20, 4, 8); // cabelo/boné
     }
   });
-  FAN_TEX.colorSpace = THREE.NoColorSpace; FAN_TEX.magFilter = THREE.NearestFilter;
-  const NF = 420, fpos = new Float32Array(NF * 3), fcol = new Float32Array(NF * 3), fph = new Float32Array(NF), fskin = new Float32Array(NF * 3);
-  const ca = new THREE.Color(TEAM.A), cb = new THREE.Color(TEAM.B), cc = new THREE.Color(), skins = [0xf1c9a5, 0xd9a47a, 0xa8714a, 0x6b4428, 0xe8b894];
+  FAN_TEX.colorSpace = THREE.NoColorSpace;
+  const NF = 420, fpos = new Float32Array(NF * 3), fcol = new Float32Array(NF * 3), fph = new Float32Array(NF), fskin = new Float32Array(NF * 3), fhair = new Float32Array(NF * 3), fpant = new Float32Array(NF * 3);
+  const ca = new THREE.Color(TEAM.A), cb = new THREE.Color(TEAM.B), cc = new THREE.Color();
+  const skins = [0xf6d2b3, 0xf1c9a5, 0xe0b08a, 0xd9a47a, 0xc08a5e, 0xa8714a, 0x8a5a38, 0x6b4428, 0x4e3120];
+  const hairs = [0x1a1410, 0x2b1d12, 0x4a2f1a, 0x6b4423, 0xb98a4e, 0xd8b56a, 0x8a3a1c, 0x9a9a9a, 0x101010];
+  const pants = [0x2a3b5c, 0x33475f, 0x1f2937, 0x3a3a3a, 0x6b5a44, 0x4b5563, 0x111827];
   for (let i = 0; i < NF; i++) {
-    const row = i % 7, x = -330 + Math.random() * 1320, z = 185 - row * 52 + (Math.random() - 0.5) * 18;
+    const row = i % 7, x = -330 + Math.random() * 1320, z = 185 - row * 52 + (Math.random() - 0.5) * 18, team = x > 330 ? cb : ca, r = Math.random();
     fpos[i * 3] = x; fpos[i * 3 + 1] = 216 + (row % 2) * 4; fpos[i * 3 + 2] = z;
-    cc.copy(x > 330 ? cb : ca).offsetHSL((Math.random() - 0.5) * 0.04, 0, (Math.random() - 0.5) * 0.18); fcol.set([cc.r, cc.g, cc.b], i * 3);
-    cc.set(skins[Math.floor(Math.random() * skins.length)]); fskin.set([cc.r, cc.g, cc.b], i * 3); fph[i] = Math.random() * 20;
+    // camisa: na cor do time com tons bem variados; alguns de branco, preto ou cinza (camisa reserva)
+    if (r < 0.1) cc.set(0xf1f1f1); else if (r < 0.16) cc.set(0x1c1c1c); else if (r < 0.2) cc.set(0x8a8f98);
+    else cc.copy(team).offsetHSL((Math.random() - 0.5) * 0.08, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.36);
+    fcol.set([cc.r, cc.g, cc.b], i * 3);
+    cc.set(skins[Math.floor(Math.random() * skins.length)]).offsetHSL(0, 0, (Math.random() - 0.5) * 0.06); fskin.set([cc.r, cc.g, cc.b], i * 3);
+    if (Math.random() < 0.25) cc.copy(team).offsetHSL(0, 0, -0.1); else cc.set(hairs[Math.floor(Math.random() * hairs.length)]); // boné do time ou cabelo
+    fhair.set([cc.r, cc.g, cc.b], i * 3);
+    cc.set(pants[Math.floor(Math.random() * pants.length)]); fpant.set([cc.r, cc.g, cc.b], i * 3);
+    fph[i] = Math.random() * 20;
   }
-  const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.BufferAttribute(fpos, 3)); fg.setAttribute('aCol', new THREE.BufferAttribute(fcol, 3)); fg.setAttribute('aSkin', new THREE.BufferAttribute(fskin, 3)); fg.setAttribute('aPh', new THREE.BufferAttribute(fph, 1));
+  const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.BufferAttribute(fpos, 3)); fg.setAttribute('aCol', new THREE.BufferAttribute(fcol, 3)); fg.setAttribute('aSkin', new THREE.BufferAttribute(fskin, 3)); fg.setAttribute('aHair', new THREE.BufferAttribute(fhair, 3)); fg.setAttribute('aPant', new THREE.BufferAttribute(fpant, 3)); fg.setAttribute('aPh', new THREE.BufferAttribute(fph, 1));
   const fanMat = new THREE.ShaderMaterial({ uniforms: { uTex: { value: FAN_TEX }, uTime: { value: 0 }, uScale: { value: 400 } }, transparent: false,
-    vertexShader: `uniform float uTime, uScale; attribute vec3 aCol, aSkin; attribute float aPh; varying vec3 vCol, vSkin; varying float vFr;
-      void main(){ vCol = aCol; vSkin = aSkin; vec3 p = position; p.y += max(0.0, sin(uTime * 6.0 + aPh)) * 9.0; vFr = step(0.2, sin(uTime * 4.3 + aPh * 1.7));
-        vec4 mv = modelViewMatrix * vec4(p, 1.0); gl_PointSize = uScale * 44.0 / -mv.z; gl_Position = projectionMatrix * mv; }`,
-    fragmentShader: `uniform sampler2D uTex; varying vec3 vCol, vSkin; varying float vFr;
-      void main(){ vec2 uv = vec2((gl_PointCoord.x * 0.5 + vFr * 0.5), 1.0 - gl_PointCoord.y); vec4 t = texture2D(uTex, uv); if (t.r < 0.5 && t.g < 0.5) discard;
-        vec3 c = t.r > 0.5 ? vCol : vSkin; c *= 0.75 + 0.35 * (1.0 - gl_PointCoord.y); gl_FragColor = vec4(c, 1.0);
+    vertexShader: `uniform float uTime, uScale; attribute vec3 aCol, aSkin, aHair, aPant; attribute float aPh; varying vec3 vCol, vSkin, vHair, vPant; varying float vFr;
+      void main(){ vCol = aCol; vSkin = aSkin; vHair = aHair; vPant = aPant; vec3 p = position; p.y += max(0.0, sin(uTime * 6.0 + aPh)) * 9.0; vFr = step(0.2, sin(uTime * 4.3 + aPh * 1.7));
+        vec4 mv = modelViewMatrix * vec4(p, 1.0); gl_PointSize = uScale * 50.0 / -mv.z; gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform sampler2D uTex; varying vec3 vCol, vSkin, vHair, vPant; varying float vFr;
+      void main(){ vec2 uv = vec2((gl_PointCoord.x * 0.5 + vFr * 0.5), 1.0 - gl_PointCoord.y); vec4 t = texture2D(uTex, uv);
+        if (t.r < 0.45 && t.g < 0.45 && t.b < 0.45) discard;
+        vec3 c = (t.r > 0.45 && t.b > 0.45) ? vPant : t.r > 0.45 ? vCol : t.g > 0.45 ? vSkin : vHair;
+        c *= 0.72 + 0.4 * (1.0 - gl_PointCoord.y); gl_FragColor = vec4(c, 1.0);
         #include <colorspace_fragment>
       }` });
   const fans = new THREE.Points(fg, fanMat); fans.frustumCulled = false; ship.add(fans);
@@ -1678,11 +1759,13 @@ function buildSea(w) {
   seaFx = { oceanMat, crowd, fanMat, buoys, gulls, waveG, waveMat, spray, spSeed, drains, W, H, wet: 0, spills: [], ship };
 }
 // torcida do navio: grita de tempos em tempos, mais alto quanto mais perto do navio
+// torcida do navio: um murmúrio de fundo baixinho (perto do navio) e, de vez em quando e quando alguém morre, o povo grita
+function cheerNear(F) { const me = sim.players.get('me'); if (!me) return 0; const d = Math.hypot(me.x - F.W / 2, me.z - (-560)); return Math.max(0, Math.min(1, 1.25 - d / 1800)); }
 function cheerSound(F, dt) {
-  F.cheerT = (F.cheerT || 0) - dt; if (F.cheerT > 0) return; F.cheerT = 1.8 + Math.random() * 1.2;
-  const me = sim.players.get('me'); if (!me) return;
-  const d = Math.hypot(me.x - F.W / 2, me.z - (-560)), v = Math.max(0, Math.min(1, 1.25 - d / 1800)) * (sim.wave && sim.wave.s === 2 ? 1 : 0.7);
-  if (v > 0.03) SFX.play('cheer', v, { pan: Math.max(-1, Math.min(1, (F.W / 2 - me.x) / 900)) });
+  const near = cheerNear(F);
+  SFX.setBed('crowd', 0.035 * near, 'bandpass', 700, 0.8); SFX.setBed('seaAmb', 0.03, 'lowpass', 420);
+  F.cheerT = (F.cheerT == null ? 3 : F.cheerT) - dt; if (F.cheerT > 0) return; F.cheerT = 7 + Math.random() * 6;
+  if (near > 0.05) SFX.play('cheer', near * (sim.wave && sim.wave.s === 2 ? 0.9 : 0.55), { pan: Math.max(-1, Math.min(1, (F.W / 2 - sim.players.get('me').x) / 900)) });
 }
 function updateSeaFx(now, dt) {
   if (!seaFx) return;
@@ -2002,6 +2085,48 @@ function ringSlab(D, m) { // piso redondo (anel ou pedaço de anel) com grossura
   const o = new THREE.Mesh(g, m); o.position.set(D.cx, D.top, D.cz); o.castShadow = o.receiveShadow = true;
   return o;
 }
+// dragão do castelo: voa de ponta a ponta bem alto e cospe fogo numa faixa (a faixa vermelha no chão avisa antes)
+let dragonFx = null;
+function makeDragonFx(W, H) {
+  const g = new THREE.Group(), skin = mat(0x5b1f1a, { roughness: 0.7 }), belly = mat(0x9a5a2a), wingM = new THREE.MeshStandardMaterial({ color: 0x3a1414, side: THREE.DoubleSide, roughness: 0.8, transparent: true, opacity: 0.95 });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(40, 12, 8), skin); body.scale.set(1, 0.8, 2.6); g.add(body);
+  const bl = new THREE.Mesh(new THREE.SphereGeometry(36, 10, 6), belly); bl.scale.set(0.8, 0.6, 2.3); bl.position.y = -8; g.add(bl);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(14, 26, 110, 8), skin); neck.rotation.x = Math.PI / 2 - 0.35; neck.position.set(0, 26, 130); g.add(neck);
+  const head = new THREE.Group(); head.position.set(0, 50, 190); g.add(head);
+  const skull = new THREE.Mesh(new THREE.BoxGeometry(34, 26, 60), skin); head.add(skull);
+  const jaw = new THREE.Mesh(new THREE.BoxGeometry(28, 8, 50), belly); jaw.position.set(0, -16, 8); head.add(jaw);
+  for (const sx of [-1, 1]) { const horn = new THREE.Mesh(new THREE.ConeGeometry(5, 34, 6), mat(0xd8c9a0)); horn.position.set(sx * 12, 22, -20); horn.rotation.x = -0.9; head.add(horn); const eye = new THREE.Mesh(new THREE.SphereGeometry(4, 6, 4), new THREE.MeshBasicMaterial({ color: 0xffd23a })); eye.position.set(sx * 13, 6, 18); head.add(eye); }
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(22, 260, 8), skin); tail.rotation.x = -Math.PI / 2; tail.position.set(0, 0, -210); g.add(tail);
+  const wsh = new THREE.Shape(); wsh.moveTo(0, 0); wsh.lineTo(280, 60); wsh.lineTo(330, -10); wsh.lineTo(250, -40); wsh.lineTo(180, -90); wsh.lineTo(110, -60); wsh.lineTo(40, -110); wsh.lineTo(0, -40);
+  const wings = [-1, 1].map((sx) => { const piv = new THREE.Group(); piv.position.set(sx * 30, 20, 30); const m = new THREE.Mesh(new THREE.ShapeGeometry(wsh), wingM); m.rotation.x = -Math.PI / 2; m.scale.set(sx, 1, 1); piv.add(m); g.add(piv); return piv; });
+  g.visible = false; scene.add(g);
+  const strip = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xff3a1a, transparent: true, opacity: 0, depthWrite: false })); strip.rotation.x = -Math.PI / 2; strip.visible = false; scene.add(strip);
+  const flames = []; for (let i = 0; i < 46; i++) { const f = new THREE.Sprite(new THREE.SpriteMaterial({ map: FIRE_TEX, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); f.visible = false; f.userData.t = Math.random(); f.userData.j = [Math.random() - 0.5, Math.random() - 0.5]; scene.add(f); flames.push(f); }
+  const burns = []; for (let i = 0; i < 24; i++) { const f = new THREE.Sprite(new THREE.SpriteMaterial({ map: FIRE_TEX, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); f.visible = false; scene.add(f); burns.push({ f, t: -9, x: 0, z: 0 }); }
+  return { g, wings, head, strip, flames, burns, W, H, lastBurn: 0, bi: 0 };
+}
+function updateDragonFx(now, dt) {
+  const D = sim.dragon;
+  if (!D || D.s === 0) { if (dragonFx) { dragonFx.g.visible = false; dragonFx.strip.visible = false; for (const f of dragonFx.flames) f.visible = false; } }
+  if (!D) return;
+  if (!dragonFx) dragonFx = makeDragonFx(mapInfo.W, mapInfo.H);
+  const F = dragonFx, t = now / 1000, H = F.H, half = 105;
+  // faixa de aviso (pisca no aviso, fica fraquinha enquanto ele passa)
+  if (D.s >= 1) { F.strip.visible = true; F.strip.scale.set(half * 2, H + 200, 1); F.strip.position.set(D.x, 1.4, H / 2); F.strip.material.opacity = D.s === 1 ? 0.18 + 0.14 * Math.sin(t * 12) : 0.12; }
+  if (D.s !== 2) return;
+  F.g.visible = true; F.g.position.set(D.x, 860 + Math.sin(t * 2) * 20, D.z); F.g.rotation.y = D.dir > 0 ? 0 : Math.PI;
+  for (const [i, w] of F.wings.entries()) w.rotation.z = (i ? -1 : 1) * (0.35 * Math.sin(t * 6.5) - 0.1);
+  // jato de fogo: da boca até o chão, um pouco atrás
+  const hx = D.x, hy = F.g.position.y + 30, hz = D.z + D.dir * 180, gz = D.z - D.dir * 110;
+  for (const f of F.flames) {
+    let u = (f.userData.t + t * 1.8) % 1; const j = f.userData.j;
+    f.visible = true; f.position.set(hx + j[0] * 80 * u, hy + (0 - hy) * u, hz + (gz - hz) * u + j[1] * 60 * u);
+    f.scale.setScalar(30 + 150 * u); f.material.opacity = 0.9 * (1 - u * 0.5);
+  }
+  // fogo que fica queimando no chão um pouquinho
+  if (now - F.lastBurn > 90) { F.lastBurn = now; const b = F.burns[F.bi++ % F.burns.length]; b.t = now; b.x = D.x + (Math.random() - 0.5) * half * 1.6; b.z = gz + (Math.random() - 0.5) * 80; }
+  for (const b of F.burns) { const u = (now - b.t) / 1000; if (u > 1) { b.f.visible = false; continue; } b.f.visible = true; b.f.position.set(b.x, 30 + u * 40, b.z); b.f.scale.setScalar(90 * (1 - u * 0.4)); b.f.material.opacity = 0.8 * (1 - u); }
+}
 function buildCastle(w) {
   const W = w.W, H = w.H, stoneT = wallTexture('#a6a6a2', 'stone');
   const stone = (rx, ry) => { const t = stoneT.clone(); t.needsUpdate = true; t.repeat.set(rx, ry); return new THREE.MeshStandardMaterial({ map: t, roughness: 0.9 }); };
@@ -2018,11 +2143,12 @@ function buildCastle(w) {
     // mãos-francesas embaixo da sacada
     for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2, c = new THREE.Mesh(new THREE.BoxGeometry(TW.bal * 0.8, 20, 10), slabM); c.position.set(T.x + Math.cos(a) * (TW.R + TW.bal * 0.4), TW.top - 24, T.z + Math.sin(a) * (TW.R + TW.bal * 0.4)); c.rotation.y = -a; mapGroup.add(c); }
     // janelas acesas na parede da torre (por fora e por dentro)
-    for (const [yy, da] of [[180, 1.2], [180, -2.2], [360, 2.6], [360, -0.9]]) {
+    const pil = new THREE.Mesh(new THREE.CylinderGeometry(TW.pillar + 7, TW.pillar + 9, TW.wallTop, 16), stone(2, 4)); pil.position.set(T.x, TW.wallTop / 2, T.z); pil.castShadow = pil.receiveShadow = true; mapGroup.add(pil); // coluna redonda
+    for (const [yy, da] of [[200, 1.2], [200, -2.2], [460, 2.6], [460, -0.9]]) {
       const a = T.a0 + da, q = new THREE.Mesh(new THREE.PlaneGeometry(22, 44), winM); q.position.set(T.x + Math.cos(a) * (TW.R + TW.half + 0.6), yy, T.z + Math.sin(a) * (TW.R + TW.half + 0.6)); q.rotation.y = -a + Math.PI / 2; mapGroup.add(q);
     }
     // arco de pedra em cima das portas
-    for (const a of [...T.gd, T.bd]) { const base = a === T.bd ? TW.top : 0, hgt = a === T.bd ? TW.balDoor : TW.lintel, ar = new THREE.Mesh(new THREE.TorusGeometry(TW.door * 0.9, 7, 6, 14, Math.PI), slabM); ar.position.set(T.x + Math.cos(a) * (TW.R + TW.half + 1), base + hgt - TW.door * 0.9 + 4, T.z + Math.sin(a) * (TW.R + TW.half + 1)); ar.rotation.y = -a + Math.PI / 2; mapGroup.add(ar); }
+    for (const a of T.gd) { const base = 0, hgt = TW.lintel, ar = new THREE.Mesh(new THREE.TorusGeometry(TW.door * 0.9, 7, 6, 14, Math.PI), slabM); ar.position.set(T.x + Math.cos(a) * (TW.R + TW.half + 1), base + hgt - TW.door * 0.9 + 4, T.z + Math.sin(a) * (TW.R + TW.half + 1)); ar.rotation.y = -a + Math.PI / 2; mapGroup.add(ar); }
   }
   // salão: janelas altas acesas, estandartes dos times nas paredes da frente e tochas dentro
   const [kx0, kz0, kx1, kz1] = MAPS3D.castelo.keep.map((v, i) => v * (i % 2 ? H : W));
@@ -2037,6 +2163,55 @@ function buildCastle(w) {
     const gl = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW_TEX, color: 0xffa040, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending })); gl.scale.setScalar(50); gl.position.set(x, 130, z); mapGroup.add(gl);
   }
   for (const zz of [0.42, 0.58]) { const pl = new THREE.PointLight(0xffb070, 50000, 700, 2); pl.position.set(W / 2, 170, H * zz); mapGroup.add(pl); } // luz quente dentro do salão
+  // salão principal: tronos do rei e da rainha no tablado, tapete vermelho e o teto encantado (céu de noite com estrelas)
+  if (w.hall) {
+    const Hh = w.hall, darkM = mat(0x3b2616, { roughness: 0.8 });
+    const goldM = mat(0xd4af37, { metalness: 0.35, roughness: 0.45, flatShading: false, emissive: 0x3a2806 }), cube = new THREE.BoxGeometry(1, 1, 1);
+    const box = (m, x, y, z, sx, sy, sz, sh) => { const b = new THREE.Mesh(cube, m); b.position.set(x, y, z); b.scale.set(sx, sy, sz); b.castShadow = !!sh; b.receiveShadow = true; mapGroup.add(b); return b; };
+    for (const R of w.walls) {
+      const cx = R.x + R.w / 2, cz = R.y + R.h / 2;
+      if (R.throne === 'back') {
+        const hgt = R.top - R.y0;
+        box(goldM, cx, R.y0 + hgt * 0.45, cz, R.w, hgt * 0.9, R.h, true);
+        const tip = new THREE.Mesh(new THREE.ConeGeometry(R.h * 0.5, hgt * 0.2, 4), goldM); tip.rotation.y = Math.PI / 4; tip.scale.set(R.w / R.h * 1.4, 1, 1.4); tip.position.set(cx, R.y0 + hgt * 0.9 + hgt * 0.1, cz); mapGroup.add(tip);
+        for (const [sx, col] of [[-1, TEAM.A], [1, TEAM.B]]) box(mat(col, { roughness: 1 }), cx + sx * (R.w / 2 + 0.6), R.y0 + hgt * 0.45, cz, 1.2, hgt * 0.62, R.h - 14); // encosto estofado
+        // coroas: a do rei maior (lado da base azul) e a da rainha menor (lado da base vermelha)
+        for (const [sx, k] of [[-1, 1], [1, 0.72]]) {
+          const y = R.y0 + hgt * 0.78, x = cx + sx * (R.w / 2 + 6 * k);
+          const ring = new THREE.Mesh(new THREE.CylinderGeometry(9 * k, 8 * k, 7 * k, 10, 1, true), goldM); ring.position.set(x, y, cz); ring.material.side = THREE.DoubleSide; mapGroup.add(ring);
+          for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2, sp = new THREE.Mesh(new THREE.ConeGeometry(2 * k, 7 * k, 4), goldM); sp.position.set(x + Math.cos(a) * 8.5 * k, y + 7 * k, cz + Math.sin(a) * 8.5 * k); mapGroup.add(sp); }
+          const gem = new THREE.Mesh(new THREE.OctahedronGeometry(2.6 * k), new THREE.MeshBasicMaterial({ color: sx < 0 ? 0x60a5fa : 0xf87171 })); gem.position.set(x + sx * 9 * k, y, cz); mapGroup.add(gem);
+        }
+      } else if (R.throne) {
+        const col = R.throne === 'king' ? TEAM.A : TEAM.B, sx = R.throne === 'king' ? -1 : 1;
+        box(darkM, cx, R.y0 + (R.top - R.y0) / 2, cz, R.w, R.top - R.y0, R.h, true);
+        box(mat(col, { roughness: 1 }), cx, R.top + 2, cz, R.w - 4, 4, R.h - 6); // almofada
+        for (const dz of [-R.h / 2 + 3, R.h / 2 - 3]) { box(goldM, cx, R.top + 9, R.y + R.h / 2 + dz, R.w, 5, 6, true); box(goldM, cx + sx * (R.w / 2 - 3), R.top + 4, R.y + R.h / 2 + dz, 6, 10, 6); } // braços
+      }
+    }
+    // tapete vermelho: da porta até a escada, degrau por degrau, e em cima até o trono
+    const carpet = [], cw = 50, stairL = Hh.n * Hh.sd;
+    for (const sd of [-1, 1]) {
+      const inner = sd < 0 ? Hh.kx0 + Hh.kt : Hh.kx1 - Hh.kt, foot = Hh.cx + sd * (Hh.dx + stairL);
+      carpet.push([(inner + foot) / 2, 0.5, Hh.cz, Math.abs(foot - inner), 1, cw]);
+      for (let k = 1; k <= Hh.n; k++) {
+        const x = sd < 0 ? Hh.cx - Hh.dx - (Hh.n - k + 0.5) * Hh.sd : Hh.cx + Hh.dx + (Hh.n - k + 0.5) * Hh.sd, y = Hh.DH * k / Hh.n, rh = Hh.DH / Hh.n;
+        carpet.push([x, y + 0.5, Hh.cz, Hh.sd + 0.02, 1, cw]); carpet.push([x + sd * (Hh.sd / 2 + 0.4), y - rh / 2 + 0.5, Hh.cz, 1, rh + 1, cw]); // em cima e na frente do degrau
+      }
+      carpet.push([Hh.cx + sd * (Hh.dx + 47) / 2, Hh.DH + 0.5, Hh.cz, Hh.dx - 47, 1, cw]);
+    }
+    instanced(cube, mat(0x8a1c22, { roughness: 1 }), carpet);
+    // chão de pedra dentro do salão
+    const fl0 = new THREE.Mesh(new THREE.PlaneGeometry(Hh.kx1 - Hh.kx0 - 2 * Hh.kt, Hh.kz1 - Hh.kz0 - 2 * Hh.kt), stone(7, 7)); fl0.rotation.x = -Math.PI / 2; fl0.position.set(Hh.cx, 0.3, Hh.cz); fl0.receiveShadow = true; mapGroup.add(fl0);
+    // teto encantado: céu de noite com estrelas e nuvens (embaixo do telhado)
+    const skyT = canvasTex(512, 512, (g) => {
+      const gr = g.createLinearGradient(0, 0, 512, 512); gr.addColorStop(0, '#0d1433'); gr.addColorStop(0.5, '#1c1f4a'); gr.addColorStop(1, '#2a1c42'); g.fillStyle = gr; g.fillRect(0, 0, 512, 512);
+      const r2 = seeded(91); for (let i = 0; i < 26; i++) { g.fillStyle = `rgba(160,170,210,${0.05 + r2() * 0.07})`; g.beginPath(); g.ellipse(r2() * 512, r2() * 512, 40 + r2() * 90, 16 + r2() * 30, r2() * 3, 0, 7); g.fill(); }
+      for (let i = 0; i < 260; i++) { const a = 0.4 + r2() * 0.6, rr = r2() < 0.1 ? 1.8 : 0.9; g.fillStyle = `rgba(255,250,230,${a})`; g.beginPath(); g.arc(r2() * 512, r2() * 512, rr, 0, 7); g.fill(); }
+    });
+    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(Hh.kx1 - Hh.kx0 - 2 * Hh.kt, Hh.kz1 - Hh.kz0 - 2 * Hh.kt), new THREE.MeshBasicMaterial({ map: skyT }));
+    ceil.rotation.x = Math.PI / 2; ceil.position.set(Hh.cx, Hh.KH - 12.6, Hh.cz); mapGroup.add(ceil);
+  }
   // ameias em cima da muralha de volta do mapa (só enfeite) e a paisagem: lago, montanhas e floresta escura em volta
   const BH = w.borderH || 200, merl = [];
   for (let x = 20; x < W; x += 60) for (const z of [12, H - 12]) merl.push([x, BH + 12, z, 30, 24, 24]);
@@ -2068,7 +2243,7 @@ void main(){ vec3 p = position; vec4 w0 = modelMatrix * vec4(p, 1.0);
   float h = sin(w0.x * 0.0022 + uTime * 0.9) * 46.0 + sin(w0.z * 0.0031 - uTime * 1.1) * 34.0 + sin((w0.x - w0.z) * 0.006 + uTime * 1.7) * 14.0 + sin((w0.x + w0.z * 0.4) * 0.013 + uTime * 2.6) * 6.0;
   w0.y += h; vH = h; vW = w0.xyz; gl_Position = projectionMatrix * viewMatrix * w0; }`;
 const STORM_SEA_FRAG = `uniform float uTime; uniform float uFlash; varying float vH; varying vec3 vW; ${NOISE_GLSL}
-void main(){ float n = fbm(vW.xz * 0.003 + uTime * 0.06); vec3 deep = vec3(0.03, 0.08, 0.1), light = vec3(0.12, 0.22, 0.24);
+void main(){ float n = fbm3(vW.xz * 0.003 + uTime * 0.06); vec3 deep = vec3(0.03, 0.08, 0.1), light = vec3(0.12, 0.22, 0.24);
   vec3 c = mix(deep, light, clamp(vH / 90.0 + 0.5 + n * 0.3, 0.0, 1.0));
   c += vec3(0.75, 0.8, 0.82) * smoothstep(0.72, 0.92, n + vH / 160.0) * 0.45; // espuma na crista
   c += vec3(0.5, 0.55, 0.7) * uFlash * 0.5;
@@ -2076,25 +2251,39 @@ void main(){ float n = fbm(vW.xz * 0.003 + uTime * 0.06); vec3 deep = vec3(0.03,
   #include <fog_fragment>
   #include <colorspace_fragment>
 }`;
+// água que entra no convés quando a onda grande inclina o navio (do lado mais baixo) e vai sumindo quando ele volta
+const DECK_WATER_FRAG = `uniform float uWet; uniform float uSide; uniform float uTime; uniform vec2 uZ; varying vec3 vW; ${NOISE_GLSL}
+void main(){ float v = (vW.z - uZ.x) / (uZ.y - uZ.x); if (uSide < 0.0) v = 1.0 - v;
+  float n = fbm3(vW.xz * 0.01 + vec2(uTime * 0.4, uTime * 0.25));
+  float cov = uWet * 0.42, a = smoothstep(1.0 - cov - 0.06, 1.0 - cov + 0.06, v + (n - 0.5) * 0.08);
+  if (a < 0.01) discard;
+  vec3 c = mix(vec3(0.16, 0.26, 0.3), vec3(0.75, 0.82, 0.85), smoothstep(0.62, 0.8, n) * 0.5);
+  gl_FragColor = vec4(c, a * 0.7 * min(1.0, uWet * 1.6));
+  #include <colorspace_fragment>
+}`;
 function buildShip(w) {
-  const W = w.W, H = w.H, P = w.deck.poly, cx = W / 2, cz = H / 2;
-  // casco: lados de tábua descendo até a água (vai afinando embaixo) e a quilha
-  const plankT = wallTexture('#4a3220', 'plank'), hullM = new THREE.MeshStandardMaterial({ map: plankT, roughness: 0.9, side: THREE.DoubleSide });
+  const W = w.W, H = w.H, P = w.deck.poly, cx = W / 2, cz = H / 2, SH = SHIP;
+  // casco: lados de tábua descendo até a água (vai afinando embaixo)
+  const plankT = wallTexture('#4a3220', 'plank');
   { const pos = [], uv = [], idx = [], bot = P.map(([x, z]) => [cx + (x - cx) * 0.9, cz + (z - cz) * 0.62]); let L = 0;
-    for (let i = 0; i <= P.length; i++) { const A = P[i % P.length], B = bot[i % P.length]; if (i) L += Math.hypot(A[0] - P[i - 1][0], A[1] - P[i - 1][1]); pos.push(A[0], 30, A[1], B[0], -170, B[1]); uv.push(L / 128, 1.6, L / 128, 0); }
+    for (let i = 0; i <= P.length; i++) { const A = P[i % P.length], B = bot[i % P.length]; if (i) L += Math.hypot(A[0] - P[i - 1][0], A[1] - P[i - 1][1]); pos.push(A[0], 30, A[1], B[0], SH.sea - 70, B[1]); uv.push(L / 128, 1.6, L / 128, 0); }
     for (let i = 0; i < P.length; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 2, a + 1, a + 3); }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
-    const t = plankT.clone(); t.needsUpdate = true; const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: t, roughness: 0.9, side: THREE.DoubleSide })); m.receiveShadow = true; mapGroup.add(m); }
-  // faixa de acabamento dourada em volta e a cabeça de dragão na proa e na popa (navio de bruxos)
-  const gold = mat(0xb8913a, { metalness: 0.5, roughness: 0.45 }), darkW = mat(0x3a2716);
+    const t = plankT.clone(); t.needsUpdate = true; const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: t, roughness: 0.9, side: THREE.DoubleSide })); mapGroup.add(m); }
+  const gold = mat(0xb8913a, { metalness: 0.5, roughness: 0.45 }), darkW = mat(0x3a2716), mastM = mat(0x5a3d22);
   for (let i = 0; i < P.length; i++) { const A = P[i], B = P[(i + 1) % P.length], L = Math.hypot(B[0] - A[0], B[1] - A[1]), s = new THREE.Mesh(new THREE.BoxGeometry(L, 5, 3), gold); s.position.set((A[0] + B[0]) / 2, 20, (A[1] + B[1]) / 2); s.rotation.y = -Math.atan2(B[1] - A[1], B[0] - A[0]); mapGroup.add(s); }
-  for (const [x, dir, col] of [[P[0][0], -1, TEAM.A], [P[5][0], 1, TEAM.B]]) {
-    const neck = new THREE.Mesh(new THREE.CylinderGeometry(10, 22, 190, 8), darkW); neck.position.set(x + dir * 40, 90, cz); neck.rotation.z = -dir * 0.55; mapGroup.add(neck);
-    const head = new THREE.Mesh(new THREE.ConeGeometry(20, 70, 6), darkW); head.position.set(x + dir * 96, 180, cz); head.rotation.z = -dir * Math.PI / 2; mapGroup.add(head);
-    for (const sz of [-1, 1]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(4, 6, 4), new THREE.MeshBasicMaterial({ color: col })); eye.position.set(x + dir * 86, 188, cz + sz * 12); mapGroup.add(eye); const horn = new THREE.Mesh(new THREE.ConeGeometry(4, 34, 5), gold); horn.position.set(x + dir * 72, 206, cz + sz * 12); horn.rotation.z = dir * 0.7; mapGroup.add(horn); }
+  // gurupés (a ponta que sai lá na frente): tábua inclinada em cima de um mastro deitado, e a cabeça de dragão na ponta
+  for (const S of w.slopes || []) {
+    if (!S.bow) continue;
+    const L = S.x1 - S.x0, ang = Math.atan2(S.h1 - S.h0, L), mid = (S.h0 + S.h1) / 2, zc = (S.z0 + S.z1) / 2, wd = S.z1 - S.z0;
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(Math.hypot(L, S.h1 - S.h0), 8, wd), new THREE.MeshStandardMaterial({ map: plankT, roughness: 0.9 })); deck.position.set((S.x0 + S.x1) / 2, mid - 4, zc); deck.rotation.z = ang; deck.receiveShadow = true; mapGroup.add(deck);
+    const spar = new THREE.Mesh(new THREE.CylinderGeometry(10, 14, Math.hypot(L, S.h1 - S.h0) + 60, 8), mastM); spar.rotation.z = Math.PI / 2 + ang; spar.position.set((S.x0 + S.x1) / 2, mid - 22, zc); mapGroup.add(spar);
+    const tipLeft = S.h0 > S.h1, tx = tipLeft ? S.x0 : S.x1, ty = Math.max(S.h0, S.h1), dir = tipLeft ? -1 : 1, col = tipLeft ? TEAM.A : TEAM.B;
+    const head = new THREE.Mesh(new THREE.ConeGeometry(16, 60, 6), darkW); head.position.set(tx + dir * 26, ty - 26, zc); head.rotation.z = -dir * Math.PI / 2; mapGroup.add(head);
+    for (const sz of [-1, 1]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(3.5, 6, 4), new THREE.MeshBasicMaterial({ color: col })); eye.position.set(tx + dir * 20, ty - 18, zc + sz * 9); mapGroup.add(eye); const horn = new THREE.Mesh(new THREE.ConeGeometry(3, 26, 5), gold); horn.position.set(tx + dir * 8, ty - 8, zc + sz * 9); horn.rotation.z = dir * 0.7; mapGroup.add(horn); }
   }
-  // mastros, vergas, velas remendadas (bem lá em cima: não atrapalham o tiro) e cordas
-  const mastM = mat(0x5a3d22), sailT = canvasTex(256, 256, (g) => {
+  // mastros: o de baixo termina no chão do cesto; o de cima (com as velas) começa bem mais alto, preso por cordas
+  const sailT = canvasTex(256, 256, (g) => {
     g.fillStyle = '#d9cfb4'; g.fillRect(0, 0, 256, 256); const rnd = seeded(3);
     for (let i = 0; i < 9; i++) { g.fillStyle = `rgba(120,100,70,${0.08 + rnd() * 0.1})`; g.fillRect(rnd() * 220, rnd() * 220, 30 + rnd() * 50, 20 + rnd() * 40); } // remendos
     g.strokeStyle = 'rgba(90,70,40,.35)'; g.lineWidth = 2; for (let x = 0; x < 256; x += 32) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 256); g.stroke(); }
@@ -2104,89 +2293,91 @@ function buildShip(w) {
     g.clearRect(0, 240, 256, 16); for (let x = 0; x < 256; x += 22) g.clearRect(x, 228 + rnd() * 12, 10 + rnd() * 8, 30); // barra rasgada
   }, false);
   const sailM = new THREE.MeshStandardMaterial({ map: sailT, side: THREE.DoubleSide, transparent: true, alphaTest: 0.3, roughness: 1 }), sails = [], rope = [];
-  const ropeM = new THREE.LineBasicMaterial({ color: 0x2a1d12 });
+  const basketM = new THREE.MeshStandardMaterial({ map: plankT, side: THREE.DoubleSide, roughness: 0.9 });
   for (const M of w.masts || []) {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(M.r * 0.7, M.r, 820, 10), mastM); m.position.set(M.x, 410, M.z); m.castShadow = true; mapGroup.add(m);
-    // cesto (fundo + borda de tábua)
-    const basket = new THREE.Mesh(new THREE.CylinderGeometry(M.nr + 4, M.nr - 6, 30, 18, 1, true), new THREE.MeshStandardMaterial({ map: plankT, side: THREE.DoubleSide, roughness: 0.9 })); basket.position.set(M.x, M.nest + 8, M.z); mapGroup.add(basket);
-    const nfloor = new THREE.Mesh(new THREE.CylinderGeometry(M.nr, M.nr - 8, 12, 18), darkW); nfloor.position.set(M.x, M.nest - 6, M.z); nfloor.receiveShadow = true; mapGroup.add(nfloor);
-    for (const [yy, len] of [[M.nest + 70, 520], [M.nest + 250, 420]]) {
+    const lowH = M.nest - 12 - M.base, low = new THREE.Mesh(new THREE.CylinderGeometry(M.r * 0.85, M.r, lowH, 10), mastM); low.position.set(M.x, M.base + lowH / 2, M.z); low.castShadow = true; mapGroup.add(low);
+    const basket = new THREE.Mesh(new THREE.CylinderGeometry(M.nr + 4, M.nr - 6, 30, 20, 1, true), basketM); basket.position.set(M.x, M.nest + 8, M.z); mapGroup.add(basket);
+    const nfloor = new THREE.Mesh(new THREE.CylinderGeometry(M.nr, M.nr - 8, 12, 20), darkW); nfloor.position.set(M.x, M.nest - 6, M.z); nfloor.receiveShadow = true; mapGroup.add(nfloor);
+    const u0 = M.nest - 12, u1 = M.nest + 780, up = new THREE.Mesh(new THREE.CylinderGeometry(M.r * 0.55, M.r * 0.62, u1 - u0, 8), mastM); up.position.set(M.x, (u0 + u1) / 2, M.z); mapGroup.add(up); // coluna no meio do cesto
+    for (const [yy, len] of [[M.nest + 230, 560], [M.nest + 450, 440]]) { // velas bem acima do cesto (não atrapalham o pulo)
       const yard = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, len, 6), mastM); yard.rotation.x = Math.PI / 2; yard.position.set(M.x, yy + 150, M.z); mapGroup.add(yard);
-      const sg = new THREE.PlaneGeometry(len * 0.92, 170, 12, 6), sp = sg.attributes.position; for (let i = 0; i < sp.count; i++) { const u = sp.getX(i) / (len * 0.46); sp.setZ(i, (1 - u * u) * 26); }
+      const sg = new THREE.PlaneGeometry(len * 0.92, 170, 10, 4), sp = sg.attributes.position; for (let i = 0; i < sp.count; i++) { const u = sp.getX(i) / (len * 0.46); sp.setZ(i, (1 - u * u) * 26); }
       const sail = new THREE.Mesh(sg, sailM); sail.rotation.y = Math.PI / 2; sail.position.set(M.x + 10, yy + 64, M.z); mapGroup.add(sail); sails.push(sail);
     }
-    // escada de corda dos 2 lados do mastro
-    for (const L of (w.ladders || []).filter((q) => Math.abs(q.x - M.x) < 1)) { const z = L.z + L.nz * 6; for (const sx of [-1, 1]) rope.push(L.x + sx * 17, 0, z, L.x + sx * 17, L.top + 20, z); for (let y = 14; y < L.top; y += 22) rope.push(L.x - 17, y, z, L.x + 17, y, z); }
-    for (const [dx, dz] of [[-0.2, -1], [0.2, -1], [-0.2, 1], [0.2, 1]]) { rope.push(M.x, M.nest + 300, M.z, M.x + dx * 300, 30, M.z + dz * (H * 0.28)); } // cordas até a borda
+    for (const [dx, dz] of [[-0.2, -1], [0.2, -1], [-0.2, 1], [0.2, 1]]) rope.push(M.x, u1 - 40, M.z, M.x + dx * 300, 30, M.z + dz * (H * 0.25)); // cordas até a borda
   }
-  { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(rope, 3)); mapGroup.add(new THREE.LineSegments(g, ropeM)); }
-  // barris e canhões (a colisão é a caixa; o desenho é redondo)
+  // escadas de corda (cada uma do chão/teto até o cesto)
+  for (const L of w.ladders || []) { const x = L.x + L.nx * 6; for (const sz of [-1, 1]) rope.push(x, L.base || 0, L.z + sz * 17, x, L.top + 20, L.z + sz * 17); for (let y = (L.base || 0) + 14; y < L.top; y += 22) rope.push(x, y, L.z - 17, x, y, L.z + 17); }
+  { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(rope, 3)); mapGroup.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0x2a1d12 }))); }
+  // barris (a colisão é a caixa; o desenho é redondo)
   for (const R of w.walls) {
-    const c0 = mapGroup.children.length; drawShipProp(R); if (R.item != null) for (let i = c0; i < mapGroup.children.length; i++) mapGroup.children[i].userData.item = R.item;
+    if (R.style !== 'barrel') continue; const c0 = mapGroup.children.length, rr = Math.min(R.w, R.h) / 2;
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(rr, rr * 0.9, R.top, 12), mat(0x6b4a2a)); b.position.set(R.x + R.w / 2, R.top / 2, R.y + R.h / 2); b.castShadow = true; mapGroup.add(b);
+    for (const yy of [0.2, 0.8]) { const hoop = new THREE.Mesh(new THREE.TorusGeometry(rr + 0.5, 1.4, 4, 16), mat(0x2d2d2d)); hoop.rotation.x = Math.PI / 2; hoop.position.set(R.x + R.w / 2, R.top * yy, R.y + R.h / 2); mapGroup.add(hoop); }
+    if (R.item != null) for (let i = c0; i < mapGroup.children.length; i++) mapGroup.children[i].userData.item = R.item;
   }
-  function drawShipProp(R) {
-    if (R.style === 'barrel') { const b = new THREE.Mesh(new THREE.CylinderGeometry(Math.min(R.w, R.h) / 2, Math.min(R.w, R.h) / 2 * 0.9, R.top, 12), mat(0x6b4a2a)); b.position.set(R.x + R.w / 2, R.top / 2, R.y + R.h / 2); b.castShadow = true; mapGroup.add(b); for (const yy of [0.2, 0.8]) { const hoop = new THREE.Mesh(new THREE.TorusGeometry(Math.min(R.w, R.h) / 2 + 0.5, 1.4, 4, 16), mat(0x2d2d2d)); hoop.rotation.x = Math.PI / 2; hoop.position.set(R.x + R.w / 2, R.top * yy, R.y + R.h / 2); mapGroup.add(hoop); } }
-    if (R.style === 'cannon') { const cw = new THREE.Mesh(new THREE.BoxGeometry(R.w * 0.9, 16, R.h * 0.8), mat(0x4a3220)); cw.position.set(R.x + R.w / 2, 8, R.y + R.h / 2); mapGroup.add(cw); const out = R.y < H / 2 ? -1 : 1, br = new THREE.Mesh(new THREE.CylinderGeometry(6, 8, R.h * 1.4, 10), mat(0x1f1f1f, { metalness: 0.6, roughness: 0.4 })); br.rotation.x = Math.PI / 2; br.position.set(R.x + R.w / 2, 24, R.y + R.h / 2 + out * 8); mapGroup.add(br); }
-  }
-  // lanternas (luz quente) nos 2 castelos
-  for (const x of [0.165 * W, W - 0.165 * W]) { const pl = new THREE.PointLight(0xffb45a, 18000, 380, 2); pl.position.set(x, 70, cz); mapGroup.add(pl); const lp = new THREE.Mesh(new THREE.SphereGeometry(5, 6, 4), new THREE.MeshBasicMaterial({ color: 0xffd08a })); lp.position.set(x, 84, cz); mapGroup.add(lp); } // lampião dentro da cabine
-  for (const x of [0.225 * W, W - 0.225 * W]) { const l = new THREE.Mesh(new THREE.BoxGeometry(8, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffc46b })); l.position.set(x, 146, cz); mapGroup.add(l); const pl = new THREE.PointLight(0xffb45a, 26000, 520, 2); pl.position.set(x + (x < cx ? 30 : -30), 150, cz); mapGroup.add(pl); }
-  // em volta (gira com o balanço): mar agitado, céu de tempestade, ilha de pedra com vulcão em erupção, chuva
+  // cabine do meio: luz quente lá dentro (uma luz só), janelas acesas e lanternas nas portas; lanternas nos castelos
+  { const pl = new THREE.PointLight(0xffb45a, 26000, 520, 2); pl.position.set(cx, 110, cz); mapGroup.add(pl); }
+  const lampM = new THREE.MeshBasicMaterial({ color: 0xffc46b });
+  for (const x of [0.43 * W - 1, 0.57 * W + 1]) for (const z of [cz - 70, cz + 70]) { const l = new THREE.Mesh(new THREE.BoxGeometry(8, 12, 8), lampM); l.position.set(x, 120, z); mapGroup.add(l); }
+  for (const z of [0.38 * H - 0.8, 0.62 * H + 0.8]) for (const x of [cx - 120, cx, cx + 120]) { const q = new THREE.Mesh(new THREE.PlaneGeometry(40, 30), new THREE.MeshBasicMaterial({ color: 0xffd08a })); q.position.set(x, 100, z); q.rotation.y = z < cz ? Math.PI : 0; mapGroup.add(q); }
+  for (const x of [0.2 * W, W - 0.2 * W]) { const l = new THREE.Mesh(new THREE.BoxGeometry(8, 12, 8), lampM); l.position.set(x, SH.castle + 36, cz); mapGroup.add(l); }
+  // tubarões rodando embaixo de cada prancha (só a barbatana aparece)
+  const finM = mat(0x2b3138, { roughness: 0.6 }), sharks = [];
+  for (const Pk of w.planks || []) for (let k = 0; k < 3; k++) { const f = new THREE.Mesh(new THREE.ConeGeometry(9, 34, 4), finM); f.scale.z = 0.35; mapGroup.add(f); sharks.push({ f, cx: Pk.x, cz: Pk.z + Pk.dir * (SH.plankL + 140), r: 110 + k * 55, ph: k * 2.1, sp: 0.5 + k * 0.15 }); }
+  // água no convés quando a onda grande inclina o navio
+  const zMin = Math.min(...P.map((q) => q[1])), zMax = Math.max(...P.map((q) => q[1]));
+  const waterMat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, uniforms: { uWet: { value: 0 }, uSide: { value: 1 }, uTime: { value: 0 }, uZ: { value: new THREE.Vector2(zMin, zMax) } },
+    vertexShader: 'varying vec3 vW; void main(){ vec4 w0 = modelMatrix * vec4(position, 1.0); vW = w0.xyz; gl_Position = projectionMatrix * viewMatrix * w0; }', fragmentShader: DECK_WATER_FRAG });
+  { const sh = new THREE.Shape(P.map(([x, z]) => new THREE.Vector2(x, -z))), g = new THREE.ShapeGeometry(sh); g.rotateX(-Math.PI / 2); const m = new THREE.Mesh(g, waterMat); m.position.y = 2; m.renderOrder = 2; mapGroup.add(m); }
+  // em volta (gira com o balanço): mar agitado, céu de tempestade, pedras soltas, chuva (mais leve que antes)
   const env = new THREE.Group(), inner = new THREE.Group(); env.position.set(cx, 0, cz); inner.position.set(-cx, 0, -cz); env.add(inner); mapGroup.add(env);
   const seaMat = new THREE.ShaderMaterial({ uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uTime: { value: 0 }, uFlash: { value: 0 } }]), vertexShader: STORM_SEA_VERT.replace('void main(){', '#include <fog_pars_vertex>\nvoid main(){').replace('gl_Position = projectionMatrix * viewMatrix * w0; }', 'gl_Position = projectionMatrix * viewMatrix * w0; vec4 mvPosition = viewMatrix * w0;\n#include <fog_vertex>\n}'), fragmentShader: STORM_SEA_FRAG.replace('uniform float uTime;', '#include <fog_pars_fragment>\nuniform float uTime;'), fog: true });
-  const sea = new THREE.Mesh(new THREE.PlaneGeometry(24000, 24000, 200, 200), seaMat); sea.rotation.x = -Math.PI / 2; sea.position.set(cx, -95, cz); inner.add(sea);
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(12000, 12000, 96, 96), seaMat); sea.rotation.x = -Math.PI / 2; sea.position.set(cx, SH.sea, cz); inner.add(sea);
   const skyM = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, fog: false, uniforms: { uTime: { value: 0 }, uFlash: { value: 0 } }, vertexShader: 'varying vec3 vW; void main(){ vW = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: `uniform float uTime; uniform float uFlash; varying vec3 vW; ${NOISE_GLSL} void main(){ float h = vW.y; float n = fbm(vW.xz / max(0.15, h + 0.3) * 2.2 + vec2(uTime * 0.03, uTime * 0.012));
+    fragmentShader: `uniform float uTime; uniform float uFlash; varying vec3 vW; ${NOISE_GLSL} void main(){ float h = vW.y; float n = fbm3(vW.xz / max(0.15, h + 0.3) * 2.2 + vec2(uTime * 0.03, uTime * 0.012));
       vec3 c = mix(vec3(0.16, 0.18, 0.21), vec3(0.05, 0.06, 0.08), smoothstep(-0.05, 0.6, h)); c = mix(c, vec3(0.25, 0.27, 0.3), smoothstep(0.45, 0.8, n) * 0.6);
       c += vec3(0.6, 0.65, 0.85) * uFlash * (0.4 + n * 0.6);
       gl_FragColor = vec4(c, 1.0);
       #include <colorspace_fragment>
     }` });
-  const sky = new THREE.Mesh(new THREE.SphereGeometry(20000, 32, 16), skyM); sky.position.set(cx, 0, cz); inner.add(sky);
-  // ilha de pedra perto (lado de baixo) com vulcão soltando fogo
-  const isl = new THREE.Group(), rockM = mat(0x2f2c2a, { roughness: 1 }), rnd = seeded(66);
-  for (let i = 0; i < 26; i++) { const r = new THREE.Mesh(new THREE.DodecahedronGeometry(120 + rnd() * 260, 0), rockM); r.position.set((rnd() - 0.5) * 2600, -60 + rnd() * 90, (rnd() - 0.5) * 900); r.scale.y = 0.5 + rnd() * 0.7; r.rotation.set(rnd() * 3, rnd() * 3, 0); isl.add(r); }
-  const vol = new THREE.Mesh(new THREE.ConeGeometry(1300, 1500, 14, 1, true), mat(0x2a2320, { roughness: 1, side: THREE.DoubleSide })); vol.position.set(300, 600, 200); isl.add(vol);
-  const crater = new THREE.Mesh(new THREE.CircleGeometry(230, 14), new THREE.MeshBasicMaterial({ color: 0xff5a14, fog: false })); crater.rotation.x = -Math.PI / 2; crater.position.set(300, 1330, 200); isl.add(crater);
-  const lavaGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW_TEX, color: 0xff6a20, transparent: true, opacity: 0.9, depthWrite: false, fog: false, blending: THREE.AdditiveBlending })); lavaGlow.scale.setScalar(1400); lavaGlow.position.set(300, 1420, 200); isl.add(lavaGlow);
-  const plume = []; for (let i = 0; i < 16; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: SMOKE_TEX, color: 0x262120, transparent: true, opacity: 0.5, depthWrite: false })); s.userData.k = i / 16; isl.add(s); plume.push(s); }
-  const embers = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(90 * 3), 3)), new THREE.PointsMaterial({ map: GLOW_TEX, color: 0xffa040, size: 44, fog: false, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending }));
-  embers.frustumCulled = false; isl.add(embers);
-  isl.position.set(cx + 1400, 0, cz + H * 0.5 + 3300); inner.add(isl);
-  for (let i = 0; i < 10; i++) { const r = new THREE.Mesh(new THREE.DodecahedronGeometry(60 + rnd() * 140, 0), rockM); const a = rnd() * Math.PI * 2, d = 2600 + rnd() * 3000; r.position.set(cx + Math.cos(a) * d, -70, cz + Math.sin(a) * d); r.scale.y = 1 + rnd() * 1.5; inner.add(r); } // pedras soltas no mar
-  // chuva: riscos caindo em volta de quem joga
-  const NR = 1400, rp = new Float32Array(NR * 6), rs = []; for (let i = 0; i < NR; i++) rs.push([Math.random() * 1600 - 800, Math.random() * 900, Math.random() * 1600 - 800, 0.8 + Math.random() * 0.4]);
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(9000, 24, 12), skyM); sky.position.set(cx, 0, cz); inner.add(sky);
+  const rockM = mat(0x2f2c2a, { roughness: 1 }), rnd = seeded(66);
+  for (let i = 0; i < 7; i++) { const r = new THREE.Mesh(new THREE.DodecahedronGeometry(60 + rnd() * 140, 0), rockM); const a = rnd() * Math.PI * 2, d = 2600 + rnd() * 2400; r.position.set(cx + Math.cos(a) * d, SH.sea + 20, cz + Math.sin(a) * d); r.scale.y = 1 + rnd() * 1.5; inner.add(r); } // pedras soltas no mar
+  const NR = 900, rp = new Float32Array(NR * 6), rs = []; for (let i = 0; i < NR; i++) rs.push([Math.random() * 1500 - 750, Math.random() * 900, Math.random() * 1500 - 750, 0.8 + Math.random() * 0.4]);
   const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.BufferAttribute(rp, 3));
-  const rain = new THREE.LineSegments(rg, new THREE.LineBasicMaterial({ color: 0x9fb2c2, transparent: true, opacity: 0.35, depthWrite: false })); rain.frustumCulled = false; inner.add(rain);
-  // relâmpago (um raio de verdade lá longe + tudo clareia)
+  const rain = new THREE.LineSegments(rg, new THREE.LineBasicMaterial({ color: 0x9fb2c2, transparent: true, opacity: 0.38, depthWrite: false })); rain.frustumCulled = false; inner.add(rain);
   const bolt = new THREE.Line(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(14 * 3), 3)), new THREE.LineBasicMaterial({ color: 0xe8f0ff, transparent: true, opacity: 0, fog: false })); bolt.frustumCulled = false; inner.add(bolt);
-  shipFx = { env, sea: seaMat, sky: skyM, sails, rain, rs, plume, embers, lavaGlow, isl, bolt, flash: 0, nextFlash: 3, W, H, eSeed: Array.from({ length: 90 }, () => [Math.random(), Math.random() * Math.PI * 2, 0.5 + Math.random()]) };
+  shipFx = { env, sea: seaMat, sky: skyM, sails, rain, rs, bolt, sharks, water: waterMat, wet: 0, flash: 0, nextFlash: 9, nextWash: 2, W, H };
 }
 function updateShipFx(now, dt) {
   const F = shipFx; if (!F) return;
   const S = sim.swayState || { roll: 0, pitch: 0, heave: 0 }, t = now / 1000;
   // o mundo em volta gira ao contrário do navio (o horizonte balança)
   F.env.rotation.set(-S.roll, 0, S.pitch); F.env.position.y = -S.heave;
-  F.sea.uniforms.uTime.value = t; F.sky.uniforms.uTime.value = t;
+  F.sea.uniforms.uTime.value = t; F.sky.uniforms.uTime.value = t; F.water.uniforms.uTime.value = t;
   for (const s of F.sails) s.rotation.z = Math.sin(t * 1.3 + s.position.x) * 0.03;
+  for (const k of F.sharks) { const a = t * k.sp + k.ph; k.f.position.set(k.cx + Math.cos(a) * k.r, SHIP.sea + 16 + Math.sin(t * 2 + k.ph) * 4, k.cz + Math.sin(a) * k.r); k.f.rotation.y = -a; }
   // chuva em volta da câmera
   const cp = camera.position, a = F.rain.geometry.attributes.position.array;
-  for (let i = 0; i < F.rs.length; i++) { const r = F.rs[i]; r[1] -= 1300 * r[3] * dt; if (r[1] < -60) { r[1] += 900; r[0] = Math.random() * 1600 - 800; r[2] = Math.random() * 1600 - 800; } const x = cp.x + r[0], y = cp.y - 300 + r[1], z = cp.z + r[2]; a[i * 6] = x; a[i * 6 + 1] = y; a[i * 6 + 2] = z; a[i * 6 + 3] = x - 10; a[i * 6 + 4] = y - 34; a[i * 6 + 5] = z + 4; }
+  for (let i = 0; i < F.rs.length; i++) { const r = F.rs[i]; r[1] -= 1300 * r[3] * dt; if (r[1] < -60) { r[1] += 900; r[0] = Math.random() * 1500 - 750; r[2] = Math.random() * 1500 - 750; } const x = cp.x + r[0], y = cp.y - 300 + r[1], z = cp.z + r[2]; a[i * 6] = x; a[i * 6 + 1] = y; a[i * 6 + 2] = z; a[i * 6 + 3] = x - 10; a[i * 6 + 4] = y - 34; a[i * 6 + 5] = z + 4; }
   F.rain.geometry.attributes.position.needsUpdate = true;
-  // fumaça e fagulhas do vulcão
-  for (const s of F.plume) { const k = (s.userData.k + t * 0.03) % 1; s.position.set(300 + Math.sin(k * 6 + t * 0.2) * 200 + k * 900, 1450 + k * 2600, 200 + k * 400); s.scale.setScalar(700 + k * 2400); s.material.opacity = 0.55 * (1 - k); }
-  const ep = F.embers.geometry.attributes.position.array;
-  for (let i = 0; i < F.eSeed.length; i++) { const [k0, an, sp] = F.eSeed[i], k = (k0 + t * 0.35 * sp) % 1; ep[i * 3] = 300 + Math.cos(an) * k * 900; ep[i * 3 + 1] = 1360 + k * 1500 - k * k * 1600; ep[i * 3 + 2] = 200 + Math.sin(an) * k * 900; }
-  F.embers.geometry.attributes.position.needsUpdate = true;
-  F.lavaGlow.material.opacity = 0.75 + 0.2 * Math.sin(t * 3);
-  // relâmpago de vez em quando (clareia tudo; o trovão vem um pouco depois)
+  // onda grande inclinou demais: entra água do lado de baixo; quando volta, a água escorre (some devagar)
+  const tgt = Math.max(0, Math.min(1, (Math.abs(S.roll) - 0.19) / 0.08));
+  const was = F.wet; F.wet += (tgt - F.wet) * Math.min(1, dt * (tgt > F.wet ? 3 : 0.5));
+  if (tgt > 0.2) F.water.uniforms.uSide.value = S.roll > 0 ? 1 : -1;
+  F.water.uniforms.uWet.value = F.wet;
+  if (was < 0.25 && F.wet >= 0.25) SFX.play('wave', 0.7);
+  // sons de fundo: chuva e mar; de vez em quando a água bate no casco; trovão bem de vez em quando e longe
+  SFX.setBed('rain', 0.028, 'bandpass', 2600, 0.6); SFX.setBed('seaAmb', 0.055, 'lowpass', 380);
+  F.nextWash -= dt; if (F.nextWash <= 0) { F.nextWash = 3 + Math.random() * 3.5; SFX.play('wash', 0.35 + Math.random() * 0.3, { pan: Math.random() * 1.6 - 0.8 }); }
   F.nextFlash -= dt;
   if (F.nextFlash <= 0) {
-    F.nextFlash = 5 + Math.random() * 8; F.flash = 1;
-    const ang = Math.random() * Math.PI * 2, d = 5000 + Math.random() * 5000, bx = F.W / 2 + Math.cos(ang) * d, bz = F.H / 2 + Math.sin(ang) * d, bp = F.bolt.geometry.attributes.position.array;
+    F.nextFlash = 14 + Math.random() * 12; F.flash = 1;
+    const ang = Math.random() * Math.PI * 2, d = 5000 + Math.random() * 3000, bx = F.W / 2 + Math.cos(ang) * d, bz = F.H / 2 + Math.sin(ang) * d, bp = F.bolt.geometry.attributes.position.array;
     for (let i = 0; i < 14; i++) { bp[i * 3] = bx + (Math.random() - 0.5) * 300 * (i ? 1 : 0); bp[i * 3 + 1] = 4200 - i * 330; bp[i * 3 + 2] = bz + (Math.random() - 0.5) * 300 * (i ? 1 : 0); }
     F.bolt.geometry.attributes.position.needsUpdate = true;
-    setTimeout(() => SFX.play('thunder', 0.6 + Math.random() * 0.4), 400 + Math.random() * 1400);
+    setTimeout(() => SFX.play('thunder', 0.3 + Math.random() * 0.2), 900 + Math.random() * 1800);
   }
   F.flash = Math.max(0, F.flash - dt * 3.2);
   const fl = F.flash > 0.6 ? 1 : F.flash * 0.9;
@@ -2195,9 +2386,11 @@ function updateShipFx(now, dt) {
 }
 
 function buildMap(mapId) {
+  for (const k in SFX.beds()) SFX.setBed(k, 0); // (sons de fundo do mapa anterior param)
   setEditOverride(netMode ? null : localEdits()); applyFx(); // no multiplayer vale só o que está salvo no jogo (igual pro servidor)
   if (mapGroup) scene.remove(mapGroup);
   disposePortals(); lampLights = []; lampPool = []; lavaFx = []; volcano = null; ceilLights = []; ceilPoints = []; doorMeshes = []; naveRoof = null; metroFx = null; seaFx = null; obraFx = null; factoryFx = null; shipFx = null;
+  if (dragonFx) { scene.remove(dragonFx.g, dragonFx.strip); for (const f of dragonFx.flames) scene.remove(f); for (const b of dragonFx.burns) scene.remove(b.f); dragonFx = null; }
   for (const w of meteorFx.warn) scene.remove(w.sh, w.ring, w.rock, w.fire, w.trail);
   meteorFx = { falling: [], rocks: new Map(), warn: [] };
   for (const fx of [tornadoFx, stormFx]) if (fx) scene.remove(fx.g);
@@ -2210,7 +2403,7 @@ function buildMap(mapId) {
   // céu/neblina de cada mapa
   const sky = mapId === 'castelo' ? 0x6b5a7a : mapId === 'navio' ? 0x1c2127 : map.space ? 0x020308 : nightMap ? 0x05060a : mapId === 'vulcao' ? 0x2a1712 : mapId === 'portal' ? 0x1b1f26 : mapId === 'metro' ? 0x0d0f12 : mapId === 'fabrica' ? 0x15171b : mapId === 'mar' ? 0x8ec9f0 : mapId === 'deserto' ? 0xb9d3e8 : 0x9cc7ee;
   scene.background = new THREE.Color(sky);
-  camera.far = mapId === 'vulcao' ? 45000 : mapId === 'castelo' ? 40000 : mapId === 'navio' ? 30000 : 8000; camera.updateProjectionMatrix(); // vulcão: dá pra ver lá embaixo
+  camera.far = mapId === 'vulcao' ? 45000 : mapId === 'castelo' ? 40000 : mapId === 'navio' ? 14000 : 8000; camera.updateProjectionMatrix(); // vulcão: dá pra ver lá embaixo
   scene.fog = map.space ? null
     : mapId === 'deserto' ? new THREE.Fog(0xdcc9a2, 2000, 7600)
     : mapId === 'castelo' ? new THREE.Fog(0x8e7a8e, 3500, 17000)
@@ -2244,7 +2437,7 @@ function buildMap(mapId) {
   const wtex = wallTexture(th.wall, style), btex = wallTexture(th.border, style);
   let iceMat = null;
   const drawWall = (R) => {
-    if (R.pframe != null || R.plat || R.rail || R.igloo != null || R.thouse || R.door3d != null || R.mezz || R.mstep || R.mrail || R.piston || R.mast || R.smast || R.style === 'barrel' || R.style === 'cannon' || ((mapId === 'mar' || mapId === 'vulcao') && R.border)) return; // desenhados separados
+    if (R.pframe != null || R.plat || R.rail || R.igloo != null || R.thouse || R.door3d != null || R.mezz || R.mstep || R.mrail || R.piston || R.mast || R.smast || R.style === 'barrel' || R.style === 'cannon' || R.throne || ((mapId === 'mar' || mapId === 'vulcao') && R.border)) return; // desenhados separados
     if (R.tree) { addTree(R.x + R.w / 2, R.y + R.h / 2, 1, mapGroup); return; } // árvore da floresta
     if (dunes && DuneField.isDune(R)) return; // virou montanha de areia
     if (R.space && !map.space) return;
@@ -2284,11 +2477,24 @@ function buildMap(mapId) {
   for (const R of mapWalls) { const c0 = mapGroup.children.length; drawWall(R); if (R.item != null) for (let i = c0; i < mapGroup.children.length; i++) mapGroup.children[i].userData.item = R.item; } // (editor 3D: cada peça sabe qual item ela é)
   // paredes em diagonal do contorno (mapas de formato irregular)
   for (const S of world.segs || []) {
+    if (S.tpillar) continue; // (coluna da torre do castelo: desenhada redonda)
     const dx = S.bx - S.ax, dz = S.bz - S.az, L = Math.hypot(dx, dz) + S.t * 2, y0s = S.y0 || 0, hgt = S.top - y0s;
     const tx = btex.clone(); tx.needsUpdate = true; tx.repeat.set(L / 128, hgt / 128);
     const side = new THREE.MeshStandardMaterial({ map: tx, roughness: 0.9 }), topM = mat(th.wallEdge);
     const m = new THREE.Mesh(new THREE.BoxGeometry(L, hgt, S.t * 2), [topM, topM, topM, topM, side, side]);
     m.position.set((S.ax + S.bx) / 2, y0s + hgt / 2, (S.az + S.bz) / 2); m.rotation.y = -Math.atan2(dz, dx); m.castShadow = m.receiveShadow = true; mapGroup.add(m); if (S.item != null) m.userData.item = S.item;
+  }
+  // rampas feitas no editor: cunha maciça (sobe de h0 até h1)
+  for (const S of world.slopes || []) {
+    if (!S.user) continue;
+    const alongX = S.axis === 'x', a0 = alongX ? S.x0 : S.z0, a1 = alongX ? S.x1 : S.z1, wd = alongX ? S.z1 - S.z0 : S.x1 - S.x0;
+    const sh = new THREE.Shape(); sh.moveTo(a0, 0); sh.lineTo(a1, 0); sh.lineTo(a1, Math.max(0.5, S.h1)); sh.lineTo(a0, Math.max(0.5, S.h0)); sh.lineTo(a0, 0);
+    const g = new THREE.ExtrudeGeometry(sh, { depth: wd, bevelEnabled: false });
+    { const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / 128, uv.getY(i) / 128); }
+    const t = wtex.clone(); t.needsUpdate = true; t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: t, roughness: 0.9, side: THREE.DoubleSide }));
+    if (alongX) m.position.z = S.z0; else { m.rotation.y = -Math.PI / 2; m.position.x = S.x0 + wd; }
+    m.castShadow = m.receiveShadow = true; if (S.item != null) m.userData.item = S.item; mapGroup.add(m);
   }
   if (world.treehouse) buildTreehouse(world.treehouse);
   for (const q of world.pyramids || []) { const c0 = mapGroup.children.length; buildPyramid(q); if (q.item != null) for (let i = c0; i < mapGroup.children.length; i++) mapGroup.children[i].userData.item = q.item; }
@@ -2364,12 +2570,13 @@ function buildMap(mapId) {
   else if (mapId === 'escuro') { hemi.intensity = 0.9; sun.intensity = 1.5; } // sala escura: um pouco mais escura mesmo com a luz acesa
   else if (mapId === 'metro') { hemi.intensity = 1.0; hemi.color.set(0xfff4e0); sun.intensity = 1.2; }
   else if (mapId === 'fabrica') { hemi.intensity = 0.95; hemi.color.set(0xfff0dc); sun.intensity = 1.1; }
-  else if (mapId === 'obra') { hemi.intensity = 1.3; hemi.color.set(0xfff4e6); sun.intensity = 2.5; sun.color.set(0xffefd6); }
+  else if (mapId === 'obra') { hemi.intensity = 1.3; hemi.color.set(0xfff4e6); hemi.groundColor.set(0x9a8a74); sun.intensity = 2.5; sun.color.set(0xffefd6); }
   else if (mapId === 'castelo') { hemi.intensity = 1.1; hemi.color.set(0xffe6d6); hemi.groundColor.set(0x6a6478); sun.intensity = 2.1; sun.color.set(0xffc48a); }
   else if (mapId === 'navio') { hemi.intensity = 0.75; hemi.color.set(0xa9b8cc); hemi.groundColor.set(0x1d2226); sun.intensity = 0.55; sun.color.set(0xc8d4e6); }
   else if (mapId === 'mar') { hemi.intensity = 1.35; hemi.color.set(0xeaf6ff); hemi.groundColor.set(0x2a5877); sun.intensity = 2.6; sun.color.set(0xfff6e6); }
   else { hemi.intensity = 1.3; sun.intensity = 2.3; }
   baseLight = { hemi: hemi.intensity, sun: sun.intensity };
+  sun.castShadow = mapId !== 'navio'; // navio: tempestade escura (quase não tem sombra) — sem sombra fica bem mais leve
   scene.add(mapGroup);
   if (portalViews.length) warmPortals();
   sun.position.set(W / 2 - 600, 1500, H / 2 + 800); sun.target.position.set(W / 2, 0, H / 2);
@@ -2457,8 +2664,9 @@ function textSprite(text, color, h = 0.04) {
   g.lineWidth = 6; g.strokeStyle = 'rgba(0,0,0,.75)'; g.strokeText(text, 128, 32);
   g.fillStyle = color; g.fillText(text, 128, 32);
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, sizeAttenuation: false }));
-  sp.scale.set(h * 4, h, 1);
+  // depthWrite off + desenhado por último: o retângulo invisível em volta do nome não "apaga" o vidro/fumaça atrás dele
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, sizeAttenuation: false, depthWrite: false, alphaTest: 0.01 }));
+  sp.scale.set(h * 4, h, 1); sp.renderOrder = 20;
   return sp;
 }
 // arma na mão do boneco para cada arma do jogo
@@ -3333,7 +3541,7 @@ function renderBoard() {
 // ---------- HUD ----------
 const SLOT_NAMES = { primary: '1', potion: '2', knife: '3', nade: '4', smoke: '5' };
 // contador do evento do mapa no topo (igual ao 2D): "Furacão em 12s"
-const HZ_TXT = { sand: ['🏜️ Tempestade de areia', 'chegando!', 'agora!'], tornado: ['🌪️ Furacão', 'nascendo!', 'solto!'], storm: ['🌬️ Tempestade congelante', 'olha a faixa!', 'soprando!'], dark: ['💡 Luz apaga', 'piscando!', 'apagou!'], lava: ['🌋 Erupção', 'o chão rachou!', 'agora!'], meteor: ['☄️ Meteoro', 'olha a sombra!', 'caiu!'], train: ['🚇 Trem', 'luz vermelha no trilho!', 'passando!'], wave: ['🌊 Onda gigante', 'vindo!', 'invadindo!'], crane: ['🏗️ Bola de demolição', 'olha o círculo vermelho!', 'girando!'], swell: ['🌊 Onda grande de lado', 'segura firme!', 'o navio inclinou!'] };
+const HZ_TXT = { sand: ['🏜️ Tempestade de areia', 'chegando!', 'agora!'], tornado: ['🌪️ Furacão', 'nascendo!', 'solto!'], storm: ['🌬️ Tempestade congelante', 'olha a faixa!', 'soprando!'], dark: ['💡 Luz apaga', 'piscando!', 'apagou!'], lava: ['🌋 Erupção', 'o chão rachou!', 'agora!'], meteor: ['☄️ Meteoro', 'olha a sombra!', 'caiu!'], train: ['🚇 Trem', 'luz vermelha no trilho!', 'passando!'], wave: ['🌊 Onda gigante', 'vindo!', 'invadindo!'], crane: ['🏗️ Bola de demolição', 'olha o círculo vermelho!', 'girando!'], swell: ['🌊 Onda grande de lado', 'segura firme!', 'o navio inclinou!'], dragon: ['🐉 Dragão', 'olha a faixa vermelha!', 'cuspindo fogo!'] };
 function hazardText() {
   const k = sim.hazard, T = HZ_TXT[k];
   if (k === 'portal') return sim.phase === 'playing' ? `🌀 Portais ${sim.portalPairs ? 'abertos' : 'fechados'} · ${sim.portalPairs ? 'fecham' : 'abrem'} em ${Math.max(0, Math.ceil(sim.portalN || 0))}s` : '';
@@ -3541,7 +3749,7 @@ function feed(html) {
   setTimeout(() => d.remove(), 4500);
   while ($('feed').children.length > 5) $('feed').lastChild.remove();
 }
-const WICON = { sea: '🌊', lancador: '🔫', estilingue: '🪃', mao: '✊', arco: '🏹', disco: '🥏', knife: '🔪', nade: '💣', lava: '🌋', meteor: '☄️', varinha: '🪄', train: '🚇', crane: '🏗️', wave: '🌊' };
+const WICON = { dragon: '🐉', sea: '🌊', lancador: '🔫', estilingue: '🪃', mao: '✊', arco: '🏹', disco: '🥏', knife: '🔪', nade: '💣', lava: '🌋', meteor: '☄️', varinha: '🪄', train: '🚇', crane: '🏗️', wave: '🌊' };
 
 // ---------- jogo ----------
 let prevPos = new Map(), acc = 0, last = performance.now(), fpsN = 0, fpsT = performance.now();
@@ -3633,7 +3841,7 @@ function applySnapshot(snap, evs) {
   sim.tombs = snap.tombs;
   sim.pickups = snap.pickups;
   sim.hazard = snap.hazard; sim.sandK = snap.sandK; sim.lightOn = snap.lightOn; sim.lightS = snap.lightS || 0;
-  sim.lamps = snap.lamps; sim.tornado = snap.tornado; sim.storm = snap.storm; sim.erupt = snap.erupt; sim.train = snap.train; sim.wave = snap.wave; sim.crane = snap.crane || null; if (snap.sway) sim.swayState = snap.sway;
+  sim.lamps = snap.lamps; sim.tornado = snap.tornado; sim.storm = snap.storm; sim.erupt = snap.erupt; sim.train = snap.train; sim.wave = snap.wave; sim.crane = snap.crane || null; sim.dragon = snap.dragon || null; if (snap.sway) sim.swayState = snap.sway;
   if (snap.holes) sim.holes = snap.holes;
   // portais abertos, portas da nave e meteoros (o sim local só espelha)
   const pk = JSON.stringify(snap.portalPairs || null);
@@ -4082,6 +4290,7 @@ function frame(now) {
   hemi.intensity = baseLight.hemi * lk; sun.intensity = baseLight.sun * lk;
   // furacão (floresta), tempestade congelante (neve), portais, portas e meteoros (nave)
   updateTornadoFx(sim.tornado, now, dtR);
+  if (mapInfo && mapInfo.mapId === 'castelo') updateDragonFx(now, dtR);
   if (shipFx) updateShipFx(now, dtR);
   updateStormFx(sim.storm, now, dtR);
   updatePortalViews(dtR); updateDoors(); updateMeteorFx(now, dtR); updateMetroFx(now); updateSeaFx(now, dtR); updateObraFx(now, dtR); updateFactoryFx(dtR);
@@ -4219,7 +4428,8 @@ function frame(now) {
   const meA = avatars.get('me');
   const [mx, my0, mz] = ip('me', me);
   // degrau de escada: a câmera acompanha suave (não fica pulando a cada degrau)
-  if (me.grounded && camSmY != null && Math.abs(my0 - camSmY) < 30) camSmY += (my0 - camSmY) * Math.min(1, dtR * 14); else camSmY = my0;
+  // (degrau: a câmera sobe/desce macia, sem dar tranco — vale pra 1ª e 3ª pessoa)
+  if (me.grounded && camSmY != null && Math.abs(my0 - camSmY) < 44) camSmY += (my0 - camSmY) * Math.min(1, dtR * 6.5); else camSmY = my0;
   const my = camSmY;
   const dx = Math.cos(me.pitch) * Math.cos(me.yaw), dy = Math.sin(me.pitch), dz = Math.cos(me.pitch) * Math.sin(me.yaw);
   sprintFov += ((me.sprinting ? 7 : 0) - sprintFov) * Math.min(1, dtR * 8);
@@ -4379,6 +4589,8 @@ function handleEvent(e, now) {
   if (e.type === 'sea_splash') sfxAt('splash', e.x, e.z);
   if (e.type === 'swell_warn') feed('🌊 Onda grande vindo de lado — segura firme!');
   if (e.type === 'swell_start') SFX.play('wave', 0.8);
+  if (e.type === 'dragon_warn') { feed('🐉 O dragão vem aí — sai da faixa vermelha ou se esconde embaixo de um telhado!'); SFX.play('dragon', 0.9); setTimeout(() => SFX.play('fire', 0.7), 3000); }
+  if (e.type === 'dragon_hit' && e.id === 'me') feed('🔥 O fogo do dragão te pegou!');
   // portal: no multiplayer a mira é sua, então gira ela aqui junto com o corpo
   if (e.type === 'portal') { if (e.id === 'me' && netMode && Number.isFinite(e.dyaw)) netYaw += e.dyaw; if (pos || e.id === 'me') sfxAt('portal', e.x, e.z); }
   if (e.type === 'portal_shot') sfxAt('portal', e.x, e.z, { quiet: true });
@@ -4398,6 +4610,7 @@ function handleEvent(e, now) {
   }
   if (e.type === 'kill') {
     if (e.killer === 'me') hitMark = { kind: 'kill', t: now };
+    if (seaFx && cheerNear(seaFx) > 0.05) SFX.play('cheer', 0.4 + 0.5 * cheerNear(seaFx)); // a torcida grita quando alguém cai
     const k = sim.players.get(e.killer), v = sim.players.get(e.victim);
     feed(`${k ? `<span class="t${k.team}">${esc(k.name)}</span>` : ''} ${WICON[e.weapon] || '💥'} <span class="t${v ? v.team : 'B'}">${esc(v ? v.name : '?')}</span>`);
     if (e.killer === 'me' || e.victim === 'me') SFX.play('kill', 1); // só os meus abates

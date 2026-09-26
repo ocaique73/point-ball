@@ -34,6 +34,8 @@ cadência/recarga de cada arma — ligar/desligar "você pode morrer" (os bots s
 
 Tem física 3D própria (`public/demo3d/sim3d.js`): tiro e granada seguem a mira, ricochete no muro e no chão, pulo duplo. 8 mapas e bots com 3 níveis.
 
+**Novidades da v0.26** (só no 3D): **obra** maior com prédios em construção de pé-direito alto, **castelo** com salão do trono (tronos do rei e da rainha, tapete vermelho, teto de céu estrelado) e um **dragão** que cospe fogo, **navio** maior e bem mais leve (prancha dos tubarões, gurupés, cabine no meio com escada, mastros com cesto largo), **rampa** no editor de mapa, portais com a regra do 2D, tiro da varinha grave, sem vidro no mar e no céu da floresta.
+
 **Novidades da v0.25** (só no 3D): **editor de mapa em 3D** (no editor, botão "🧊 Editar em 3D": voa pelo mapa, clica na peça e arrasta as setas), **editor de HUD** (menu Esc → aba HUD: arrasta, muda tamanho/transparência e separa vida, tiro, arma e pulo), contagem do round com todo mundo parado e a tela em preto e branco voltando a cor, e o próximo round só começa depois da killcam.
 
 **Novidades da v0.24** (só no 3D): **editor de mapa** (menu Esc → 🛠️ Editor de mapa), mapas novos **Castelo** e **Navio na tempestade**, rampa no metrô, pirâmides nas bases do deserto, iglus com 3 entradas, furacão novo, granada sempre na força máxima.
