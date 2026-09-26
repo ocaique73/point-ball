@@ -33,9 +33,9 @@
   #score small { display: block; font-weight: 600; color: var(--muted); font-size: 12px; }
   #banner { position: fixed; left: 50%; top: 24%; transform: translate(-50%, -50%); font-size: 34px; font-weight: 900; text-shadow: 0 3px 8px #000; display: none; text-align: center; pointer-events: none; }
   #banner small { display: block; font-size: 16px; color: var(--muted); font-weight: 700; }
-  #kc { position: fixed; left: 50%; top: 70px; transform: translateX(-50%); display: none; padding: 6px 16px; border-radius: 10px; background: rgba(127,29,29,.75); border: 1px solid #ef4444; color: #fee2e2; font-size: 15px; text-align: center; pointer-events: none; }
+  #kc { position: fixed; left: 50%; top: 70px; transform: translateX(-50%); display: none; padding: 6px 16px; border-radius: 10px; background: rgba(0,0,0,.5); border: 1px solid rgba(255,255,255,.18); color: #f1f5f9; font-size: 15px; text-align: center; pointer-events: none; }
   #kc b { letter-spacing: 3px; margin-right: 10px; }
-  #heal { position: fixed; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, rgba(255,60,90,0) 45%, rgba(255,40,80,.55) 100%); transition: opacity .08s; }
+  #heal { position: fixed; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, rgba(60,255,170,0) 50%, rgba(52,211,153,.45) 100%); transition: opacity .08s; }
   /* tabela (Tab) */
   #board { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(720px, 94vw); display: none; background: rgba(8, 11, 18, .92); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
   #board h3 { margin: 4px 0 6px; }
@@ -108,7 +108,7 @@
   </div>
   <div class="pane on" id="p-game">
     <label class="field"><span>Câmera</span><select id="o-cam"><option value="1">1ª pessoa</option><option value="3">3ª pessoa (por trás)</option></select><span></span></label>
-    <label class="field"><span>Mapa</span><select id="o-map"><option value="deserto">Deserto</option><option value="neve">Neve</option><option value="floresta">Floresta</option><option value="nave">Nave espacial (base lunar)</option><option value="portal">Portais</option><option value="vulcao">Vulcão</option><option value="escuro">Sala escura</option><option value="cidade">Cidade à noite</option><option value="teste">Sala de teste</option></select><span></span></label>
+    <label class="field"><span>Mapa</span><select id="o-map"><option value="deserto">Deserto</option><option value="neve">Neve</option><option value="floresta">Floresta</option><option value="nave">Nave espacial (base lunar)</option><option value="portal">Portais</option><option value="vulcao">Vulcão</option><option value="escuro">Sala escura</option><option value="cidade">Cidade à noite</option><option value="metro">Estação de metrô</option><option value="mar">Plataforma no mar</option><option value="teste">Sala de teste</option></select><span></span></label>
     <label class="field"><span>Modo de jogo</span><select id="o-mode"><option value="tdm">Mata-mata em equipe</option><option value="rounds">Rounds (eliminação)</option><option value="ffa">Mata-mata cada um por si</option><option value="koth">Rei da colina</option><option value="livre">Treino livre (sem fim)</option></select><span></span></label>
     <label class="field" id="f-kills"><span>Abates pra vencer</span><select id="o-kills"><option>20</option><option>25</option><option>30</option><option>50</option></select><span></span></label>
     <label class="field" id="f-rounds"><span>Rounds</span><select id="o-rounds"><option>1</option><option>2</option><option>3</option><option>5</option><option>7</option></select><span></span></label>
@@ -118,7 +118,7 @@
     <label class="field"><span>Bots no seu time</span><select id="o-allies"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select><span></span></label>
     <label class="field"><span>Nível dos bots</span><select id="o-level"><option value="iniciante">Iniciante</option><option value="amador" selected>Amador</option><option value="pro">Profissional</option></select><span></span></label>
     <label class="field"><span>Killcam final (última kill do round/partida)</span><select id="o-kc"><option value="1">Ligada</option><option value="0">Desligada</option></select><span></span></label>
-    <label class="field"><span>Zoom ao mirar (botão direito)</span><select id="o-adszoom"><option value="1">Com zoom</option><option value="0">Sem zoom (só carrega a força)</option></select><span></span></label>
+    <label class="field"><span>Zoom ao mirar (botão direito)</span><select id="o-adszoom"><option value="1">Com zoom</option><option value="0">Sem zoom</option></select><span></span></label>
     <label class="field"><span>Sombras</span><select id="o-shadow"><option value="1">Ligadas</option><option value="0">Desligadas</option></select><span></span></label>
     <label class="field"><span>Campo de visão (FOV)</span><input type="range" id="o-fov" min="60" max="110" step="1"><span class="v" id="v-fov"></span></label>
   </div>
@@ -159,7 +159,7 @@
     <label class="field"><span>Inverter mouse (Y)</span><select id="o-invert"><option value="0">Não</option><option value="1">Sim</option></select><span></span></label>
     <label class="field"><span>Som</span><select id="o-mute"><option value="0">Ligado</option><option value="1">Mudo</option></select><span></span></label>
     <div class="keys">
-      <kbd>WASD</kbd> andar · <kbd>Shift</kbd> correr (correndo não dá pra atirar) · <kbd>Mouse</kbd> olhar e mirar · <kbd>Clique</kbd> atirar / usar · <kbd>Botão direito</kbd> mirar (segura pra carregar a força do tiro; anda mais devagar)<br>
+      <kbd>WASD</kbd> andar · <kbd>Shift</kbd> correr (correndo não dá pra atirar) · <kbd>Mouse</kbd> olhar e mirar · <kbd>Clique</kbd> atirar / usar · <kbd>Botão direito</kbd> mirar (zoom pra ver longe; anda um pouco mais devagar)<br>
       <kbd>Espaço</kbd> pular (sem limite) · <kbd>Espaço</kbd> de novo no ar = <b>pulo duplo</b> (carrega a cada 15 s, passa por cima dos muros)<br>
       <kbd>1</kbd> arma principal · <kbd>2</kbd> poção (1 vida) · <kbd>3</kbd> faca · <kbd>4</kbd> granada · <kbd>5</kbd> fumaça · <kbd>Rodinha</kbd> troca de arma<br>
       Granada, fumaça e poção: aperte <kbd>2</kbd>/<kbd>4</kbd>/<kbd>5</kbd> para pegar e <kbd>Clique</kbd> para usar (poção bebe na hora, granada/fumaça vão para onde a mira aponta)<br>
