@@ -12,7 +12,7 @@ const G = window.RC_GAME, MAPS = Object.assign({}, window.RC_MAPS.MAPS, MAPS3D),
 const MAP_LIST = [['deserto', 'Deserto'], ['neve', 'Neve'], ['floresta', 'Floresta'], ['nave', 'Base na Lua'], ['portal', 'Portais'], ['vulcao', 'Vulcão'], ['escuro', 'Sala escura'], ['cidade', 'Cidade à noite'], ['metro', 'Estação de metrô'], ['mar', 'Plataforma no mar'], ['obra', 'Canteiro de obras'], ['fabrica', 'Fábrica'], ['castelo', 'Castelo'], ['navio', 'Navio na tempestade']];
 const STYLES = [['', 'padrão do mapa'], ['stone', 'pedra'], ['wood', 'madeira'], ['plank', 'tábuas'], ['container', 'contêiner'], ['concrete', 'concreto'], ['brick', 'tijolo'], ['sandstone', 'arenito'], ['basalt', 'pedra vulcânica'], ['tile', 'azulejo'], ['ice', 'gelo'], ['hedge', 'cerca viva'], ['grate', 'grade'], ['barrel', 'barril'], ['cannon', 'canhão']];
 const SWATCH = ['#a6a6a2', '#8f897c', '#6b7280', '#4b5563', '#e5e7eb', '#9a6b3f', '#6b4a2a', '#c08a3e', '#2f6f9f', '#b03a2e', '#2f8f5b', '#d9822b', '#e2b33c', '#4e7a3a', '#7a5634', '#2d2d2d'];
-const TYPE_NAME = { box: 'Muro / caixa', wall2: 'Parede diagonal', tree: 'Árvore', dune: 'Montanha de areia', pyr: 'Pirâmide' };
+const TYPE_NAME = { ramp: 'Rampa', box: 'Muro / caixa', wall2: 'Parede diagonal', tree: 'Árvore', dune: 'Montanha de areia', pyr: 'Pirâmide' };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // ---------- rascunho ----------
@@ -104,6 +104,14 @@ function drawItem(it, mode) {
     if (it.y0) { g.strokeStyle = 'rgba(255,255,255,.5)'; g.setLineDash([3, 3]); g.strokeRect(sx(it.x * W), sy(it.z * H), it.w * W * view.s, it.h * H * view.s); g.setLineDash([]); }
     g.strokeStyle = hl || 'rgba(0,0,0,.5)'; g.lineWidth = hl ? 2 : 1; g.setLineDash(mode === 'mir' ? [5, 4] : []); g.strokeRect(sx(it.x * W), sy(it.z * H), it.w * W * view.s, it.h * H * view.s); g.setLineDash([]);
     if (it.w * W * view.s > 26 && it.h * H * view.s > 13) { g.fillStyle = 'rgba(255,255,255,.85)'; g.font = '10px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(top), sx((it.x + it.w / 2) * W), sy((it.z + it.h / 2) * H)); }
+  } else if (it.t === 'ramp') {
+    const x0 = sx(it.x * W), z0 = sy(it.z * H), ww = it.w * W * view.s, hh = it.h * H * view.s, d = it.dir || '+x';
+    const grd = d[1] === 'x' ? g.createLinearGradient(x0, 0, x0 + ww, 0) : g.createLinearGradient(0, z0, 0, z0 + hh), lo = 'rgba(160,150,120,.35)', hi = 'rgba(230,210,150,.9)';
+    grd.addColorStop(0, d[0] === '+' ? lo : hi); grd.addColorStop(1, d[0] === '+' ? hi : lo); g.fillStyle = grd; g.fillRect(x0, z0, ww, hh);
+    g.strokeStyle = hl || 'rgba(0,0,0,.5)'; g.lineWidth = hl ? 2 : 1; g.strokeRect(x0, z0, ww, hh);
+    const cxp = x0 + ww / 2, czp = z0 + hh / 2, ang = { '+x': 0, '-x': Math.PI, '+z': Math.PI / 2, '-z': -Math.PI / 2 }[d], L = Math.min(ww, hh, 60) * 0.35 + 6;
+    g.strokeStyle = '#1b1300'; g.lineWidth = 2; g.beginPath(); g.moveTo(cxp - Math.cos(ang) * L, czp - Math.sin(ang) * L); g.lineTo(cxp + Math.cos(ang) * L, czp + Math.sin(ang) * L); g.lineTo(cxp + Math.cos(ang + 2.5) * 7 + Math.cos(ang) * (L - 1), czp + Math.sin(ang + 2.5) * 7 + Math.sin(ang) * (L - 1)); g.stroke();
+    if (ww > 40 && hh > 16) { g.fillStyle = '#1b1300'; g.font = '10px system-ui'; g.textAlign = 'center'; g.textBaseline = 'top'; g.fillText(`${it.h0 || 0}→${it.h1}`, cxp, z0 + 2); }
   } else if (it.t === 'wall2') {
     g.strokeStyle = hl || hexA(theme.wall || '#9aa', 0.9); g.lineWidth = Math.max(2, (it.th || 24) * view.s); g.lineCap = 'round'; g.beginPath(); g.moveTo(sx(it.ax * W), sy(it.az * H)); g.lineTo(sx(it.bx * W), sy(it.bz * H)); g.stroke(); g.lineCap = 'butt';
   } else if (it.t === 'dune') {
@@ -121,7 +129,7 @@ function drawItem(it, mode) {
 }
 // alças: pontos pra esticar (caixa: cantos e lados; parede/duna: as 2 pontas; pirâmide: canto)
 function handlesOf(it) {
-  if (it.t === 'box') { const x0 = it.x * W, z0 = it.z * H, x1 = (it.x + it.w) * W, z1 = (it.z + it.h) * H, xm = (x0 + x1) / 2, zm = (z0 + z1) / 2; return [['nw', x0, z0], ['ne', x1, z0], ['sw', x0, z1], ['se', x1, z1], ['n', xm, z0], ['s', xm, z1], ['w', x0, zm], ['e', x1, zm]]; }
+  if ((it.t === 'box' || it.t === 'ramp')) { const x0 = it.x * W, z0 = it.z * H, x1 = (it.x + it.w) * W, z1 = (it.z + it.h) * H, xm = (x0 + x1) / 2, zm = (z0 + z1) / 2; return [['nw', x0, z0], ['ne', x1, z0], ['sw', x0, z1], ['se', x1, z1], ['n', xm, z0], ['s', xm, z1], ['w', x0, zm], ['e', x1, zm]]; }
   if (it.t === 'wall2' || it.t === 'dune') return [['a', it.ax * W, it.az * H], ['b', it.bx * W, it.bz * H]];
   if (it.t === 'pyr') return [['size', it.x * W + it.half, it.z * H + it.half]];
   return [];
@@ -130,7 +138,7 @@ function drawHandles(it) { g.fillStyle = '#ffcc33'; g.strokeStyle = '#1b1300'; f
 function hitItem(x, z) {
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i], pad = 6 / view.s;
-    if (it.t === 'box' && x >= it.x * W - pad && x <= (it.x + it.w) * W + pad && z >= it.z * H - pad && z <= (it.z + it.h) * H + pad) return i;
+    if ((it.t === 'box' || it.t === 'ramp') && x >= it.x * W - pad && x <= (it.x + it.w) * W + pad && z >= it.z * H - pad && z <= (it.z + it.h) * H + pad) return i;
     if (it.t === 'tree' && Math.hypot(x - it.x * W, z - it.z * H) < TREE.r * 1.6 + pad) return i;
     if (it.t === 'pyr' && Math.abs(x - it.x * W) < it.half && Math.abs(z - it.z * H) < it.half) return i;
     if (it.t === 'wall2' || it.t === 'dune') {
@@ -167,12 +175,12 @@ cv.addEventListener('pointermove', (e) => {
   if (drag.kind === 'new2') { drag.bx = snapV(x); drag.bz = snapV(z); draw(); return; }
   const it = items[sel], s0 = drag.start, dx = x - drag.x, dz = z - drag.z;
   if (drag.kind === 'move') {
-    if (it.t === 'box') { it.x = r4(snapV(s0.x * W + dx) / W); it.z = r4(snapV(s0.z * H + dz) / H); }
+    if ((it.t === 'box' || it.t === 'ramp')) { it.x = r4(snapV(s0.x * W + dx) / W); it.z = r4(snapV(s0.z * H + dz) / H); }
     else if (it.t === 'tree' || it.t === 'pyr') { it.x = r4(snapV(s0.x * W + dx) / W); it.z = r4(snapV(s0.z * H + dz) / H); }
     else { const ddx = snapV(dx), ddz = snapV(dz); it.ax = r4(s0.ax + ddx / W); it.bx = r4(s0.bx + ddx / W); it.az = r4(s0.az + ddz / H); it.bz = r4(s0.bz + ddz / H); }
   } else if (drag.kind === 'handle') {
     const h = drag.h;
-    if (it.t === 'box') {
+    if ((it.t === 'box' || it.t === 'ramp')) {
       let x0 = s0.x * W, z0 = s0.z * H, x1 = (s0.x + s0.w) * W, z1 = (s0.z + s0.h) * H;
       if (h.includes('w')) x0 = Math.min(x1 - 6, snapV(x)); if (h.includes('e')) x1 = Math.max(x0 + 6, snapV(x));
       if (h.includes('n')) z0 = Math.min(z1 - 6, snapV(z)); if (h.includes('s')) z1 = Math.max(z0 + 6, snapV(z));
@@ -196,6 +204,7 @@ function addAt(t, x, z) {
   if (t === 'wall2' || t === 'dune') { drag = { kind: 'new2', t, ax: x, az: z, bx: x, bz: z }; return; }
   let it;
   if (t === 'box') it = { t: 'box', x: r4((x - 40) / W), z: r4((z - 30) / H), w: r4(80 / W), h: r4(60 / H), top: 120 };
+  else if (t === 'ramp') it = { t: 'ramp', x: r4((x - 80) / W), z: r4((z - 40) / H), w: r4(160 / W), h: r4(80 / H), dir: '+x', h0: 0, h1: 110 };
   else if (t === 'tree') it = { t: 'tree', x: r4(x / W), z: r4(z / H) };
   else if (t === 'pyr') it = { t: 'pyr', x: r4(x / W), z: r4(z / H), half: 230, top: 26, h: 270 };
   pushNew(it);
@@ -208,7 +217,7 @@ function pushNew(it) {
 function delSel() { if (sel < 0) return; const kill = [sel]; if (mirror && partner >= 0) kill.push(partner); items = items.filter((q, i) => !kill.includes(i)); sel = -1; partner = -1; commit(); props(); }
 function dupSel() {
   if (sel < 0) return; const it = clone(items[sel]), off = 40;
-  if (it.t === 'box' || it.t === 'tree' || it.t === 'pyr') { it.x = r4(it.x + off / W); it.z = r4(it.z + off / H); } else { it.ax = r4(it.ax + off / W); it.bx = r4(it.bx + off / W); it.az = r4(it.az + off / H); it.bz = r4(it.bz + off / H); }
+  if ((it.t === 'box' || it.t === 'ramp') || it.t === 'tree' || it.t === 'pyr') { it.x = r4(it.x + off / W); it.z = r4(it.z + off / H); } else { it.ax = r4(it.ax + off / W); it.bx = r4(it.bx + off / W); it.az = r4(it.az + off / H); it.bz = r4(it.bz + off / H); }
   pushNew(it);
 }
 function nudge(dx, dz) {
@@ -254,6 +263,11 @@ function props(quick) {
     h += `<h3>Cor</h3><div class="swatches">${SWATCH.map((c) => `<div class="sw" style="background:${c}" data-c="${c}" title="${c}"></div>`).join('')}<div class="sw" data-c="" title="padrão do mapa" style="background:repeating-linear-gradient(45deg,#333 0 4px,#555 4px 8px)"></div></div>
       <div class="row"><label>Outra cor</label><input type="color" data-k="tint" value="${it.tint || '#a6a6a2'}"></div>`;
     h += `<div class="row"><label>Textura</label><select data-k="style">${STYLES.map(([v, n]) => `<option value="${v}" ${(it.style || '') === v ? 'selected' : ''}>${n}</option>`).join('')}</select></div>`;
+  } else if (it.t === 'ramp') {
+    h += field('Posição x', 'px', Math.round(it.x * W), 10) + field('Posição z', 'pz', Math.round(it.z * H), 10) + field('Largura', 'pw', Math.round(it.w * W), 10, 10) + field('Profundidade', 'ph', Math.round(it.h * H), 10, 10);
+    h += field('Altura embaixo', 'h0', it.h0 || 0, 5, 0, 1500) + field('Altura em cima', 'h1', it.h1, 5, 1, 2000);
+    h += `<div class="row"><label>Sobe pra</label><select data-k="dir">${[['+x', '→ direita'], ['-x', '← esquerda'], ['+z', '↓ baixo'], ['-z', '↑ cima']].map(([v, n]) => `<option value="${v}" ${it.dir === v ? 'selected' : ''}>${n}</option>`).join('')}</select></div>`;
+    h += `<div class="muted">Rampa é maciça embaixo. Dica: pra subir andando sem pular, não passe de ~35° (altura ≈ 0,7 × comprimento).</div>`;
   } else if (it.t === 'wall2') {
     h += field('Ponta A x', 'pax', Math.round(it.ax * W), 10) + field('Ponta A z', 'paz', Math.round(it.az * H), 10) + field('Ponta B x', 'pbx', Math.round(it.bx * W), 10) + field('Ponta B z', 'pbz', Math.round(it.bz * H), 10);
     h += field('Grossura', 'th', it.th || 24, 2, 4, 200) + field('Altura', 'top', it.top || 130, 5, 4, 2000);
@@ -281,6 +295,7 @@ function setProp(k, v) {
   else if (k === 'cx') it.x = r4(n / W); else if (k === 'cz') it.z = r4(n / H);
   else if (k === 'tint') { if (v) it.tint = v; else delete it.tint; }
   else if (k === 'style') { if (v) it.style = v; else delete it.style; }
+  else if (k === 'dir') it.dir = v;
   else if (k === 'y0') { if (n > 0) it.y0 = n; else delete it.y0; }
   else it[k] = n;
   syncPartner(); commit(); props();
@@ -393,7 +408,7 @@ $('reset').onclick = () => { if (!confirm('Voltar este mapa ao padrão do jogo? 
 function setTool(t) { tool = t; document.querySelectorAll('[data-tool]').forEach((b) => b.classList.toggle('on', b.dataset.tool === t)); cv.style.cursor = t === 'select' ? 'default' : 'crosshair'; $('hint').innerHTML = hintText(); }
 document.querySelectorAll('[data-tool]').forEach((b) => b.addEventListener('click', () => setTool(b.dataset.tool)));
 function hintText() {
-  const t = { select: 'Clique pra selecionar, arraste pra mover. Botão direito (ou espaço) arrasta a tela.', box: 'Clique no mapa pra pôr um muro/caixa.', wall2: 'Arraste de uma ponta à outra pra fazer a parede diagonal.', tree: 'Clique pra pôr uma árvore.', dune: 'Arraste pra fazer a crista da montanha de areia.', pyr: 'Clique pra pôr uma pirâmide.' }[tool];
+  const t = { select: 'Clique pra selecionar, arraste pra mover. Botão direito (ou espaço) arrasta a tela.', box: 'Clique no mapa pra pôr um muro/caixa.', ramp: 'Clique no mapa pra pôr uma rampa (a seta mostra pra onde ela sobe).', wall2: 'Arraste de uma ponta à outra pra fazer a parede diagonal.', tree: 'Clique pra pôr uma árvore.', dune: 'Arraste pra fazer a crista da montanha de areia.', pyr: 'Clique pra pôr uma pirâmide.' }[tool];
   return t + (mirror ? ' · Espelhar ligado: o outro lado muda junto.' : '');
 }
 document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => {
@@ -415,7 +430,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); delSel(); return; }
   if (e.key === 'Escape') { sel = -1; partner = -1; setTool('select'); draw(); props(); return; }
   if (e.key.startsWith('Arrow')) { e.preventDefault(); nudge(e.key === 'ArrowLeft' ? -10 * st : e.key === 'ArrowRight' ? 10 * st : 0, e.key === 'ArrowUp' ? -10 * st : e.key === 'ArrowDown' ? 10 * st : 0); return; }
-  const tk = { v: 'select', b: 'box', l: 'wall2', t: 'tree', d: 'dune', p: 'pyr' }[k]; if (tk) setTool(tk);
+  const tk = { v: 'select', b: 'box', r: 'ramp', l: 'wall2', t: 'tree', d: 'dune', p: 'pyr' }[k]; if (tk) setTool(tk);
   if (k === 'f') { fit(); draw(); }
 });
 window.addEventListener('keyup', (e) => { if (e.key === ' ') spaceDown = false; });

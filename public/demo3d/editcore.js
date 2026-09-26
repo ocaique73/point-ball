@@ -13,14 +13,17 @@ const near = (a, b, e) => Math.abs(a - b) < (e || 0.004);
 // mode 'x' = espelho esquerda/direita; 'rot' = girado (o deserto é assim)
 export function mirrorOf(it, mode) {
   const m = clone(it), rot = mode === 'rot';
-  if (it.t === 'box') { m.x = r4(1 - it.x - it.w); if (rot) m.z = r4(1 - it.z - it.h); }
+  if (it.t === 'box' || it.t === 'ramp') {
+    m.x = r4(1 - it.x - it.w); if (rot) m.z = r4(1 - it.z - it.h);
+    if (it.t === 'ramp') { const flip = { '+x': '-x', '-x': '+x', '+z': '-z', '-z': '+z' }; if (it.dir[1] === 'x' || rot) m.dir = flip[it.dir]; } // (espelho: a rampa sobe pro outro lado)
+  }
   else if (it.t === 'tree' || it.t === 'pyr') { m.x = r4(1 - it.x); if (rot) m.z = r4(1 - it.z); }
   else { m.ax = r4(1 - it.ax); m.bx = r4(1 - it.bx); if (rot) { m.az = r4(1 - it.az); m.bz = r4(1 - it.bz); } }
   return m;
 }
 export function same(a, b) {
   if (a.t !== b.t) return false;
-  if (a.t === 'box') return near(a.x, b.x) && near(a.z, b.z) && near(a.w, b.w) && near(a.h, b.h);
+  if (a.t === 'box' || a.t === 'ramp') return near(a.x, b.x) && near(a.z, b.z) && near(a.w, b.w) && near(a.h, b.h);
   if (a.t === 'tree' || a.t === 'pyr') return near(a.x, b.x) && near(a.z, b.z);
   return (near(a.ax, b.ax) && near(a.az, b.az) && near(a.bx, b.bx) && near(a.bz, b.bz)) || (near(a.ax, b.bx) && near(a.az, b.bz) && near(a.bx, b.ax) && near(a.bz, b.az));
 }

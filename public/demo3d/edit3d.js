@@ -6,7 +6,7 @@ import { clone, r4, CHANNEL, loadDraft, saveDraft, mirrorOf, same, findPartner }
 import { editableItems, bakedEdits } from '/demo3d/world3d.js';
 
 const SW = ['#a6a6a2', '#8f897c', '#6b7280', '#e5e7eb', '#9a6b3f', '#6b4a2a', '#2f6f9f', '#b03a2e', '#2f8f5b', '#d9822b', '#e2b33c', '#4e7a3a'];
-const TNAME = { box: 'Muro / caixa', wall2: 'Parede diagonal', tree: 'Árvore', dune: 'Montanha de areia', pyr: 'Pirâmide' };
+const TNAME = { ramp: 'Rampa', box: 'Muro / caixa', wall2: 'Parede diagonal', tree: 'Árvore', dune: 'Montanha de areia', pyr: 'Pirâmide' };
 
 export function createEdit3D(ctx) {
   const { THREE, scene, camera, canvas } = ctx;
@@ -46,6 +46,7 @@ export function createEdit3D(ctx) {
     <button data-m="translate" class="on" title="Mover (1): setas coloridas; a verde sobe/desce">✥ Mover</button>
     <button data-m="scale" title="Esticar (2): cubinhos nas pontas das setas">⇲ Esticar</button>
     <button id="e3d-new" title="Novo muro onde você está olhando (B)">🧱 Novo</button>
+    <button id="e3d-ramp" title="Nova rampa onde você está olhando (R)">📈 Rampa</button>
     <button id="e3d-dup" title="Duplicar (Ctrl+D)">⧉</button>
     <button id="e3d-del" title="Apagar (Delete)">🗑️</button>
     <button id="e3d-undo" title="Desfazer (Ctrl+Z)">↶</button><button id="e3d-redo" title="Refazer (Ctrl+Y)">↷</button>
@@ -82,6 +83,7 @@ export function createEdit3D(ctx) {
   // ---------- geometria de cada item (no mundo) ----------
   const geo = (it) => {
     if (it.t === 'box') { const y0 = it.y0 || 0, top = it.top || 120; return { cx: (it.x + it.w / 2) * W, cz: (it.z + it.h / 2) * H, cy: (y0 + top) / 2, sx: it.w * W, sy: top - y0, sz: it.h * H, rot: 0 }; }
+    if (it.t === 'ramp') { const hi = Math.max(it.h0 || 0, it.h1 || 0); return { cx: (it.x + it.w / 2) * W, cz: (it.z + it.h / 2) * H, cy: hi / 2, sx: it.w * W, sy: Math.max(10, hi), sz: it.h * H, rot: 0 }; }
     if (it.t === 'tree') return { cx: it.x * W, cz: it.z * H, cy: 240, sx: 60, sy: 480, sz: 60, rot: 0 };
     if (it.t === 'pyr') return { cx: it.x * W, cz: it.z * H, cy: it.h / 2, sx: it.half * 2, sy: it.h, sz: it.half * 2, rot: 0 };
     const ax = it.ax * W, az = it.az * H, bx = it.bx * W, bz = it.bz * H, L = Math.hypot(bx - ax, bz - az);
@@ -128,6 +130,10 @@ export function createEdit3D(ctx) {
       const cx = g0.cx + dX, cz = g0.cz + dZ; let y0 = scaled ? Math.round(y00 + (h0 - hgt) / 2 + dY) : y00 + dY; if (y0 < 3) y0 = 0;
       it.x = r4((cx - w / 2) / W); it.z = r4((cz - d / 2) / H); if (scaled) { it.w = r4(w / W); it.h = r4(d / H); }
       it.top = y0 + hgt; if (y0) it.y0 = y0; else delete it.y0;
+    } else if (it.t === 'ramp') {
+      const w = scaled ? Math.max(10, snapV(g0.sx * s.x)) : g0.sx, d = scaled ? Math.max(10, snapV(g0.sz * s.z)) : g0.sz, cx = g0.cx + dX, cz = g0.cz + dZ;
+      it.x = r4((cx - w / 2) / W); it.z = r4((cz - d / 2) / H); if (scaled) { it.w = r4(w / W); it.h = r4(d / H); }
+      const k = scaled ? s.y : 1, dy = scaled ? 0 : dY; it.h0 = Math.max(0, snapV((o.h0 || 0) * k + dy, 5)); it.h1 = Math.max(5, snapV((o.h1 || 0) * k + dy, 5));
     } else if (it.t === 'tree') { it.x = r4(o.x + dX / W); it.z = r4(o.z + dZ / H); }
     else if (it.t === 'pyr') { it.x = r4(o.x + dX / W); it.z = r4(o.z + dZ / H); if (scaled) { it.half = Math.max(60, snapV(o.half * Math.max(s.x, s.z))); it.h = Math.max(40, snapV(o.h * s.y)); } }
     else {
@@ -170,15 +176,15 @@ export function createEdit3D(ctx) {
   function del() { if (sel < 0) return; undoSt.push(JSON.stringify(items)); redoSt.length = 0; const kill = [sel]; if (mirror && partner >= 0) kill.push(partner); items = items.filter((q, k) => !kill.includes(k)); sel = -1; save(); select(-1); }
   function dup() {
     if (sel < 0) return; const it = clone(items[sel]);
-    if (it.t === 'box' || it.t === 'tree' || it.t === 'pyr') { it.x = r4(it.x + 40 / W); it.z = r4(it.z + 40 / H); } else { it.ax = r4(it.ax + 40 / W); it.bx = r4(it.bx + 40 / W); it.az = r4(it.az + 40 / H); it.bz = r4(it.bz + 40 / H); }
+    if (it.t === 'box' || it.t === 'ramp' || it.t === 'tree' || it.t === 'pyr') { it.x = r4(it.x + 40 / W); it.z = r4(it.z + 40 / H); } else { it.ax = r4(it.ax + 40 / W); it.bx = r4(it.bx + 40 / W); it.az = r4(it.az + 40 / H); it.bz = r4(it.bz + 40 / H); }
     addNew(it);
   }
-  function newBox() { // onde a câmera está olhando (no chão ou em cima de alguma coisa)
+  function newBox(ramp) { // onde a câmera está olhando (no chão ou em cima de alguma coisa)
     const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
     const hit = pick(0, 0, true); let x, z;
     if (hit && hit.point) { x = hit.point.x; z = hit.point.z; } else { x = camera.position.x + dir.x * 300; z = camera.position.z + dir.z * 300; }
     x = Math.max(60, Math.min(W - 60, snapV(x))); z = Math.max(60, Math.min(H - 60, snapV(z)));
-    addNew({ t: 'box', x: r4((x - 40) / W), z: r4((z - 30) / H), w: r4(80 / W), h: r4(60 / H), top: 120 });
+    addNew(ramp ? { t: 'ramp', x: r4((x - 80) / W), z: r4((z - 40) / H), w: r4(160 / W), h: r4(80 / H), dir: Math.abs(Math.cos(cam.yaw)) > Math.abs(Math.sin(cam.yaw)) ? (Math.cos(cam.yaw) > 0 ? '+x' : '-x') : (Math.sin(cam.yaw) > 0 ? '+z' : '-z'), h0: 0, h1: 110 } : { t: 'box', x: r4((x - 40) / W), z: r4((z - 30) / H), w: r4(80 / W), h: r4(60 / H), top: 120 });
   }
 
   // ---------- painel da peça ----------
@@ -189,6 +195,7 @@ export function createEdit3D(ctx) {
     let h = `<h4>${TNAME[it.t]}${mirror && partner >= 0 ? ' <span style="color:#9a7a20">+ o do outro lado</span>' : ''}</h4>`;
     const num = (l, k, v, st) => `<div class="r"><span>${l}</span><input type="number" data-k="${k}" value="${v}" step="${st || 10}"></div>`;
     if (it.t === 'box') h += num('Largura', 'w', Math.round(g.sx)) + num('Profundidade', 'd', Math.round(g.sz)) + num('Altura (topo)', 'top', it.top || 120, 5) + num('Base (passa por baixo)', 'y0', it.y0 || 0, 5);
+    else if (it.t === 'ramp') { h += num('Largura', 'w', Math.round(g.sx)) + num('Profundidade', 'd', Math.round(g.sz)) + num('Altura embaixo', 'h0', it.h0 || 0, 5) + num('Altura em cima', 'h1', it.h1, 5); h += `<div class="r"><span>Sobe pra</span><span>${['+x', '-x', '+z', '-z'].map((d) => `<button data-dir="${d}" style="padding:2px 6px;${it.dir === d ? 'border-color:#ffcc33;color:#ffcc33' : ''}">${{ '+x': '→', '-x': '←', '+z': '↓', '-z': '↑' }[d]}</button>`).join('')}</span></div>`; }
     else if (it.t === 'wall2') h += num('Comprimento', 'len', Math.round(g.sx)) + num('Grossura', 'th', it.th || 24, 2) + num('Altura', 'top', it.top || 130, 5);
     else if (it.t === 'pyr') h += num('Meia base', 'half', it.half) + num('Altura', 'h', it.h);
     else if (it.t === 'dune') h += num('Altura (x108)', 'hk', it.hk, 0.05) + num('Largura (x150)', 'wk', it.wk, 0.05);
@@ -197,11 +204,12 @@ export function createEdit3D(ctx) {
     props.innerHTML = h;
     props.querySelectorAll('input[data-k]').forEach((inp) => inp.addEventListener('change', () => setNum(inp.dataset.k, Number(inp.value))));
     props.querySelectorAll('.sw').forEach((s) => s.addEventListener('click', () => { if (s.dataset.c) items[sel].tint = s.dataset.c; else delete items[sel].tint; commit(); }));
+    props.querySelectorAll('[data-dir]').forEach((b) => (b.onclick = () => { items[sel].dir = b.dataset.dir; commit(); }));
     props.querySelector('#e3d-pdup').onclick = dup; props.querySelector('#e3d-pdel').onclick = del;
   }
   function setNum(k, v) {
     const it = items[sel]; if (!it || !Number.isFinite(v)) return;
-    if (it.t === 'box') {
+    if (it.t === 'box' || it.t === 'ramp') {
       if (k === 'w') { const cx = (it.x + it.w / 2) * W; it.w = r4(Math.max(6, v) / W); it.x = r4((cx - Math.max(6, v) / 2) / W); }
       else if (k === 'd') { const cz = (it.z + it.h / 2) * H; it.h = r4(Math.max(6, v) / H); it.z = r4((cz - Math.max(6, v) / 2) / H); }
       else if (k === 'y0') { const hgt = (it.top || 120) - (it.y0 || 0); if (v > 0) it.y0 = v; else delete it.y0; it.top = (it.y0 || 0) + hgt; }
@@ -264,7 +272,7 @@ export function createEdit3D(ctx) {
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); del(); return; }
     if (e.key === 'Escape') { select(-1); return; }
     if (e.code === 'Digit1') setMode('translate'); if (e.code === 'Digit2') setMode('scale');
-    if (e.code === 'KeyB') newBox(); if (e.code === 'KeyT') topView(); if (e.code === 'KeyP') play();
+    if (e.code === 'KeyB') newBox(); if (e.code === 'KeyR') newBox(true); if (e.code === 'KeyT') topView(); if (e.code === 'KeyP') play();
     if (e.code === 'KeyF' && sel >= 0) { const g = geo(items[sel]), d = Math.max(g.sx, g.sy, g.sz) * 1.6 + 120; cam.x = g.cx - Math.cos(cam.yaw) * Math.cos(cam.pitch) * d; cam.z = g.cz - Math.sin(cam.yaw) * Math.cos(cam.pitch) * d; cam.y = g.cy - Math.sin(cam.pitch) * d; }
     if (e.code === 'Space') e.preventDefault();
   });
@@ -278,7 +286,7 @@ export function createEdit3D(ctx) {
   }
   E.lockChanged = (locked) => { if (!locked && !E.fly) { E.fly = true; document.body.classList.add('e3d'); bar.style.display = props.style.display = help.style.display = ''; playTip.style.display = 'none'; const p = ctx.me(); if (p) { cam.x = p.x; cam.z = p.z; cam.y = p.y + 140; cam.yaw = p.yaw; cam.pitch = -0.35; } } };
   bar.querySelectorAll('[data-m]').forEach((b) => (b.onclick = () => setMode(b.dataset.m)));
-  bar.querySelector('#e3d-new').onclick = newBox; bar.querySelector('#e3d-dup').onclick = dup; bar.querySelector('#e3d-del').onclick = del;
+  bar.querySelector('#e3d-new').onclick = () => newBox(); bar.querySelector('#e3d-ramp').onclick = () => newBox(true); bar.querySelector('#e3d-dup').onclick = dup; bar.querySelector('#e3d-del').onclick = del;
   bar.querySelector('#e3d-undo').onclick = undo; bar.querySelector('#e3d-redo').onclick = redo; bar.querySelector('#e3d-top').onclick = topView; bar.querySelector('#e3d-play-b').onclick = play;
   bar.querySelector('#e3d-mir').onclick = (e) => { mirror = !mirror; e.currentTarget.classList.toggle('on', mirror); select(sel); };
   bar.querySelector('#e3d-snap').onclick = (e) => { snap = !snap; e.currentTarget.classList.toggle('on', snap); applySnap(); };

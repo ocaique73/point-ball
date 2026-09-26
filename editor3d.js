@@ -9,6 +9,13 @@
 //   GITHUB_REPO   = (opcional) dono/repositório — padrão ocaique73/point-ball
 //   EDITOR_BRANCH = (opcional) branch onde grava — padrão editor
 const crypto = require('crypto');
+// no PC: lê as chaves do arquivo .env (na pasta do jogo) se existir; no Render elas ficam no painel Environment
+try {
+  for (const line of require('fs').readFileSync(require('path').join(__dirname, '.env'), 'utf8').split(/\r?\n/)) {
+    const m = line.match(/^\s*(?:export\s+)?([A-Z_][A-Z0-9_]*)\s*=\s*(.*?)\s*$/);
+    if (m && process.env[m[1]] == null) process.env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, '$2');
+  }
+} catch (e) { /* sem .env: tudo bem */ }
 const express = require('express');
 
 const FILE = 'public/demo3d/edits3d.js';

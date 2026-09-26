@@ -1,4 +1,7 @@
 node_modules
+# chaves (EDITOR_KEY, GITHUB_TOKEN) — nunca vão pro GitHub
+.env
+.env.*
 game-config.local.json
 
 # Godot cache

@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 26/09/2026 — v0.25.0 (Three.js): editor de mapa em 3D (junto com o de cima), editor de HUD com separar vida/tiro/arma/pulo, contagem do round parada e em preto e branco, próximo round espera a killcam, base na Lua e deserto corrigidos.
+Última atualização: 26/09/2026 — v0.26.0 (Three.js): obra maior com prédios em construção, salão do trono no castelo + dragão, navio maior e mais leve com prancha dos tubarões, gurupés e mastros novos, rampa no editor, portais com a regra do 2D, sons mais graves, sem vidro no mar e na floresta.
 
 ---
 
@@ -323,6 +323,26 @@
 - [x] Godot: mecânica da **Sala escura** (luz apaga/acende sozinha, com lanterna fraca pra dar pra jogar) e do **Vulcão** (4 poças de lava espelhadas que alternam ativa/inativa e doem quando ativas).
 - [ ] Godot: falta a mecânica de **Portais** (teletransporte — é a mais complexa, precisa abrir buracos na parede e sincronizar posição/velocidade) e da **Cidade à noite** (postes que acendem/apagam ao levar tiro; hoje o mapa não é permanentemente escuro ainda).
 - [ ] Godot: **multiplayer do zero** (o Godot não usa o servidor Node/Socket.IO da versão web — precisa de servidor dedicado ENet, salas, times, dono da sala). Fase grande, ainda não iniciada.
+
+- [x] v0.26.0 (Three.js): nona rodada de ajustes do Caique (só no 3D)
+  - [x] **Obra**: mapa maior (o octógono cortava os cantos e o mapa parecia pequeno); um prédio em construção de cada lado (só laje, pilar e escada, sem parede, 3 andares + laje de cima), ~50% mais largo e com o **pé-direito 50% mais alto**, fora do caminho da bola de demolição (guindaste mais alto); embaixo das lajes não fica mais preto
+  - [x] **Castelo**: torres mais altas (e a pilastra do meio), rampa mais larga, sem batente na porta do topo, parede no fim da subida, sacada com o dobro da largura, 1 porta embaixo por torre (sem o quadrado na frente), salão mais alto por dentro sem as 4 vigas, brilho em cima das muralhas corrigido
+  - [x] **Castelo – salão do trono**: as portas de cima e de baixo fecharam (ficam as 2 viradas pras bases); tablado no meio com escada dos 2 lados (degrau baixinho igual ao navio) e os **tronos do rei e da rainha** lá em cima, tapete vermelho, chão de pedra e **teto encantado** (céu de noite)
+  - [x] **Castelo – evento Dragão**: de 20 em 20 s um dragão passa voando e cospe fogo numa faixa (faixa vermelha avisa antes; debaixo de telhado não pega)
+  - [x] **Navio**: ~35% maior, sem a ilha do vulcão, 30% menos pedras; onda grande 20% mais forte e entra água no convés; bem mais leve (sem sombra do sol, 1 luz só na cabine, mar/céu mais simples) mantendo névoa, chuva e tempestade; som de "explosão" (trovão) trocado por trovão longe + mais barulho de água
+  - [x] **Navio – partes de subir**: convés alto na base de cada time, cabine fechada no meio (mais alta) com **escada dos 2 lados da porta** até o teto; **gurupés** na ponta de cada base; **prancha dos tubarões** no meio de cada lateral (sem parapeito na entrada); tirei os caixotes da escada e o que ficava no chão das laterais
+  - [x] **Navio – mastros**: os das bases com 1 escada, o do meio (em cima da cabine) com 2 (uma pra cada base); o mastro não atravessa a cabine; cesto do topo **+40% largo**, com a coluna do mastro no meio (sem as cordinhas) e as velas bem mais altas (não atrapalham andar/pular)
+  - [x] **Mar**: tirei o som que incomodava (era o grito antigo da torcida); torcida gritando (e comemora nas mortes); bonecos da torcida mais bonitos e com mais variedade de cor; **sem vidro em volta** (só o murinho baixo, a parede invisível continua pra ninguém cair)
+  - [x] **Vulcão**: vidro em volta menos transparente (com friso e colunas, dá pra ver que é parede e o tiro bate); corrigido o fundo do nome dos bonecos ficando diferente com o vidro atrás
+  - [x] **Floresta**: tirei o vidro/teto no céu (o tiro não bate mais lá em cima)
+  - [x] **Editor de mapa**: ferramenta **Rampa** (📈, tecla R) no editor de cima e no 3D (altura embaixo/em cima e pra que lado sobe)
+  - [x] Câmera: pula menos subindo escada de degrau (1ª e 3ª pessoa)
+  - [x] Sons: tiro da varinha grave (o meu e o dos outros). Bola de neve na mão: 2× mais forte
+  - [x] **Portais**: +1 s fechado e aberto; o portal do começo do round fica +0,7 s aberto; regra do 2D: no começo do round um par abre na parede de trás de cada base (um em cada base, nunca os dois na mesma) e o segundo par nunca nas paredes de trás; depois fica aleatório
+  - [x] Bots: saem/entram pela porta das salas fechadas (salão do castelo, torres, cabine do navio) e desgrudam de canto
+  - [x] Editor: "Salvar" manda todos os mapas e as abas Tiro e boneco / Efeitos de uma vez; o servidor também lê um arquivo `.env` (só no PC; no Render as chaves ficam no painel)
+  - [ ] Validar no PC (FPS do navio) e jogar o multiplayer com 2+ pessoas
+  - [ ] v0.27: fábrica maior com pontes em Z (esteira lenta em cima, 5 elevadores: 2 por base + 1 no meio) e esteiras de baixo mais fortes; cidade em volta da obra; online: escolher armas da sala, modo streamer, sala sem nome = "Sala 1, 2..." e senha/código num só
 
 - [x] v0.25.0 (Three.js): oitava rodada de ajustes do Caique (só no 3D)
   - [x] **Editor de mapa em 3D** (`/demo3d/?edit3d=mapa`, ou "🧊 Editar em 3D" no editor): câmera voando (botão direito olha, WASD voa), clica na peça, setas coloridas pra mover (inclusive pra cima = plataforma) e cubinhos pra esticar; novo, duplicar, apagar, espelho, grade, desfazer, "de cima" e "testar andando". O editor de cima e o 3D ficam iguais na hora (mesmo rascunho) e selecionam a mesma peça
