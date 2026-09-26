@@ -10,11 +10,12 @@ export const TEAM_PAL = {
   B: ['#dc2626', '#ef4444', '#f87171', '#fca5a5', '#7f1d1d', '#ea580c', '#be123c', '#1c0a0a']
 };
 export const LEATHER = (team) => ['#5b3a24', '#3b2a1e', '#7a5236', '#1f2022', '#6b7280', '#d6c2a0', TEAM_PAL[team][4], TEAM_PAL[team][1]];
+export const SKIN = ['#f6c09c', '#ecb38c', '#dca079', '#c68762', '#a86c4c', '#865238', '#643c29', '#fad9c2']; // cor da pele
 export const HAIR = ['#2b1d14', '#5a3a22', '#8a5a2b', '#d1a954', '#efe3c2', '#141414', '#8a2d1a', '#9ca3af'];
 export const HATS = { none: 'Nenhum', cap: 'Boné', beanie: 'Gorro', top: 'Cartola', cowboy: 'Chapéu de caubói', crown: 'Coroa', band: 'Faixa na testa' };
 // peças que dá pra pintar: s camisa, p calça, b botas, g luvas, c capa/capuz, h chapéu/elmo do personagem, a armadura, hr cabelo, hc chapéu extra
-export const SLOTS = [['s', 'Camisa / túnica', 'team'], ['p', 'Calça', 'team'], ['c', 'Capa e capuz', 'team'], ['h', 'Chapéu / elmo do personagem', 'team'], ['a', 'Armadura (cavaleiro)', 'team'], ['b', 'Botas e cinto', 'leather'], ['g', 'Luvas', 'leather'], ['hr', 'Cabelo / barba', 'hair'], ['hc', 'Cor do chapéu extra', 'team']];
-export const LOOK_DEFAULT = { m: 'hood', s: 1, p: 4, c: 0, h: 0, a: 2, b: 0, g: 1, hr: 1, hc: 0, cp: 1, o: 0, hat: 'none' };
+export const SLOTS = [['sk', 'Cor da pele', 'skin'], ['s', 'Camisa / túnica', 'team'], ['p', 'Calça', 'team'], ['c', 'Capa e capuz', 'team'], ['h', 'Chapéu / elmo do personagem', 'team'], ['a', 'Armadura (cavaleiro)', 'team'], ['b', 'Botas e cinto', 'leather'], ['g', 'Luvas', 'leather'], ['hr', 'Cabelo / barba', 'hair'], ['hc', 'Cor do chapéu extra', 'team']];
+export const LOOK_DEFAULT = { m: 'hood', sk: 0, s: 1, p: 4, c: 0, h: 0, a: 2, b: 0, g: 1, hr: 1, hc: 0, cp: 1, o: 0, hat: 'none' };
 
 // que célula da textura de cada pedaço do personagem vira que peça (a textura KayKit é uma grade 8x4 de degradês)
 const R_ARM = { 8: 's', 21: 'g', 5: 'g', 9: 'c' }, R_LEG = { 19: 'p', 15: 'b' };
@@ -32,7 +33,7 @@ const clampI = (v, n, d) => { v = Math.floor(Number(v)); return Number.isFinite(
 export function normLook(l) {
   l = l || {}; const o = Object.assign({}, LOOK_DEFAULT);
   if (CHARS[l.m]) o.m = l.m;
-  for (const k of ['s', 'p', 'c', 'h', 'a', 'b', 'g', 'hr', 'hc']) o[k] = clampI(l[k], 8, LOOK_DEFAULT[k]);
+  for (const k of ['sk', 's', 'p', 'c', 'h', 'a', 'b', 'g', 'hr', 'hc']) o[k] = clampI(l[k], 8, LOOK_DEFAULT[k]);
   o.cp = l.cp === 0 || l.cp === '0' ? 0 : 1; o.o = l.o === 1 || l.o === '1' ? 1 : 0;
   if (HATS[l.hat]) o.hat = l.hat;
   return o;
@@ -42,12 +43,13 @@ export function botLook(id) {
   let h = 2166136261; for (const ch of String(id)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
   const r = () => { h = Math.imul(h ^ (h >>> 15), 2246822507) >>> 0; h = Math.imul(h ^ (h >>> 13), 3266489909) >>> 0; return (h >>> 0) / 4294967296; };
   const ids = Object.keys(CHARS), hats = Object.keys(HATS), i8 = () => Math.floor(r() * 8);
-  return normLook({ m: ids[Math.floor(r() * ids.length)], s: i8(), p: i8(), c: i8(), h: i8(), a: i8(), b: Math.floor(r() * 6), g: Math.floor(r() * 6), hr: i8(), hc: i8(), cp: r() < 0.7 ? 1 : 0, hat: r() < 0.3 ? hats[1 + Math.floor(r() * (hats.length - 1))] : 'none' });
+  return normLook({ m: ids[Math.floor(r() * ids.length)], sk: i8(), s: i8(), p: i8(), c: i8(), h: i8(), a: i8(), b: Math.floor(r() * 6), g: Math.floor(r() * 6), hr: i8(), hc: i8(), cp: r() < 0.7 ? 1 : 0, hat: r() < 0.3 ? hats[1 + Math.floor(r() * (hats.length - 1))] : 'none' });
 }
 export function slotColor(look, team, slot) {
   const tm = team === 'B' ? 'B' : 'A', k = slot === 'p' && look.o ? 's' : slot; // macacão: calça da cor da camisa
   if (slot === 'b' || slot === 'g') return LEATHER(tm)[look[slot]];
   if (slot === 'hr') return HAIR[look.hr];
+  if (slot === 'sk') return SKIN[look.sk || 0];
   return TEAM_PAL[tm][look[k]];
 }
 
@@ -91,7 +93,8 @@ export function dressModel(model, key, look, team, BASE) {
   model.traverse((o) => {
     if (!o.isMesh) return;
     if (/_Head/.test(o.name)) headMesh = o;
-    const cells = parts[o.name];
+    const skin = key === 'knight' || key === 'barbarian' ? { 0: 'sk' } : { 0: 'sk', 30: 'sk', 31: 'sk' };
+    const cells = /^(Rogue|Knight|Barbarian|Mage)_/.test(o.name) ? Object.assign(skin, parts[o.name] || {}) : null; // (a pele entra em todas as peças)
     if (cells && o.material.map && o.material.map.image) { o.material = o.material.clone(); o.material.map = recolorTex(o.material.map, cells, look, team); o.material.needsUpdate = true; }
     if (/_Cape$/.test(o.name)) o.visible = !!look.cp;
     if (HEADWEAR.includes(o.name) && look.hat !== 'none') o.visible = false;

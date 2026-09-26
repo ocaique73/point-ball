@@ -21,6 +21,13 @@
   .slot b { display: block; color: var(--text); font-size: 13px; }
   .slot.on { border-color: var(--acc); color: var(--acc); background: rgba(255,204,51,.08); }
   .slot.off { opacity: .35; }
+  .icrow { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ic { display: grid; justify-items: center; gap: 2px; width: 64px; padding: 6px 2px; border-radius: 10px; border: 1px solid #2b3a55; background: #111a2b; color: var(--muted); cursor: pointer; }
+  .ic span { font-size: 22px; line-height: 1; } .ic small { font-size: 10px; }
+  .ic.on { border-color: var(--acc); background: #1b2a44; color: #fff; box-shadow: 0 0 0 1px var(--acc) inset; }
+  #minimap { position: fixed; top: 46px; left: 12px; border-radius: 8px; background: rgba(8,12,20,.45); border: 1px solid rgba(255,255,255,.14); pointer-events: none; }
+  #alive { top: 192px; left: 12px; width: 220px; box-sizing: border-box; justify-content: center; font-weight: 800; font-size: 13px; display: flex; gap: 10px; padding: 4px 10px; }
+  #alive .tA { color: #60a5fa; } #alive .tB { color: #f87171; }
   #feed { top: 12px; right: 12px; text-align: right; display: grid; gap: 4px; background: none; border: none; padding: 0; }
   #feed div { background: var(--panel); border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 13px; }
   .tA { color: #60a5fa; } .tB { color: #f87171; }
@@ -91,6 +98,8 @@
 </div>
 <div class="panel" id="slots"></div>
 <div class="panel" id="feed"></div>
+<canvas id="minimap" width="220" height="140"></canvas>
+<div class="panel" id="alive"></div>
 
 <div id="board"><h3>Placar</h3><div id="board-net" class="wdesc" style="margin-bottom:6px"></div><div id="board-body"></div></div>
 <div class="panel" id="score"></div>
