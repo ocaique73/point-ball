@@ -112,8 +112,8 @@ export function pickPortalPairs3D(slots, prev, rnd) {
 
 // ---------- alturas por mapa ----------
 // mapas fechados (sala escura, portais, base na Lua): parede de borda até o teto; o teto ricocheteia tiro
-export const CEILING_Y = { floresta: 700, nave: 360, escuro: 360, portal: 660, metro: 330, fabrica: 400 };
-export const BORDER_H = { nave: 360, escuro: 360, portal: 660, metro: 330, mar: 100, fabrica: 400, obra: 240 };
+export const CEILING_Y = { floresta: 700, nave: 360, escuro: 360, portal: 660, metro: 480, fabrica: 400 };
+export const BORDER_H = { nave: 360, escuro: 360, portal: 660, metro: 480, mar: 100, fabrica: 400, obra: 240, castelo: 200 };
 // portais: andar de cima (passarelas e pontes); só dá pra subir por um portal
 export const PLAT = { y: 300, th: 14, walk: 115, corner: 190, cornerLen: 190, bridge: 70, gapZ: 390, gap: 115 }; // cantos = quadrados largos
 // poste da cidade: altura da lâmpada, distância dela pro poste e o raio que o tiro acerta
@@ -164,6 +164,8 @@ export function forestTrees(W, H, walls, avoid) {
 // ---------- vulcão: o mapa flutua em cima de um vulcão gigante; a erupção fura o chão ----------
 // depth = grossura da laje; quem cai passa dela e morre ao chegar em -kill
 export const HOLE = { depth: 90, kill: 300, far: 1500 };
+// navio: balanço (graus em radianos) e quanto isso empurra quem está em cima
+export const SWAY = { roll: 0.07, pitch: 0.025, heave: 10, big: 0.19, slide: 700, air: 380 };
 // sorteia 3 pares de buracos espelhados, longe das paredes e do meio (onde ficam as áreas de reabastecer)
 export function makeLavaHoles(W, H, walls, rnd) {
   rnd = rnd || Math.random;
@@ -204,6 +206,10 @@ export class DuneField {
     this.segs = [];
     for (const R of walls) {
       if (!DuneField.isDune(R)) continue;
+      if (R.crest) { // crista desenhada à mão (deserto do 3D): [ax, az, bx, bz] + altura/largura
+        const [ax, az, bx, bz] = R.crest, [hk, wk] = R.dune || [1, 2];
+        this.segs.push({ ax, az, bx, bz, h: DUNE.h * hk, w: DUNE.w * wk }); continue;
+      }
       const horiz = R.w >= R.h, t = Math.min(R.w, R.h);
       const ax = horiz ? R.x + t / 2 : R.x + R.w / 2, az = horiz ? R.y + R.h / 2 : R.y + t / 2;
       const bx = horiz ? R.x + R.w - t / 2 : R.x + R.w / 2, bz = horiz ? R.y + R.h / 2 : R.y + R.h - t / 2;
@@ -243,7 +249,7 @@ export class DuneField {
     let py = 0;
     for (const q of this.pyr) {
       const d = Math.max(Math.abs(x - q.x), Math.abs(z - q.z)); if (d < q.half) py = Math.max(py, Math.min(q.h, (q.half - d) / (q.half - q.top) * q.h));
-      const k = clamp((d - q.half - 40) / 320, 0, 1); best *= k * k * (3 - 2 * k); // em volta da pirâmide a areia fica baixinha (a base não some)
+      const k = clamp((d - q.half - 30) / 220, 0, 1); best *= k * k * (3 - 2 * k); // em volta da pirâmide a areia fica baixinha (a base não some)
     }
     if (best <= 0) return py;
     // ondinhas de vento na areia
@@ -272,6 +278,7 @@ export class Sim3D {
     this.P = Object.assign({}, P, opts.params || {});
     if (opts.borderH) this.P.borderH = opts.borderH; // mapa fechado: borda até o teto
     this.cfg = opts.cfg || null;
+    this.NADE = Object.assign({}, NADE, opts.nade || {}); // granada (força, quique, rolar) — o editor pode mudar
     this.WEAPONS = {}; for (const k of WEAPON_IDS) this.WEAPONS[k] = Object.assign({}, WEAPONS[k], (opts.weapons && opts.weapons[k]) || {});
     // sala de teste / modo teste: só quem está nesta lista não morre (você); os bots morrem normal
     this.godIds = new Set(opts.godIds || (opts.godMode ? ['me'] : []));
@@ -288,6 +295,14 @@ export class Sim3D {
     // paredes em diagonal (mapas de formato irregular: octógono, hexágono...) e o contorno do mapa
     this.segs = (opts.segs || []).map((q) => { const dx = q.bx - q.ax, dz = q.bz - q.az, len = Math.hypot(dx, dz) || 1; return Object.assign({}, q, { ux: dx / len, uz: dz / len, len, nx: -dz / len, nz: dx / len }); });
     this.shape = opts.shape || null;
+    // pisos redondos (anel: sacada em volta da torre, patamar) e rampas em espiral (dentro das torres do castelo)
+    this.discs = (opts.discs || []).map((d) => Object.assign({ r0: 0, y0: d.top - 12 }, d));
+    this.spirals = opts.spirals || [];
+    // rampas retas (metrô): chão inclinado e maciço embaixo [x0, z0, x1, z1, eixo, altura no começo, altura no fim]
+    this.slopes = opts.slopes || [];
+    // navio: fora do casco é mar (cai e morre); o navio balança (inclina e sobe/desce) e isso mexe no pulo
+    this.spawnX = opts.spawnX || null; // faixa (x) onde o time A nasce (o B é espelhado)
+    this.deck = opts.deck || null; this.swayState = { roll: 0, pitch: 0, heave: 0, vh: 0, ah: 0 };
     // fábrica: pistões que sobem e descem sozinhos (carregam quem está em cima) e esteiras que levam quem pisa nelas
     this.pistons = this.staticBoxes.filter((b) => b.piston);
     for (const b of this.pistons) b.top = pistonTop(b.piston, 0);
@@ -321,7 +336,8 @@ export class Sim3D {
       meteor: [E, v(c.meteorWarn, 2) + 0.6, 0.6],
       train: [E, 2.5, 2 * trainLegT(this.H) + TRAIN.gap + 0.1], // ida + volta
       crane: [E, 2.5, CRANE.dur],
-      wave: [E, 3.5, 3.6] // 3,5 s de aviso: a onda vem crescendo lá do horizonte
+      wave: [E, 3.5, 3.6], // 3,5 s de aviso: a onda vem crescendo lá do horizonte
+      swell: [E, 2.5, 5] // navio: onda grande de lado (o navio inclina forte e tudo escorrega)
     };
     this.tornado = null; this.storm = null;
     this.sandActive = false; this.sandK = 0; this.sandS = 0;
@@ -431,7 +447,57 @@ export class Sim3D {
   // pisa no chão? (fora dos buracos) — a altura do chão ali
   floorAt(x, z, r) {
     if (this.holeAt(x, z, r * 0.35)) return -Infinity;
+    if (this.deck && !this.onDeck(x, z, r * 0.3)) return -Infinity; // navio: fora do casco é mar
     return this.groundAt(x, z);
+  }
+  onDeck(x, z, m) {
+    const P = this.deck.poly; let inn = false;
+    for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, zi] = P[i], [xj, zj] = P[j]; if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) inn = !inn; }
+    void m; return inn;
+  }
+  // rampa em espiral: alturas da rampa nesse ponto (uma por volta); [] se está fora do anel
+  spiralHs(S, x, z) {
+    const dx = x - S.cx, dz = z - S.cz, rr = dx * dx + dz * dz;
+    if (rr < S.r0 * S.r0 || rr > S.r1 * S.r1) return null;
+    let f = ((Math.atan2(dz, dx) - S.a0) * (S.dir || 1)) / (Math.PI * 2); f -= Math.floor(f);
+    const per = (S.y1 - S.y0) / S.turns, out = [];
+    for (let k = 0; k <= S.turns; k++) { const u = (f + k) / S.turns; if (u <= 1) out.push(S.y0 + (S.y1 - S.y0) * u); }
+    void per; return out;
+  }
+  slopeH(S, x, z) {
+    if (x < S.x0 || x > S.x1 || z < S.z0 || z > S.z1) return null;
+    const u = S.axis === 'x' ? (x - S.x0) / (S.x1 - S.x0) : (z - S.z0) / (S.z1 - S.z0);
+    return S.h0 + (S.h1 - S.h0) * u;
+  }
+  // chão extra (rampas e pisos redondos) debaixo de quem está na altura y (sobe até "up" de degrau)
+  extraFloor(x, z, y, up) {
+    let f = -Infinity;
+    for (const S of this.slopes) { const h = this.slopeH(S, x, z); if (h != null && h <= y + up && h > f) f = h; }
+    for (const S of this.spirals) { const hs = this.spiralHs(S, x, z); if (hs) for (const h of hs) if (h <= y + up && h > f) f = h; }
+    for (const D of this.discs) if (D.top <= y + up && D.top > f && this.inDisc(D, x, z)) f = D.top;
+    return f;
+  }
+  // teto baixo (parte de baixo da volta de cima da rampa / do piso redondo) acima de y
+  extraCeil(x, z, y) {
+    let c = Infinity;
+    for (const S of this.spirals) { const hs = this.spiralHs(S, x, z); if (hs) for (const h of hs) { const b = h - (S.th || 10); if (b > y + 2 && b < c) c = b; } }
+    for (const D of this.discs) if (D.y0 > y + 2 && D.y0 < c && this.inDisc(D, x, z)) c = D.y0;
+    return c;
+  }
+  // raio bate num piso redondo (em cima ou embaixo)? devolve t ou Infinity
+  discRay(D, ox, oy, oz, dx, dy, dz, tMax) {
+    if (Math.abs(dy) < 1e-9) return Infinity;
+    const y = oy > D.top ? D.top : oy < D.y0 ? D.y0 : null; if (y == null) return Infinity;
+    const t = (y - oy) / dy; if (t < 0 || t > tMax) return Infinity;
+    return this.inDisc(D, ox + dx * t, oz + dz * t) ? t : Infinity;
+  }
+  // ponto dentro do piso redondo (anel, ou só um pedaço dele se tiver a0/a1)
+  inDisc(D, x, z) {
+    const dx = x - D.cx, dz = z - D.cz, rr = dx * dx + dz * dz;
+    if (rr < D.r0 * D.r0 || rr > D.r1 * D.r1) return false;
+    if (D.a1 == null) return true;
+    let a = Math.atan2(dz, dx) - D.a0; a -= Math.floor(a / (Math.PI * 2)) * Math.PI * 2;
+    return a <= D.a1 - D.a0;
   }
 
   // ---------- jogadores ----------
@@ -457,9 +523,10 @@ export class Sim3D {
     for (let i = 0; i < 60; i++) {
       // cada um por si: nasce em qualquer lugar, o mais longe possível dos outros
       const ffa = this.mode === 'ffa';
-      const x = ffa ? 70 + Math.random() * (this.W - 140) : p.team === 'A' ? 60 + Math.random() * 190 : this.W - 60 - Math.random() * 190;
+      const sx = this.spawnX || [60, 250], sxv = sx[0] + Math.random() * (sx[1] - sx[0]);
+      const x = ffa ? 70 + Math.random() * (this.W - 140) : p.team === 'A' ? sxv : this.W - sxv;
       const z = 80 + Math.random() * (this.H - 160);
-      if (this.boxes.some((b) => b.y0 < this.P.height && this.circleBox(x, z, r, b)) || this.holeAt(x, z, -r - 20) || !this.inside(x, z, r + 4)) continue;
+      if (this.boxes.some((b) => b.y0 < this.P.height && this.circleBox(x, z, r, b)) || this.holeAt(x, z, -r - 20) || !this.inside(x, z, r + 4) || this.slopes.some((S) => x > S.x0 - r && x < S.x1 + r && z > S.z0 - r && z < S.z1 + r)) continue;
       if (!ffa) { p.x = x; p.z = z; break; }
       let d = 1e9; for (const q of this.players.values()) if (q !== p && q.alive) d = Math.min(d, Math.hypot(q.x - x, q.z - z));
       if (d > bestD) { bestD = d; p.x = x; p.z = z; }
@@ -550,6 +617,7 @@ export class Sim3D {
   segBlocked(ax, ay, az, bx, by, bz) {
     if (this.dunes && this.terrainHit(ax, ay, az, bx - ax, by - ay, bz - az, 1) <= 1) return true;
     for (const S of this.segs) if (this.segRay(S, ax, ay, az, bx - ax, by - ay, bz - az, 1) <= 1) return true;
+    for (const D of this.discs) if (this.discRay(D, ax, ay, az, bx - ax, by - ay, bz - az, 1) <= 1) return true;
     for (const b of this.boxes) {
       let t0 = 0, t1 = 1;
       const d = [bx - ax, by - ay, bz - az], o = [ax, ay, az], mn = [b.x0, b.y0, b.z0], mx = [b.x1, b.top, b.z1];
@@ -599,7 +667,7 @@ export class Sim3D {
     const t = ((S.ax + S.nx * S.t * side - ox) * S.nx + (S.az + S.nz * S.t * side - oz) * S.nz) / dn;
     if (t < 0 || t > tMax) return Infinity;
     const hx = ox + dx * t, hz = oz + dz * t, u = (hx - S.ax) * S.ux + (hz - S.az) * S.uz, y = oy + dy * t;
-    if (u < -S.t || u > S.len + S.t || y < 0 || y > S.top) return Infinity;
+    if (u < -S.t || u > S.len + S.t || y < (S.y0 || 0) || y > S.top) return Infinity;
     return t;
   }
   // a mira: primeiro ponto que o raio (olho -> direção) acerta (muro, chão ou alguém)
@@ -613,6 +681,7 @@ export class Sim3D {
     }
     if (this.dunes) best = Math.min(best, this.terrainHit(ox, oy, oz, dx, dy, dz, best));
     for (const S of this.segs) best = Math.min(best, this.segRay(S, ox, oy, oz, dx, dy, dz, best));
+    for (const D of this.discs) best = Math.min(best, this.discRay(D, ox, oy, oz, dx, dy, dz, best));
     for (const b of this.boxes) {
       let t0 = 0, t1 = best;
       const d = [dx, dy, dz], o = [ox, oy, oz], mn = [b.x0, b.y0, b.z0], mx = [b.x1, b.top, b.z1];
@@ -641,6 +710,7 @@ export class Sim3D {
 
   // ---------- passo da simulação ----------
   step(dt) {
+    if (this.deck) this.updateSway();
     this.time += dt;
     this.updatePhase();
     if (this.phase === 'matchEnd') { const ev = this.events; this.events = []; return ev; }
@@ -684,6 +754,7 @@ export class Sim3D {
       train: this.train ? { x: this.train.x, dir: this.train.dir, t2: this.train.t2, lt: this.train.lt, on: this.train.on, xb: this.train.xb, leg: this.train.leg, s: this.train.s, k: this.train.k } : null,
       crane: this.crane ? { a0: this.crane.a0, dir: this.crane.dir, t2: this.crane.t2, s: this.crane.s, k: this.crane.k, rest: this.crane.rest } : null,
       wave: this.wave ? { side: this.wave.side, t2: this.wave.t2, s: this.wave.s, k: this.wave.k } : null,
+      sway: this.deck ? this.swayState : null,
       holes: this.holes, erupt: this.erupt && !this.erupt.done ? { pts: this.erupt.pts, r: this.erupt.r } : null,
       lamps: this.lamps.map((l) => ({ i: l.i, x: l.x, z: l.z, dx: l.dx, dz: l.dz, offUntil: l.offUntil })),
       portalPairs: this.portalPairs, portalN: this.portalN, doors: this.doors.map((d) => Math.round(d.open * 100) / 100), doorsT: this.doors.map((d) => Math.max(0, Math.round((d.until - this.time) * 20) / 20)),
@@ -729,8 +800,15 @@ export class Sim3D {
       const k = Math.min(1, this.P.airControl * dt * 6);
       if (wl > 0.01) { p.vx += (wx - p.vx) * k; p.vz += (wz - p.vz) * k; }
     }
+    // navio inclinado: quem está em pé escorrega pro lado mais baixo; no ar, o pulo é levado pro lado (e fica mais alto/baixo com o sobe-desce)
+    if (this.deck) {
+      const S = this.swayState, sx = Math.sin(S.pitch), sz = Math.sin(S.roll);
+      if (p.grounded) { p.vx += sx * SWAY.slide; p.vz += sz * SWAY.slide; } // escorrega (velocidade)
+      else { p.vx += sx * SWAY.air * dt; p.vz += sz * SWAY.air * dt; p.vy -= S.ah * 6 * dt; } // no ar: é levado pro lado
+    }
     const r = this.radius(p);
     // horizontal: bate nos muros que estão na altura do corpo
+    const px0 = p.x, pz0 = p.z;
     p.x += p.vx * dt; p.z += p.vz * dt;
     // esteira da fábrica: quem está pisando nela é levado junto
     if (this.belts.length && p.grounded && p.y < 2) for (const B of this.belts) if (p.x > B.x0 && p.x < B.x1 && p.z > B.z0 && p.z < B.z1) { p.x += B.vx * dt; p.z += B.vz * dt; break; }
@@ -745,11 +823,17 @@ export class Sim3D {
     }
     // paredes em diagonal (contorno do mapa): empurram pra fora; as de contorno valem em qualquer altura
     for (const S of this.segs) {
-      if (!S.inf && (p.y >= S.top - 2)) continue;
+      if (!S.inf && (p.y >= S.top - 2 || p.y + this.heightOf(p) <= (S.y0 || 0) + 0.5)) continue;
       const [cx, cz, d] = this.segNear(S, p.x, p.z), m = r + S.t;
       if (d >= m) continue;
       if (d > 1e-6) { p.x = cx + (p.x - cx) / d * m; p.z = cz + (p.z - cz) / d * m; }
       else { p.x = cx + S.nx * m; p.z = cz + S.nz * m; }
+    }
+    // rampa em espiral na altura do corpo (não dá pra atravessar andando): volta pra onde estava
+    if (this.slopes.length) for (const S of this.slopes) { const h = this.slopeH(S, p.x, p.z); if (h != null && h > p.y + 14) { p.x = px0; p.z = pz0; break; } } // rampa é maciça embaixo
+    if (this.spirals.length) {
+      const ph0 = this.heightOf(p);
+      for (const S of this.spirals) { const hs = this.spiralHs(S, p.x, p.z); if (hs && hs.some((h) => h > p.y + 14 && h - (S.th || 10) < p.y + ph0)) { p.x = px0; p.z = pz0; break; } }
     }
     // parede invisível em cima da borda: ninguém sai do mapa pulando por cima do muro
     if (p.y >= this.P.borderH - 6) { const m = this.wallT + r; p.x = clamp(p.x, m, this.W - m); p.z = clamp(p.z, m, this.H - m); }
@@ -780,8 +864,10 @@ export class Sim3D {
     if (p.vy > 0) for (const b of this.boxes) {
       if (b.y0 > 0 && y0 + ph <= b.y0 + 1 && p.y + ph > b.y0 && this.circleBox(p.x, p.z, r * 0.8, b)) { p.y = b.y0 - ph; p.vy = 0; }
     }
+    if (p.vy > 0 && (this.spirals.length || this.discs.length)) { const c = this.extraCeil(p.x, p.z, y0 + ph - 2); if (p.y + ph > c) { p.y = c - ph; p.vy = 0; } }
     let floor = pit ? -Infinity : this.floorAt(p.x, p.z, r);
     for (const b of this.boxes) if (this.circleBox(p.x, p.z, r * 0.7, b) && y0 >= b.top - 2) floor = Math.max(floor, b.top);
+    if (this.spirals.length || this.discs.length || this.slopes.length) floor = Math.max(floor, this.extraFloor(p.x, p.z, y0, p.grounded ? 14 : 2));
     // descendo o morro andando: continua grudado no chão (sem ficar "pulando" ladeira abaixo)
     const snap = p.grounded && p.vy <= 0 && floor > -Infinity && y0 - floor < 16;
     if (p.y <= floor || snap) {
@@ -791,11 +877,15 @@ export class Sim3D {
     } else p.grounded = false;
     // lá embaixo é lava
     if (this.holes && p.y < -HOLE.kill) { this.lavaFall(p); return; }
+    // navio: caiu no mar
+    if (this.deck && p.y < this.deck.kill) { this.drown(p); return; }
     this.fireInput(p);
   }
   // atirar / usar
   fireInput(p) {
-    if (!this.canAct() || p.sprinting || this.time < p.sprintOut) { if (p.charge0 && !p.input.fire) p.charge0 = 0; }
+    // correndo: só não atira nem dá facada (poção, granada e fumaça pode)
+    const run = p.sprinting || this.time < p.sprintOut, free = p.weapon === 'potion' || p.weapon === 'nade' || p.weapon === 'smoke';
+    if (!this.canAct() || (run && !free)) { if (p.charge0 && !p.input.fire) p.charge0 = 0; }
     else if (p.input.fire) this.useWeapon(p, false);
     else if (p.charge0 || p.nade0) this.useWeapon(p, true); // soltou o botão (granada)
   }
@@ -814,11 +904,19 @@ export class Sim3D {
         if (!up) continue;
         L = q; break;
       }
+      // lá em cima, em pé na tampa do alçapão, de costas pra fora + S = desce pela escada
+      if (!L && p.input.fwd < 0 && p.grounded) for (const q of this.ladders) {
+        if (Math.abs(p.y - q.top) > 3) continue;
+        const dx = p.x - q.x, dz = p.z - q.z, out = dx * q.nx + dz * q.nz, lat = -dx * q.nz + dz * q.nx;
+        if (out < -2 || out > (q.hole || 64) + r || Math.abs(lat) > q.half + 12) continue;
+        L = q; p.y = q.top - 6; break;
+      }
       if (!L) return false;
       p.ladder = L; this.events.push({ type: 'ladder', id: p.id });
     }
     const lat = Math.max(-8, Math.min(8, -(p.x - L.x) * L.nz + (p.z - L.z) * L.nx));
-    p.x = L.x + L.nx * (r + 3) - L.nz * lat; p.z = L.z + L.nz * (r + 3) + L.nx * lat;
+    const off = r + 3 + (L.tilt || 0) * Math.max(0, 1 - p.y / L.top); // escada inclinada: embaixo fica mais longe do tronco
+    p.x = L.x + L.nx * off - L.nz * lat; p.z = L.z + L.nz * off + L.nx * lat;
     p.vx = p.vz = 0; p.vy = 0; p.grounded = false; p.sprinting = false;
     p.y += CLIMB * dt * Math.sign(p.input.fwd);
     if (p.y >= L.top) { // chegou lá em cima: sai do buraco e fica em pé no chão da casinha, do lado de fora do buraco
@@ -836,11 +934,10 @@ export class Sim3D {
     if (this.time < p.fireReady) return;
     if (p.weapon === 'knife') return this.knife(p);
     if (p.weapon === 'potion') return this.drinkPotion(p);
-    if (p.weapon === 'nade' || p.weapon === 'smoke') { // segura = puxa o braço (carrega); solta = joga
-      if (!released) { if (!p.nade0) { p.nade0 = this.time; this.events.push({ type: 'nade_pull', id: p.id }); } return; }
-      if (!p.nade0) return;
-      const k = this.nadeK(p); p.nade0 = 0;
-      return this.throwNade(p, p.weapon === 'smoke', k);
+    if (p.weapon === 'nade' || p.weapon === 'smoke') { // clicou = joga (sempre na força máxima)
+      if (released) return;
+      p.nade0 = 0;
+      return this.throwNade(p, p.weapon === 'smoke', 1);
     }
     const w = this.weaponDef(p);
     if (p.reloadUntil) return;
@@ -931,9 +1028,18 @@ export class Sim3D {
     else if (this.hazard === 'meteor') this.updateMeteor();
     else if (this.hazard === 'train') this.updateTrain();
     else if (this.hazard === 'wave') this.updateWave(dt);
+    else if (this.hazard === 'swell') this.updateSwell();
     else if (this.hazard === 'crane') this.updateCrane();
   }
   // vulcão: caiu na lava = morreu (o abate vai pra quem acertou por último, se foi há pouco)
+  drown(p) { // caiu do navio no mar
+    if (this.godIds.has(p.id)) { this.spawn(p); this.events.push({ type: 'respawn', id: p.id }); this.events.push({ type: 'drown', id: p.id, x: p.x, z: p.z, saved: true }); return; }
+    let by = null, bt = -1;
+    for (const id in p.lastHitBy) if (this.time - p.lastHitBy[id] < 5 && p.lastHitBy[id] > bt) { bt = p.lastHitBy[id]; by = id; }
+    this.events.push({ type: 'drown', id: p.id, x: p.x, z: p.z });
+    p.lives = 1; p.invulnUntil = 0; p.protectUntil = 0;
+    this.damage(p, by, 'sea');
+  }
   lavaFall(p) {
     if (this.godIds.has(p.id)) { this.spawn(p); this.events.push({ type: 'respawn', id: p.id }); this.events.push({ type: 'lava_fall', id: p.id, x: p.x, z: p.z, saved: true }); return; }
     let by = null, bt = -1;
@@ -1132,18 +1238,18 @@ export class Sim3D {
   nadeLaunch(p, k) {
     k = k == null ? 0.75 : clamp(k, 0, 1);
     const [dx, dy, dz] = this.aimDir(p), h = Math.hypot(dx, dz) || 1;
-    const sp = (NADE.min + (NADE.max - NADE.min) * k) * (p.grounded ? 1 : NADE.air), up = this.P.nadeUp * (0.6 + 0.4 * k);
+    const sp = (this.NADE.min + (this.NADE.max - this.NADE.min) * k) * (p.grounded ? 1 : this.NADE.air), up = this.P.nadeUp * (0.6 + 0.4 * k);
     const ox = p.x + dx / h * 26, oy = p.y + this.P.eye * (this.radius(p) / this.P.radius) + 6, oz = p.z + dz / h * 26;
     return [ox, oy, oz, dx * sp + p.vx * 0.4, dy * sp + up + Math.max(0, p.vy) * 0.3, dz * sp + p.vz * 0.4];
   }
-  nadeK(p) { return p.nade0 ? clamp((this.time - p.nade0) / NADE.charge, 0, 1) : 0; }
+  nadeK(p) { return 1; } // (sem carregar: sempre força máxima)
   // prevê o arco até o primeiro toque (uma linha só) e onde a granada vai parar (a área da explosão)
   predictNade(p, smoke, k) {
     const [x, y, z, vx, vy, vz] = this.nadeLaunch(p, k), g = { x, y, z, vx, vy, vz }, pts = [[x, y, z]], fuse = smoke ? this.P.smokeFuse : this.P.nadeFuse;
     const saveEv = this.events.length; let flying = true;
     for (let t = 0, n = 0; t < fuse; t += 1 / 60, n++) {
-      for (let i = 0; i < 4; i++) { g.vy -= this.P.gravity / 240; if (this.bounceStep(g, this.P.nadeR, NADE.rest, 1 / 240)) { if (flying) pts.push([g.x, g.y, g.z]); flying = false; } }
-      if (g.y <= this.groundAt(g.x, g.z) + this.P.nadeR + 0.5) { g.vx *= NADE.roll; g.vz *= NADE.roll; }
+      for (let i = 0; i < 4; i++) { g.vy -= this.P.gravity / 240; if (this.bounceStep(g, this.P.nadeR, this.NADE.rest, 1 / 240)) { if (flying) pts.push([g.x, g.y, g.z]); flying = false; } }
+      if (g.y <= this.groundAt(g.x, g.z) + this.P.nadeR + 0.5) { g.vx *= this.NADE.roll; g.vz *= this.NADE.roll; }
       if (flying && n % 2 === 0) pts.push([g.x, g.y, g.z]);
       if (g.y < -HOLE.depth - 120) break;
     }
@@ -1220,6 +1326,22 @@ export class Sim3D {
     }
   }
   // mar: a onda vem de um lado sorteado (menos o do navio), passa por cima da borda e arrasta quem pegar
+  // navio balançando: inclina pros lados (roll), pra frente/trás (pitch) e sobe/desce (heave)
+  updateSway() {
+    const t = this.time, S = this.swayState, SW = this.swell;
+    let big = 0;
+    if (SW && SW.s === 2) big = Math.sin(Math.PI * Math.min(1, SW.k)) * SW.side; // onda grande: inclina forte e volta
+    S.roll = SWAY.roll * Math.sin(t * 2 * Math.PI / 7.3) + SWAY.big * big;
+    S.pitch = SWAY.pitch * Math.sin(t * 2 * Math.PI / 9.1 + 1.3);
+    const w = 2 * Math.PI / 5.2; S.heave = SWAY.heave * Math.sin(t * w); S.ah = -SWAY.heave * w * w * Math.sin(t * w); S.vh = SWAY.heave * w * Math.cos(t * w);
+  }
+  updateSwell() {
+    const cy = this.cycle('swell');
+    if (!this.swell || this.swell.idx !== cy.idx) this.swell = { idx: cy.idx, side: Math.random() < 0.5 ? -1 : 1, s: 0, k: 0, warned: false, started: false };
+    const W = this.swell; W.s = cy.s; W.k = cy.k;
+    if (cy.s >= 1 && !W.warned) { W.warned = true; this.events.push({ type: 'swell_warn', side: W.side }); }
+    if (cy.s === 2 && !W.started) { W.started = true; this.events.push({ type: 'swell_start', side: W.side }); }
+  }
   updateWave(dt) {
     const cy = this.cycle('wave'), idx = Math.max(0, cy.idx);
     const [interval, , dur] = this.hz.wave;
@@ -1236,6 +1358,7 @@ export class Sim3D {
     const horiz = Wv.side === 'L' || Wv.side === 'R', len = horiz ? this.W : this.H, dir = Wv.side === 'L' || Wv.side === 'T' ? 1 : -1;
     const d = (this.time - Wv.t2) * WAVE.speed - WAVE.band, pos = dir > 0 ? d : len - d; // frente da onda
     Wv.pos = pos; Wv.dir = dir; Wv.horiz = horiz;
+    if (d >= 0 && !Wv.arrived) { Wv.arrived = true; this.events.push({ type: 'wave_arrive', side: Wv.side }); } // chegou na plataforma (o som toca 1 vez)
     for (const p of this.players.values()) {
       if (!p.alive || p.spin || p.y > 160) continue;
       const c = horiz ? p.x : p.z;
@@ -1264,7 +1387,7 @@ export class Sim3D {
     o.x += o.vx * dt; o.y += o.vy * dt; o.z += o.vz * dt;
     let hit = false;
     // chão (menos em cima de um buraco do vulcão: cai lá dentro)
-    if (o.y < r && !(this.holes && this.holeAt(o.x, o.z, 0))) { o.y = r; o.vy = Math.abs(o.vy) * rest; o.vx *= 0.98; o.vz *= 0.98; hit = 'floor'; }
+    if (o.y < r && !(this.holes && this.holeAt(o.x, o.z, 0)) && !(this.deck && !this.onDeck(o.x, o.z, 0))) { o.y = r; o.vy = Math.abs(o.vy) * rest; o.vx *= 0.98; o.vz *= 0.98; hit = 'floor'; }
     // montanha de areia: quica seguindo a inclinação do morro
     if (this.dunes) {
       const g = this.dunes.at(o.x, o.z);
@@ -1277,8 +1400,19 @@ export class Sim3D {
         hit = 'floor';
       }
     }
+    // pisos redondos (sacada/patamar) e rampas em espiral: quicam por cima e por baixo
+    for (const D of this.discs) {
+      if (o.y - r > D.top || o.y + r < D.y0 || !this.inDisc(D, o.x, o.z)) continue;
+      if (o.vy <= 0 && o.y > (D.top + D.y0) / 2) { o.y = D.top + r; o.vy = Math.abs(o.vy) * rest; o.vx *= 0.98; o.vz *= 0.98; hit = 'floor'; }
+      else { o.y = D.y0 - r; o.vy = -Math.abs(o.vy) * rest; hit = 'wall'; }
+    }
+    for (const S of this.slopes) { const h = this.slopeH(S, o.x, o.z); if (h != null && o.y - r < h) { o.y = h + r; o.vy = Math.abs(o.vy) * rest; o.vx *= 0.98; o.vz *= 0.98; hit = 'floor'; } }
+    for (const S of this.spirals) {
+      const hs = this.spiralHs(S, o.x, o.z); if (!hs) continue;
+      for (const h of hs) if (o.y - r < h && o.y + r > h - (S.th || 10)) { if (o.vy <= 0 && o.y > h - 5) { o.y = h + r; o.vy = Math.abs(o.vy) * rest; o.vx *= 0.98; o.vz *= 0.98; hit = 'floor'; } else { o.y = h - (S.th || 10) - r; o.vy = -Math.abs(o.vy) * rest; hit = 'wall'; } }
+    }
     for (const S of this.segs) {
-      if (o.y - r > S.top) continue;
+      if (o.y - r > S.top || o.y + r < (S.y0 || 0)) continue;
       const [cx, cz, d] = this.segNear(S, o.x, o.z), m = r + S.t;
       if (d >= m) continue;
       const nx = d > 1e-6 ? (o.x - cx) / d : S.nx, nz = d > 1e-6 ? (o.z - cz) / d : S.nz;
@@ -1351,12 +1485,12 @@ export class Sim3D {
     for (const g of this.nades) {
       const n = 4, sub = dt / n;
       for (let i = 0; i < n; i++) {
-        g.vy -= this.P.gravity * sub; this.bounceStep(g, this.P.nadeR, NADE.rest, sub);
+        g.vy -= this.P.gravity * sub; this.bounceStep(g, this.P.nadeR, this.NADE.rest, sub);
         if (this.portals.length) this.portalCross(g, this.P.nadeR, false);
       }
       // caiu na lava: some (sem explodir)
-      if (g.y < -HOLE.depth - 120) { this.events.push({ type: 'lava_splash', x: g.x, z: g.z }); continue; }
-      if (g.y <= this.groundAt(g.x, g.z) + this.P.nadeR + 0.5) { g.vx *= NADE.roll; g.vz *= NADE.roll; } // rolando no chão (pouco)
+      if (g.y < -HOLE.depth - 120 || (this.deck && g.y < this.deck.kill)) { this.events.push({ type: this.deck ? 'sea_splash' : 'lava_splash', x: g.x, z: g.z }); continue; }
+      if (g.y <= this.groundAt(g.x, g.z) + this.P.nadeR + 0.5) { g.vx *= this.NADE.roll; g.vz *= this.NADE.roll; } // rolando no chão (pouco)
       g.spin += Math.hypot(g.vx, g.vz) * dt * 0.05;
       const age = this.time - g.t0;
       if (g.smoke ? age >= this.P.smokeFuse : age >= this.P.nadeFuse) {

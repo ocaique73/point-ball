@@ -48,6 +48,7 @@ app.use('/vendor/three', express.static(path.join(__dirname, 'node_modules', 'th
 app.use('/vendor/three-addons', express.static(path.join(__dirname, 'node_modules', 'three', 'examples', 'jsm')));
 app.get(['/demo3d', '/demo3d/'], (req, res) => res.sendFile(path.join(__dirname, 'public', 'demo3d', 'index.html')));
 app.get('/healthz', (req, res) => res.send('ok'));
+require('./editor3d').setupEditor(app); // editor de mapa do 3D: salvar os ajustes (com senha)
 app.get('/api/config', (req, res) => res.json(CONFIG));
 app.get('/api/rooms', (req, res) => {
   const list = [];

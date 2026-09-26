@@ -17,7 +17,7 @@ Armas: **arco** (padrão), estilingue e bolinha na mão. Modos (iguais ao 2D): R
 Uma granada inimiga lançada mostra a distância e a direção no topo da tela pra você correr. Os eventos de cada mapa
 (furacão, tempestade, chuva congelante, erupção, luz apagando) só começam 25 s depois do início e repetem a cada 25 s.
 
-Mapas: Deserto (**montanhas de areia** que dá pra subir, tempestade de areia), Neve (paredes de gelo: dá pra ver através de
+Mapas: Castelo (torres com rampa em espiral e sacada), Navio na tempestade (balança; caiu no mar, morreu), Deserto (**montanhas de areia** que dá pra subir, tempestade de areia), Neve (paredes de gelo: dá pra ver através de
 uma, a segunda já escurece), Floresta (paredes de madeira com árvore grande em cada ponta + furacão + ricochete na copa das
 árvores), Nave espacial (uma **base na Lua**: corredor de nave, janelas pra superfície da Lua e a Terra no céu, teto de vidro
 que também ricocheteia tiro), Portais (portais ovais que dá pra **ver através** — gente, tiro e granada passam e saem no
@@ -33,6 +33,14 @@ cadência/recarga de cada arma — ligar/desligar "você pode morrer" (os bots s
 ## Demo A — Three.js (web + PC)
 
 Tem física 3D própria (`public/demo3d/sim3d.js`): tiro e granada seguem a mira, ricochete no muro e no chão, pulo duplo. 8 mapas e bots com 3 níveis.
+
+**Novidades da v0.24** (só no 3D): **editor de mapa** (menu Esc → 🛠️ Editor de mapa), mapas novos **Castelo** e **Navio na tempestade**, rampa no metrô, pirâmides nas bases do deserto, iglus com 3 entradas, furacão novo, granada sempre na força máxima.
+
+**Editor de mapa** (`/demo3d/editor.html`): escolha o mapa e mexa nos muros/caixas/paredes/árvores/dunas/pirâmides vistos de cima (arrasta pra mover, quadradinhos amarelos esticam, "Espelhar lados" muda o outro lado junto). As abas **Tiro e boneco** e **Efeitos** mudam os números das armas, do pulo, da granada, do rastro da varinha e da explosão. Tudo fica num rascunho no seu navegador: a **Prévia 3D** e o seu jogo (marcando "usar no meu jogo") já usam na hora; o multiplayer só usa o que estiver salvo no jogo.
+Pra o botão **Salvar** funcionar, no Render (Environment) coloque:
+1. `EDITOR_KEY` = uma senha só sua (o editor pede ela na primeira vez).
+2. `GITHUB_TOKEN` = um token do GitHub (Settings → Developer settings → Fine-grained tokens → só o repositório point-ball → permissão *Contents: Read and write*).
+Salvando, o servidor grava `public/demo3d/edits3d.js` na branch **editor** do GitHub (o jogo no ar não muda). Depois é só avisar o Claude, que pega de lá e coloca no jogo. Sem o token, "Salvar" guarda só na memória do servidor; dá pra usar "Copiar código" e colar no chat.
 
 **Novidades da v0.23** (só no 3D): obra em octógono e fábrica em hexágono, minimapa, contador de vivos, sons por distância, granada segurando pra jogar longe, pulo duplo com botas douradas, editor com ícones e cor da pele, portais e cidade mais leves.
 
