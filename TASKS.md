@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 26/09/2026 — v0.24.0 (Three.js): editor de mapa/tiro/efeitos com salvar seguro, mapas novos Castelo (torres com rampa em espiral) e Navio na tempestade (balança e inclina), rampa no metrô, pirâmides nas bases do deserto, iglus com 3 entradas, furacão novo, granada na força máxima.
+Última atualização: 26/09/2026 — v0.25.0 (Three.js): editor de mapa em 3D (junto com o de cima), editor de HUD com separar vida/tiro/arma/pulo, contagem do round parada e em preto e branco, próximo round espera a killcam, base na Lua e deserto corrigidos.
 
 ---
 
@@ -323,6 +323,15 @@
 - [x] Godot: mecânica da **Sala escura** (luz apaga/acende sozinha, com lanterna fraca pra dar pra jogar) e do **Vulcão** (4 poças de lava espelhadas que alternam ativa/inativa e doem quando ativas).
 - [ ] Godot: falta a mecânica de **Portais** (teletransporte — é a mais complexa, precisa abrir buracos na parede e sincronizar posição/velocidade) e da **Cidade à noite** (postes que acendem/apagam ao levar tiro; hoje o mapa não é permanentemente escuro ainda).
 - [ ] Godot: **multiplayer do zero** (o Godot não usa o servidor Node/Socket.IO da versão web — precisa de servidor dedicado ENet, salas, times, dono da sala). Fase grande, ainda não iniciada.
+
+- [x] v0.25.0 (Three.js): oitava rodada de ajustes do Caique (só no 3D)
+  - [x] **Editor de mapa em 3D** (`/demo3d/?edit3d=mapa`, ou "🧊 Editar em 3D" no editor): câmera voando (botão direito olha, WASD voa), clica na peça, setas coloridas pra mover (inclusive pra cima = plataforma) e cubinhos pra esticar; novo, duplicar, apagar, espelho, grade, desfazer, "de cima" e "testar andando". O editor de cima e o 3D ficam iguais na hora (mesmo rascunho) e selecionam a mesma peça
+  - [x] **Editor de HUD** (menu Esc → aba HUD): arrasta cada informação pra onde quiser, muda tamanho (rodinha), transparência, fundo e esconde; botão **separar** vida, tiro, arma, pulo duplo e aviso do evento em caixas soltas; fica salvo no navegador
+  - [x] **Contagem do round**: todo mundo parado (só dá pra olhar) e a tela quase preto e branco, voltando a cor até ficar normal 0,5 s antes de começar
+  - [x] O próximo round só começa a contar **depois da killcam final** (sozinho: espera a killcam; multiplayer: o fim do round dura 7 s)
+  - [x] Base na Lua: vidro em volta de volta como era; paredes do meio com a faixa preta em cima e o metal cinza embaixo
+  - [x] Deserto: **2 pirâmides em cada base** (uma em cada ponta); ninguém nasce em cima da pirâmide
+  - [ ] Validar no PC e jogar o multiplayer com 2+ pessoas
 
 - [x] v0.24.0 (Three.js): sétima rodada de ajustes do Caique (só no 3D)
   - [x] **Editor de mapa** (`/demo3d/editor.html`, link no menu Esc): mapa visto de cima pra mover/esticar/criar/apagar muros, caixas, paredes em diagonal, árvores, dunas e pirâmides (com espelho automático do outro lado, grade, desfazer); aba **Tiro e boneco** (velocidade, cadência, recarga, ricochete, queda de cada arma; pulo, gravidade; granada) e aba **Efeitos** (rastro da varinha, tamanho/brilho do tiro, explosão); prévia 3D ao vivo e "usar no meu jogo"

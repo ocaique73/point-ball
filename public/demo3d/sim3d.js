@@ -361,7 +361,7 @@ export class Sim3D {
     this.mode = MODES.includes(opts.mode) ? opts.mode : 'livre';
     this.killLimit = opts.killLimit || 0; this.matchTime = opts.matchTime || 0;
     this.totalRounds = opts.rounds || 3; this.hillTarget = opts.hillTarget || 100;
-    this.roundTime = v(c.roundTime, 120); this.startDelay = v(c.roundStartDelay, 3); this.endDelay = v(c.roundEndDelay, 3);
+    this.roundTime = v(c.roundTime, 120); this.startDelay = v(c.roundStartDelay, 3); this.endDelay = opts.endDelay != null ? opts.endDelay : v(c.roundEndDelay, 3);
     this.score = { A: 0, B: 0 }; this.round = 1; this.result = null; this.hill = null; this.hillOwner = null;
     this.phase = this.mode === 'rounds' ? 'countdown' : 'playing';
     this.phaseUntil = this.mode === 'rounds' ? this.startDelay : 0;
@@ -526,7 +526,7 @@ export class Sim3D {
       const sx = this.spawnX || [60, 250], sxv = sx[0] + Math.random() * (sx[1] - sx[0]);
       const x = ffa ? 70 + Math.random() * (this.W - 140) : p.team === 'A' ? sxv : this.W - sxv;
       const z = 80 + Math.random() * (this.H - 160);
-      if (this.boxes.some((b) => b.y0 < this.P.height && this.circleBox(x, z, r, b)) || this.holeAt(x, z, -r - 20) || !this.inside(x, z, r + 4) || this.slopes.some((S) => x > S.x0 - r && x < S.x1 + r && z > S.z0 - r && z < S.z1 + r)) continue;
+      if (this.boxes.some((b) => b.y0 < this.P.height && this.circleBox(x, z, r, b)) || this.holeAt(x, z, -r - 20) || !this.inside(x, z, r + 4) || this.slopes.some((S) => x > S.x0 - r && x < S.x1 + r && z > S.z0 - r && z < S.z1 + r) || (this.dunes && i < 50 && this.dunes.at(x, z) > 25)) continue; // (deserto: nasce no chão, não em cima da pirâmide)
       if (!ffa) { p.x = x; p.z = z; break; }
       let d = 1e9; for (const q of this.players.values()) if (q !== p && q.alive) d = Math.min(d, Math.hypot(q.x - x, q.z - z));
       if (d > bestD) { bestD = d; p.x = x; p.z = z; }
@@ -566,7 +566,7 @@ export class Sim3D {
     this.events.push({ type: 'reload', id: p.id });
   }
   jump(p) {
-    if (!p.alive) return;
+    if (!p.alive || this.phase === 'countdown') return; // (na contagem ninguém pula)
     if (p.ladder) { const L = p.ladder; p.ladder = null; p.vy = 260; p.vx = L.nx * 200; p.vz = L.nz * 200; p.jumps = 1; this.events.push({ type: 'jump', id: p.id }); return; } // pula pra fora da escada
     if (p.grounded) { // pulo normal: sem limite, vai para onde você está andando
       p.vy = this.P.jumpV; p.grounded = false; p.jumps = 1;
@@ -775,9 +775,11 @@ export class Sim3D {
     // pego pelo furacão: gira subindo dentro dele e depois é jogado longe
     if (p.spin) { this.updateSpin(p, dt); return; }
     if (p.bot) this.botThink(p, dt);
+    // contagem antes do round: todo mundo parado (dá só pra olhar em volta)
+    const frozen = this.phase === 'countdown', inF = frozen ? 0 : p.input.fwd, inS = frozen ? 0 : p.input.side;
     // andar relativo para onde olha
     const fx = Math.cos(p.yaw), fz = Math.sin(p.yaw), rx = -fz, rz = fx;
-    let wx = fx * p.input.fwd + rx * p.input.side, wz = fz * p.input.fwd + rz * p.input.side;
+    let wx = fx * inF + rx * inS, wz = fz * inF + rz * inS;
     const wl = Math.hypot(wx, wz); if (wl > 1) { wx /= wl; wz /= wl; }
     // tempestade congelante deixa devagar por um tempo (a de areia só tampa a visão)
     // mirar (botão direito): anda mais devagar e carrega a força do tiro; não dá pra correr mirando

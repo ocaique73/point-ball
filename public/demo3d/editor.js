@@ -5,6 +5,7 @@
 import { world3D, editableItems, setEditOverride, bakedEdits, MAPS3D, MAP_SCALE, MAP_SCALE_OF } from '/demo3d/world3d.js';
 import { WEAPONS, WEAPON_IDS, P, NADE, TREE } from '/demo3d/sim3d.js';
 import { FX_DEFAULT, FX_INFO } from '/demo3d/fx3d.js';
+import { clone, r4, EMPTY, CHANNEL, mirrorOf, same, findPartner as partnerOf } from '/demo3d/editcore.js';
 
 const $ = (id) => document.getElementById(id);
 const G = window.RC_GAME, MAPS = Object.assign({}, window.RC_MAPS.MAPS, MAPS3D), CFG = window.RC_CONFIG.DEFAULT_CONFIG;
@@ -12,12 +13,9 @@ const MAP_LIST = [['deserto', 'Deserto'], ['neve', 'Neve'], ['floresta', 'Flores
 const STYLES = [['', 'padrão do mapa'], ['stone', 'pedra'], ['wood', 'madeira'], ['plank', 'tábuas'], ['container', 'contêiner'], ['concrete', 'concreto'], ['brick', 'tijolo'], ['sandstone', 'arenito'], ['basalt', 'pedra vulcânica'], ['tile', 'azulejo'], ['ice', 'gelo'], ['hedge', 'cerca viva'], ['grate', 'grade'], ['barrel', 'barril'], ['cannon', 'canhão']];
 const SWATCH = ['#a6a6a2', '#8f897c', '#6b7280', '#4b5563', '#e5e7eb', '#9a6b3f', '#6b4a2a', '#c08a3e', '#2f6f9f', '#b03a2e', '#2f8f5b', '#d9822b', '#e2b33c', '#4e7a3a', '#7a5634', '#2d2d2d'];
 const TYPE_NAME = { box: 'Muro / caixa', wall2: 'Parede diagonal', tree: 'Árvore', dune: 'Montanha de areia', pyr: 'Pirâmide' };
-const clone = (o) => JSON.parse(JSON.stringify(o));
-const r4 = (v) => Math.round(v * 10000) / 10000;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // ---------- rascunho ----------
-const EMPTY = () => ({ v: 1, maps: {}, weapons: {}, player: {}, nade: {}, fx: {} });
 let draft = (() => { try { const d = JSON.parse(localStorage.getItem('pb3d_edits') || 'null'); if (d && typeof d === 'object') return Object.assign(EMPTY(), d); } catch (e) {} return Object.assign(EMPTY(), clone(bakedEdits() || {})); })();
 let saveTimer = 0;
 function persist() { clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { localStorage.setItem('pb3d_edits', JSON.stringify(draft)); } catch (e) {} }, 180); }
@@ -39,7 +37,7 @@ function loadMap(id) {
   items = draft.maps[id] && Array.isArray(draft.maps[id].items) ? clone(draft.maps[id].items) : clone(defaults);
   sel = -1; partner = -1; undoSt.length = 0; redoSt.length = 0; lastState = clone(items);
   fit(); draw(); props();
-  if ($('center').classList.contains('split')) $('pv').src = '/demo3d/?preview=' + id;
+  if ($('center').classList.contains('split')) $('pv').src = '/demo3d/?edit3d=' + id;
   $('hint').innerHTML = hintText();
 }
 function commit(noUndo) {
@@ -52,29 +50,7 @@ function undo() { if (!undoSt.length) return; redoSt.push(JSON.stringify(items))
 function redo() { if (!redoSt.length) return; undoSt.push(JSON.stringify(items)); items = JSON.parse(redoSt.pop()); lastState = clone(items); commit(true); props(); }
 
 // ---------- espelho (o mesmo item do outro lado do mapa) ----------
-const near = (a, b, e) => Math.abs(a - b) < (e || 0.004);
-function mirrorOf(it, mode) {
-  const m = clone(it), rot = mode === 'rot';
-  if (it.t === 'box') { m.x = r4(1 - it.x - it.w); if (rot) m.z = r4(1 - it.z - it.h); }
-  else if (it.t === 'tree' || it.t === 'pyr') { m.x = r4(1 - it.x); if (rot) m.z = r4(1 - it.z); }
-  else { m.ax = r4(1 - it.ax); m.bx = r4(1 - it.bx); if (rot) { m.az = r4(1 - it.az); m.bz = r4(1 - it.bz); } }
-  return m;
-}
-function same(a, b) {
-  if (a.t !== b.t) return false;
-  if (a.t === 'box') return near(a.x, b.x) && near(a.z, b.z) && near(a.w, b.w) && near(a.h, b.h);
-  if (a.t === 'tree' || a.t === 'pyr') return near(a.x, b.x) && near(a.z, b.z);
-  return (near(a.ax, b.ax) && near(a.az, b.az) && near(a.bx, b.bx) && near(a.bz, b.bz)) || (near(a.ax, b.bx) && near(a.az, b.bz) && near(a.bx, b.ax) && near(a.bz, b.az));
-}
-function findPartner(i) {
-  partner = -1; partnerMode = null; if (i < 0) return;
-  for (const mode of ['x', 'rot']) {
-    const m = mirrorOf(items[i], mode);
-    if (same(m, items[i])) continue; // está bem no meio: não tem par
-    const j = items.findIndex((q, k) => k !== i && same(q, m));
-    if (j >= 0) { partner = j; partnerMode = mode; return; }
-  }
-}
+function findPartner(i) { const r = partnerOf(items, i); partner = r.partner; partnerMode = r.mode; }
 function syncPartner() { if (mirror && sel >= 0 && partner >= 0) items[partner] = mirrorOf(items[sel], partnerMode); }
 
 // ---------- desenho (visto de cima) ----------
@@ -242,9 +218,23 @@ function nudge(dx, dz) {
   syncPartner(); commit(); props(true);
 }
 
+// ---------- junto com o editor 3D (outra aba ou a janela de baixo) ----------
+const bc = 'BroadcastChannel' in window ? new BroadcastChannel(CHANNEL) : null;
+let postedSel = -1;
+if (bc) bc.onmessage = (e) => { const m = e.data; if (m && m.t === 'sel' && m.map === mapId && m.i !== sel) { sel = m.i >= 0 && m.i < items.length ? m.i : -1; postedSel = sel; findPartner(sel); draw(); props(); } };
+window.addEventListener('storage', (e) => { // mexeram no 3D: atualiza aqui
+  if (e.key !== 'pb3d_edits' || !e.newValue) return;
+  try {
+    const d = JSON.parse(e.newValue); draft = Object.assign(EMPTY(), d);
+    const mine = d.maps && d.maps[mapId] && d.maps[mapId].items, next = mine ? clone(mine) : clone(defaults);
+    if (JSON.stringify(next) !== JSON.stringify(items)) { undoSt.push(JSON.stringify(items)); items = next; lastState = clone(items); if (sel >= items.length) sel = -1; findPartner(sel); draw(); props(); }
+  } catch (err) { /* rascunho quebrado: ignora */ }
+});
+
 // ---------- painel do item selecionado ----------
 function field(label, key, val, step, min, max, unit) { return `<div class="row"><label>${label}</label><span><input type="number" data-k="${key}" value="${val}" step="${step || 1}" ${min != null ? `min="${min}"` : ''} ${max != null ? `max="${max}"` : ''}> ${unit || ''}</span></div>`; }
 function props(quick) {
+  if (sel !== postedSel) { postedSel = sel; if (bc) bc.postMessage({ t: 'sel', map: mapId, i: sel }); } // o editor 3D seleciona a mesma peça
   const el = $('props');
   if (quick && document.activeElement && el.contains(document.activeElement)) return;
   const it = items[sel];
@@ -391,7 +381,8 @@ $('map').onchange = () => loadMap($('map').value);
 $('undo').onclick = undo; $('redo').onclick = redo;
 $('mirror').onclick = () => { mirror = !mirror; $('mirror').classList.toggle('on', mirror); findPartner(sel); draw(); props(); };
 $('snap').onclick = () => { snap = !snap; $('snap').classList.toggle('on', snap); };
-$('prev').onclick = () => { const c = $('center'), on = !c.classList.contains('split'); c.classList.toggle('split', on); $('prev').classList.toggle('on', on); $('pv').src = on ? '/demo3d/?preview=' + mapId : 'about:blank'; setTimeout(() => { resize(); fit(); draw(); }, 50); };
+$('prev').onclick = () => { const c = $('center'), on = !c.classList.contains('split'); c.classList.toggle('split', on); $('prev').classList.toggle('on', on); $('pv').src = on ? '/demo3d/?edit3d=' + mapId : 'about:blank'; setTimeout(() => { resize(); fit(); draw(); }, 50); };
+$('prev3d').onclick = () => window.open('/demo3d/?edit3d=' + mapId, '_blank');
 $('useme').checked = localStorage.getItem('pb3d_edits_on') === '1';
 $('useme').onchange = () => { try { localStorage.setItem('pb3d_edits_on', $('useme').checked ? '1' : '0'); } catch (e) {} };
 $('save').onclick = saveServer; $('load').onclick = loadServer;

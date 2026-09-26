@@ -1,6 +1,6 @@
 {
   "name": "point-ball",
-  "version": "0.24.0",
+  "version": "0.25.0",
   "description": "Jogo 2D multiplayer online (visto de cima) com balas de borracha que ricocheteiam",
   "main": "server.js",
   "scripts": {

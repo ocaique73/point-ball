@@ -35,8 +35,11 @@ S.sfx = Object.assign({}, S.sfx || {});
 S.look = normLook(S.look); // roupa do seu personagem
 delete S.test;
 // editor de mapa: o rascunho do editor (só neste navegador, fora do multiplayer) e a prévia (?preview=mapa)
-function localEdits() { try { if (localStorage.getItem('pb3d_edits_on') !== '1' && !PREVIEW) return null; return JSON.parse(localStorage.getItem('pb3d_edits') || 'null'); } catch (e) { return null; } }
+function localEdits() { try { if (localStorage.getItem('pb3d_edits_on') !== '1' && !PREVIEW && !EDIT3D_MAP) return null; return JSON.parse(localStorage.getItem('pb3d_edits') || 'null'); } catch (e) { return null; } }
 const PREVIEW = (() => { try { const q = new URLSearchParams(location.search); return q.get('preview'); } catch (e) { return null; } })();
+const EDIT3D_MAP = (() => { try { return new URLSearchParams(location.search).get('edit3d'); } catch (e) { return null; } })(); // editor de mapa em 3D
+let EDIT3D = null;
+if (EDIT3D_MAP) { S.map = EDIT3D_MAP; S.bots = '0'; S.allies = '0'; S.die = '0'; S.mode = 'livre'; }
 if (PREVIEW) { S.map = PREVIEW; S.bots = '0'; S.allies = '0'; S.die = '0'; S.mode = 'livre'; }
 // efeitos visuais do tiro (o editor muda estes números)
 let FX = JSON.parse(JSON.stringify(FX_DEFAULT));
@@ -408,10 +411,12 @@ function wallTexture(color, style) {
       g.fillStyle = 'rgba(0,0,0,.28)'; g.fillRect(x + 6, 188, 116, 3); g.fillRect(x + 119, 40, 3, 151);
       g.fillStyle = '#8b939e'; for (const [bx, by] of [[14, 48], [114, 48], [14, 180], [114, 180]]) { g.beginPath(); g.arc(x + bx, by, 2.5, 0, 7); g.fill(); }
     }
-    g.fillStyle = '#9aa2ad'; g.fillRect(0, 0, 256, 34); // faixa de cima
-    g.fillStyle = '#2d333c'; g.fillRect(0, 214, 256, 42); // rodapé escuro
-    g.fillStyle = '#e0b020'; g.fillRect(0, 210, 256, 4);
-    g.fillStyle = '#e8f7ff'; g.fillRect(0, 14, 256, 6); // fita de luz
+    // (ordem nova: a faixa preta fica em cima e a faixa cinza de metal embaixo)
+    g.fillStyle = '#2d333c'; g.fillRect(0, 0, 256, 34); // faixa escura em cima
+    g.fillStyle = '#e0b020'; g.fillRect(0, 34, 256, 4);
+    g.fillStyle = '#9aa2ad'; g.fillRect(0, 214, 256, 42); // rodapé de metal cinza
+    g.fillStyle = 'rgba(255,255,255,.25)'; g.fillRect(0, 214, 256, 2); g.fillStyle = 'rgba(0,0,0,.25)'; for (let x = 0; x < 256; x += 32) g.fillRect(x, 216, 2, 40); // juntas do metal
+    g.fillStyle = '#e8f7ff'; g.fillRect(0, 14, 256, 6); // fita de luz (na faixa escura)
     g.fillStyle = '#3b424c'; for (let k = 0; k < 7; k++) g.fillRect(150 + k * 12, 226, 7, 20); // grade de ventilação
     g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 2; g.beginPath(); g.moveTo(128, 34); g.lineTo(128, 214); g.stroke();
   }, true);
@@ -510,22 +515,20 @@ function wallTexture(color, style) {
   }, true);
 }
 // casco da base lunar: mesmo painel do corredor, mas com uma janela grande no meio (dá pra ver a Lua lá fora)
-// parede alta da base lunar (1 peça na altura toda): embaixo painel cinza opaco (os bonecos aparecem na frente dele),
-// uma faixa clara de acabamento e as janelas pro espaço só em cima
-const HULL_TEX = canvasTex(256, 512, (g) => {
-  const grd = g.createLinearGradient(0, 300, 0, 500); grd.addColorStop(0, '#c9ced6'); grd.addColorStop(1, '#aab1bb');
-  g.fillStyle = grd; g.fillRect(0, 290, 256, 222); // painel opaco (de baixo)
-  g.fillStyle = '#98a0ab'; for (const x of [0, 128]) g.fillRect(x, 290, 3, 200); g.fillRect(0, 392, 256, 3); // juntas dos painéis
-  g.fillStyle = '#7d8591'; for (const x of [10, 118, 138, 246]) for (const y of [302, 380, 404, 480]) { g.beginPath(); g.arc(x, y, 2.5, 0, 7); g.fill(); } // rebites
-  g.fillStyle = '#2d333c'; g.fillRect(0, 490, 256, 22); g.fillStyle = '#e0b020'; g.fillRect(0, 486, 256, 4); // rodapé
-  g.fillStyle = '#8d95a0'; g.fillRect(0, 272, 256, 18); g.fillStyle = '#e8f7ff'; g.fillRect(0, 279, 256, 4); // faixa de acabamento com luz
-  g.clearRect(0, 28, 256, 244); // vidro (em cima)
-  g.fillStyle = 'rgba(150,200,255,.08)'; g.fillRect(0, 28, 256, 244);
-  g.fillStyle = 'rgba(255,255,255,.07)'; g.beginPath(); g.moveTo(40, 28); g.lineTo(96, 28); g.lineTo(30, 272); g.lineTo(8, 272); g.fill(); // reflexo
-  g.fillStyle = '#6b7280'; g.fillRect(0, 0, 256, 28); g.fillRect(0, 262, 256, 10); g.fillRect(0, 28, 8, 244); g.fillRect(248, 28, 8, 244); g.fillRect(124, 28, 8, 244); // moldura
+// casco da base lunar: parede alta de vidro (janelas pro espaço), igual antes
+const HULL_TEX = canvasTex(256, 256, (g) => {
+  const grd = g.createLinearGradient(0, 0, 0, 256); grd.addColorStop(0, '#d6dbe2'); grd.addColorStop(1, '#b7bdc7');
+  g.fillStyle = grd; g.fillRect(0, 0, 256, 256);
+  g.fillStyle = '#9aa2ad'; g.fillRect(0, 0, 256, 34);
+  g.fillStyle = '#e8f7ff'; g.fillRect(0, 14, 256, 6);
+  g.fillStyle = '#2d333c'; g.fillRect(0, 214, 256, 42); g.fillStyle = '#e0b020'; g.fillRect(0, 210, 256, 4);
+  g.clearRect(12, 52, 232, 140); // vidro
+  g.fillStyle = 'rgba(150,200,255,.10)'; g.fillRect(12, 52, 232, 140);
+  g.fillStyle = 'rgba(255,255,255,.10)'; g.beginPath(); g.moveTo(40, 52); g.lineTo(90, 52); g.lineTo(30, 192); g.lineTo(12, 192); g.lineTo(12, 110); g.fill(); // reflexo
+  g.fillStyle = '#6b7280'; g.fillRect(4, 44, 248, 8); g.fillRect(4, 192, 248, 8); g.fillRect(4, 44, 8, 156); g.fillRect(244, 44, 8, 156); g.fillRect(124, 44, 8, 156); // moldura
 }, true);
 // fita de luz do corredor da nave (brilha sozinha)
-const CORRIDOR_EMIS = canvasTex(256, 256, (g) => { g.fillStyle = '#000'; g.fillRect(0, 0, 256, 256); g.fillStyle = '#bfeaff'; g.fillRect(0, 14, 256, 6); g.fillStyle = '#34d399'; g.fillRect(20, 226, 6, 6); g.fillStyle = '#f87171'; g.fillRect(34, 226, 6, 6); }, true);
+const CORRIDOR_EMIS = canvasTex(256, 256, (g) => { g.fillStyle = '#000'; g.fillRect(0, 0, 256, 256); g.fillStyle = '#bfeaff'; g.fillRect(0, 14, 256, 6); g.fillStyle = '#34d399'; g.fillRect(20, 24, 6, 6); g.fillStyle = '#f87171'; g.fillRect(34, 24, 6, 6); }, true);
 // mancha de luz macia (poste no chão, brilho de lava, portal)
 const GLOW_TEX = canvasTex(128, 128, (g) => { const grd = g.createRadialGradient(64, 64, 0, 64, 64, 64); grd.addColorStop(0, 'rgba(255,255,255,1)'); grd.addColorStop(0.35, 'rgba(255,255,255,.45)'); grd.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = grd; g.fillRect(0, 0, 128, 128); });
 let iceEnv = null;
@@ -2119,6 +2122,9 @@ function buildShip(w) {
   { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(rope, 3)); mapGroup.add(new THREE.LineSegments(g, ropeM)); }
   // barris e canhões (a colisão é a caixa; o desenho é redondo)
   for (const R of w.walls) {
+    const c0 = mapGroup.children.length; drawShipProp(R); if (R.item != null) for (let i = c0; i < mapGroup.children.length; i++) mapGroup.children[i].userData.item = R.item;
+  }
+  function drawShipProp(R) {
     if (R.style === 'barrel') { const b = new THREE.Mesh(new THREE.CylinderGeometry(Math.min(R.w, R.h) / 2, Math.min(R.w, R.h) / 2 * 0.9, R.top, 12), mat(0x6b4a2a)); b.position.set(R.x + R.w / 2, R.top / 2, R.y + R.h / 2); b.castShadow = true; mapGroup.add(b); for (const yy of [0.2, 0.8]) { const hoop = new THREE.Mesh(new THREE.TorusGeometry(Math.min(R.w, R.h) / 2 + 0.5, 1.4, 4, 16), mat(0x2d2d2d)); hoop.rotation.x = Math.PI / 2; hoop.position.set(R.x + R.w / 2, R.top * yy, R.y + R.h / 2); mapGroup.add(hoop); } }
     if (R.style === 'cannon') { const cw = new THREE.Mesh(new THREE.BoxGeometry(R.w * 0.9, 16, R.h * 0.8), mat(0x4a3220)); cw.position.set(R.x + R.w / 2, 8, R.y + R.h / 2); mapGroup.add(cw); const out = R.y < H / 2 ? -1 : 1, br = new THREE.Mesh(new THREE.CylinderGeometry(6, 8, R.h * 1.4, 10), mat(0x1f1f1f, { metalness: 0.6, roughness: 0.4 })); br.rotation.x = Math.PI / 2; br.position.set(R.x + R.w / 2, 24, R.y + R.h / 2 + out * 8); mapGroup.add(br); }
   }
@@ -2237,11 +2243,11 @@ function buildMap(mapId) {
   const style = WALL_STYLE[mapId] || 'brick';
   const wtex = wallTexture(th.wall, style), btex = wallTexture(th.border, style);
   let iceMat = null;
-  for (const R of mapWalls) {
-    if (R.pframe != null || R.plat || R.rail || R.igloo != null || R.thouse || R.door3d != null || R.mezz || R.mstep || R.mrail || R.piston || R.mast || R.smast || R.style === 'barrel' || R.style === 'cannon' || ((mapId === 'mar' || mapId === 'vulcao') && R.border)) continue; // desenhados separados
-    if (R.tree) { addTree(R.x + R.w / 2, R.y + R.h / 2, 1, mapGroup); continue; } // árvore da floresta
-    if (dunes && DuneField.isDune(R)) continue; // virou montanha de areia
-    if (R.space && !map.space) continue;
+  const drawWall = (R) => {
+    if (R.pframe != null || R.plat || R.rail || R.igloo != null || R.thouse || R.door3d != null || R.mezz || R.mstep || R.mrail || R.piston || R.mast || R.smast || R.style === 'barrel' || R.style === 'cannon' || ((mapId === 'mar' || mapId === 'vulcao') && R.border)) return; // desenhados separados
+    if (R.tree) { addTree(R.x + R.w / 2, R.y + R.h / 2, 1, mapGroup); return; } // árvore da floresta
+    if (dunes && DuneField.isDune(R)) return; // virou montanha de areia
+    if (R.space && !map.space) return;
     const hgt = R.top != null ? R.top : R.border || R.space ? borderH : P.wallH;
     if (style === 'ice' && !R.border) {
       // gelo: dá pra ver um pouco o que está atrás de UMA parede, mas bem menos que antes
@@ -2255,13 +2261,13 @@ function buildMap(mapId) {
       const cap = new THREE.Mesh(new THREE.BoxGeometry(R.w + 2, 6, R.h + 2), mat(0xffffff, { roughness: 1, emissive: 0x9fb8cc, emissiveIntensity: 0.25 })); // neve em cima
       cap.position.set(R.x + R.w / 2, hgt + 2.5, R.y + R.h / 2); cap.castShadow = true; cap.receiveShadow = true;
       mapGroup.add(cap);
-      continue;
+      return;
     }
     const y0 = R.y0 || 0, bh = hgt - y0;
     const hull = style === 'corridor' && (R.border || R.space);
     const base = hull ? HULL_TEX : R.tint ? tintTex(R.tint, R.style || style) : R.border || R.space ? btex : wtex; // (mar: contêineres coloridos e caixotes de madeira)
     const t = base.clone(); t.needsUpdate = true;
-    if (hull) t.repeat.set(Math.max(R.w, R.h) / 150, 1); // 1 peça na altura toda: painel embaixo, janela em cima
+    if (hull) t.repeat.set(Math.max(R.w, R.h) / 150, bh / 180); // 2 fileiras de janela na parede alta
     else if (style === 'corridor') t.repeat.set(Math.max(R.w, R.h) / 150, 1);
     else if (R.style === 'wood') t.repeat.set(Math.max(R.w, R.h) / 64, bh / 64);
     else if (style === 'lab' || style === 'sandstone' || style === 'basalt' || style === 'tile' || style === 'container' || style === 'concrete') t.repeat.set(Math.max(R.w, R.h) / 128, bh / 128);
@@ -2274,17 +2280,18 @@ function buildMap(mapId) {
     box.position.set(R.x + R.w / 2, y0 + bh / 2, R.y + R.h / 2);
     box.castShadow = !(closed && (R.border || R.space)); box.receiveShadow = true; // mapa fechado: a borda alta não faz sombra dentro
     mapGroup.add(box);
-  }
+    };
+  for (const R of mapWalls) { const c0 = mapGroup.children.length; drawWall(R); if (R.item != null) for (let i = c0; i < mapGroup.children.length; i++) mapGroup.children[i].userData.item = R.item; } // (editor 3D: cada peça sabe qual item ela é)
   // paredes em diagonal do contorno (mapas de formato irregular)
   for (const S of world.segs || []) {
     const dx = S.bx - S.ax, dz = S.bz - S.az, L = Math.hypot(dx, dz) + S.t * 2, y0s = S.y0 || 0, hgt = S.top - y0s;
     const tx = btex.clone(); tx.needsUpdate = true; tx.repeat.set(L / 128, hgt / 128);
     const side = new THREE.MeshStandardMaterial({ map: tx, roughness: 0.9 }), topM = mat(th.wallEdge);
     const m = new THREE.Mesh(new THREE.BoxGeometry(L, hgt, S.t * 2), [topM, topM, topM, topM, side, side]);
-    m.position.set((S.ax + S.bx) / 2, y0s + hgt / 2, (S.az + S.bz) / 2); m.rotation.y = -Math.atan2(dz, dx); m.castShadow = m.receiveShadow = true; mapGroup.add(m);
+    m.position.set((S.ax + S.bx) / 2, y0s + hgt / 2, (S.az + S.bz) / 2); m.rotation.y = -Math.atan2(dz, dx); m.castShadow = m.receiveShadow = true; mapGroup.add(m); if (S.item != null) m.userData.item = S.item;
   }
   if (world.treehouse) buildTreehouse(world.treehouse);
-  for (const q of world.pyramids || []) buildPyramid(q);
+  for (const q of world.pyramids || []) { const c0 = mapGroup.children.length; buildPyramid(q); if (q.item != null) for (let i = c0; i < mapGroup.children.length; i++) mapGroup.children[i].userData.item = q.item; }
   if (world.igloos.length) buildIgloos(world.igloos);
   if (world.doors.length) buildDoors(world.doors);
   if (mapId === 'portal') buildPlatforms();
@@ -3221,10 +3228,10 @@ function drawPreview() {
 setInterval(() => { if (menuOpen) drawPreview(); }, 450);
 $('btn-play').addEventListener('click', () => { SFX.init(); lockPointer(); });
 function lockPointer() { try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) {} }
-canvas.addEventListener('click', () => { SFX.init(); if (!locked) lockPointer(); });
+canvas.addEventListener('click', () => { SFX.init(); if (!locked && !EDIT3D && !hudEdit) lockPointer(); });
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === canvas;
-  showMenu(!locked);
+  if (EDIT3D) EDIT3D.lockChanged(locked); else showMenu(!locked); // editor 3D: Esc volta pro editor (sem menu)
   if (!locked) { netFireHeld = false; aimHeld = false; const me = sim && sim.players.get('me'); if (me) me.input.fire = false; }
 });
 
@@ -3373,6 +3380,117 @@ function drawMinimap(me, now) {
     g.save(); g.translate(mx, mz); g.rotate(me.yaw); g.fillStyle = '#fde047'; g.beginPath(); g.moveTo(7, 0); g.lineTo(-4, -4.5); g.lineTo(-2, 0); g.lineTo(-4, 4.5); g.closePath(); g.fill(); g.restore();
   }
 }
+
+// ---------- HUD editável: cada informação da tela pode mudar de lugar, de tamanho, ficar transparente ou sumir;
+// e dá pra separar o painel de baixo (vida, tiro, arma, pulo duplo) e o aviso do evento em caixas soltas ----------
+const HUD_ITEMS = [
+  ['hud', 'Painel (vida, tiro, arma, pulo)', 'hud'], ['lives', 'Vida', 'hw-lives'], ['ammo', 'Tiro / munição', 'hw-ammo'], ['weapon', 'Nome da arma', 'hw-weapon'], ['jump', 'Pulo duplo', 'hw-jump'],
+  ['slots', 'Barra de armas', 'slots'], ['minimap', 'Minimapa', 'minimap'], ['alive', 'Vivos de cada time', 'alive'], ['score', 'Placar / round', 'score'],
+  ['feed', 'Mortes (kill feed)', 'feed'], ['top', 'FPS', 'top'], ['hz', 'Aviso do evento do mapa', 'hw-hz']
+];
+const HUD_SPLIT_IDS = ['lives', 'ammo', 'weapon', 'jump', 'hz'];
+if (!S.hud || typeof S.hud !== 'object') S.hud = { split: false, w: {} };
+if (!S.hud.w) S.hud.w = {};
+let hudEdit = false, hudSel = null;
+const hudEl = (id) => { const it = HUD_ITEMS.find((q) => q[0] === id); return it ? $(it[2]) : null; };
+const hudActive = () => HUD_ITEMS.filter(([id]) => (S.hud.split ? id !== 'hud' : !HUD_SPLIT_IDS.includes(id))).map((q) => q[0]);
+function hudSplit(on) {
+  // separa: cada linha do painel de baixo (e o aviso do evento) vira uma caixa solta no mesmo lugar onde estava
+  const rects = {}; for (const id of HUD_SPLIT_IDS) { const e = id === 'hz' ? $('h-hz') : hudEl(id); if (e) rects[id] = e.getBoundingClientRect(); }
+  let hz = $('hw-hz');
+  if (on) {
+    if (!hz) { hz = document.createElement('div'); hz.id = 'hw-hz'; hz.className = 'panel hwsep'; document.body.appendChild(hz); }
+    hz.appendChild($('h-hz')); $('h-hz').style.marginLeft = '0';
+    for (const id of ['lives', 'ammo', 'weapon', 'jump']) { const e = hudEl(id); e.classList.add('panel', 'hwsep'); document.body.appendChild(e); }
+    $('hud').style.display = 'none';
+    // caixas soltas empilhadas no canto de baixo à esquerda (onde o painel ficava), sem encostar uma na outra
+    let yb = innerHeight - 12;
+    for (const id of ['jump', 'weapon', 'ammo', 'lives']) { const e = hudEl(id), r = e.getBoundingClientRect(); if (!S.hud.w[id]) S.hud.w[id] = { x: (12 + r.width / 2) / innerWidth, y: (yb - r.height / 2) / innerHeight }; yb -= r.height + 6; }
+    if (!S.hud.w.hz && rects.hz && rects.hz.width) { const r = rects.hz; S.hud.w.hz = { x: (r.left + r.width / 2 + 10) / innerWidth, y: 76 / innerHeight }; }
+  } else {
+    for (const id of ['lives', 'ammo', 'weapon', 'jump']) { const e = hudEl(id); e.classList.remove('panel', 'hwsep', 'hw-nobg', 'hw-hide', 'hwx', 'hwsel'); e.style.cssText = ''; $('hud').appendChild(e); }
+    $('top').appendChild($('h-hz')); $('h-hz').style.marginLeft = '10px';
+    if (hz) hz.remove();
+    $('hud').style.display = '';
+  }
+  S.hud.split = !!on;
+}
+function applyHud() {
+  if (!!S.hud.split !== !!$('hw-hz')) hudSplit(S.hud.split);
+  for (const [id, , elId] of HUD_ITEMS) {
+    const e = $(elId); if (!e) continue;
+    const act = hudActive().includes(id), L = S.hud.w[id] || {};
+    e.classList.toggle('hwx', act && hudEdit);
+    if (!act) continue;
+    e.classList.toggle('hw-hide', L.show === false);
+    e.classList.toggle('hw-nobg', L.bg === false);
+    e.style.opacity = L.op != null ? String(L.op) : '';
+    if (L.x != null) { e.style.left = (L.x * 100) + 'vw'; e.style.top = (L.y * 100) + 'vh'; e.style.right = 'auto'; e.style.bottom = 'auto'; e.style.transform = `translate(-50%, -50%) scale(${L.s || 1})`; }
+    else { e.style.left = e.style.top = e.style.right = e.style.bottom = e.style.transform = ''; }
+    e.dataset.hw = id;
+  }
+  $('hb-split').textContent = S.hud.split ? 'Juntar de novo no painel' : 'Separar vida/tiro/arma/pulo';
+  $('hud-split').textContent = $('hb-split').textContent;
+  renderHudList();
+}
+function hudSave() { save(); applyHud(); }
+// antes de mudar o tamanho: guarda onde a caixa está (o tamanho cresce a partir do meio dela)
+function hudPos(id) { const L = S.hud.w[id] = S.hud.w[id] || {}; if (L.x == null) { const e = hudEl(id), r = e && e.getBoundingClientRect(); if (r && r.width) { L.x = (r.left + r.width / 2) / innerWidth; L.y = (r.top + r.height / 2) / innerHeight; } } return L; }
+function renderHudList() {
+  const el = $('hud-list'); if (!el || !menuOpen) return;
+  el.innerHTML = hudActive().map((id) => { const L = S.hud.w[id] || {}, n = HUD_ITEMS.find((q) => q[0] === id)[1];
+    return `<div class="row2" style="display:grid;grid-template-columns:1.4fr 60px 1fr 1fr 60px;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid #243044">
+      <b style="font-size:12px">${n}</b><label style="font-size:12px"><input type="checkbox" data-hl="${id}" data-k="show" ${L.show === false ? '' : 'checked'}> mostra</label>
+      <label style="font-size:12px">tamanho <input type="range" min="0.5" max="2.5" step="0.05" value="${L.s || 1}" data-hl="${id}" data-k="s" style="width:80px"></label>
+      <label style="font-size:12px">visível <input type="range" min="0.15" max="1" step="0.05" value="${L.op != null ? L.op : 1}" data-hl="${id}" data-k="op" style="width:80px"></label>
+      <label style="font-size:12px"><input type="checkbox" data-hl="${id}" data-k="bg" ${L.bg === false ? '' : 'checked'}> fundo</label></div>`; }).join('');
+  el.querySelectorAll('[data-hl]').forEach((inp) => inp.addEventListener('input', () => { const L = inp.dataset.k === 's' ? hudPos(inp.dataset.hl) : (S.hud.w[inp.dataset.hl] = S.hud.w[inp.dataset.hl] || {}); L[inp.dataset.k] = inp.type === 'checkbox' ? inp.checked : Number(inp.value); save(); applyHud(); }));
+}
+function hudSelShow() {
+  const box = $('hb-sel'); document.querySelectorAll('.hwsel').forEach((e) => e.classList.remove('hwsel'));
+  if (!hudSel) { box.style.display = 'none'; return; }
+  const e = hudEl(hudSel); if (e) e.classList.add('hwsel');
+  const L = S.hud.w[hudSel] || {}, n = HUD_ITEMS.find((q) => q[0] === hudSel)[1];
+  box.style.display = 'flex';
+  box.innerHTML = `<b style="color:var(--acc)">${n}</b><label>tamanho <input type="range" min="0.5" max="2.5" step="0.05" value="${L.s || 1}" data-k="s"></label><label>visível <input type="range" min="0.15" max="1" step="0.05" value="${L.op != null ? L.op : 1}" data-k="op"></label><label><input type="checkbox" data-k="bg" ${L.bg === false ? '' : 'checked'}> fundo</label><label><input type="checkbox" data-k="show" ${L.show === false ? '' : 'checked'}> mostra</label>`;
+  box.querySelectorAll('[data-k]').forEach((inp) => inp.addEventListener('input', () => { const Q = inp.dataset.k === 's' ? hudPos(hudSel) : (S.hud.w[hudSel] = S.hud.w[hudSel] || {}); Q[inp.dataset.k] = inp.type === 'checkbox' ? inp.checked : Number(inp.value); hudSave(); }));
+}
+function hudEditMode(on) {
+  hudEdit = on; document.body.classList.toggle('hudedit', on); hudSel = null;
+  if (on) { showMenu(false); if (!$('score').textContent) $('score').innerHTML = 'Round 1/5 · Azul 0 x 0 Vermelho'; }
+  else { save(); showMenu(true); }
+  applyHud(); hudSelShow();
+}
+let hudDrag = null;
+document.addEventListener('pointerdown', (e) => {
+  if (!hudEdit) return;
+  const w = e.target.closest && e.target.closest('.hwx'); if (!w) return;
+  e.preventDefault(); const id = w.dataset.hw, r = w.getBoundingClientRect();
+  if (!S.hud.w[id]) S.hud.w[id] = {};
+  const L = S.hud.w[id]; if (L.x == null) { L.x = (r.left + r.width / 2) / innerWidth; L.y = (r.top + r.height / 2) / innerHeight; applyHud(); }
+  hudDrag = { id, ox: e.clientX - L.x * innerWidth, oy: e.clientY - L.y * innerHeight, moved: false };
+  hudSel = id; hudSelShow();
+});
+document.addEventListener('pointermove', (e) => {
+  if (!hudDrag) return; const L = S.hud.w[hudDrag.id];
+  L.x = Math.max(0.01, Math.min(0.99, (e.clientX - hudDrag.ox) / innerWidth)); L.y = Math.max(0.01, Math.min(0.99, (e.clientY - hudDrag.oy) / innerHeight));
+  hudDrag.moved = true; applyHud();
+});
+document.addEventListener('pointerup', () => { if (hudDrag) { hudDrag = null; save(); } });
+document.addEventListener('wheel', (e) => {
+  if (!hudEdit) return; const w = e.target.closest && e.target.closest('.hwx'); if (!w) return;
+  const L = hudPos(w.dataset.hw); L.s = Math.max(0.5, Math.min(2.5, (L.s || 1) * (e.deltaY < 0 ? 1.06 : 1 / 1.06)));
+  hudSel = w.dataset.hw; hudSave(); hudSelShow();
+}, { passive: true });
+$('hud-edit').onclick = () => hudEditMode(true);
+$('hb-done').onclick = () => hudEditMode(false);
+const toggleSplit = () => { hudSplit(!S.hud.split); hudSave(); hudSelShow(); };
+$('hb-split').onclick = toggleSplit; $('hud-split').onclick = toggleSplit;
+const resetHud = () => { if (S.hud.split) hudSplit(false); S.hud = { split: false, w: {} }; for (const [, , elId] of HUD_ITEMS) { const e = $(elId); if (e) { e.style.left = e.style.top = e.style.right = e.style.bottom = e.style.transform = e.style.opacity = e.style.transformOrigin = ''; e.classList.remove('hw-hide', 'hw-nobg'); } } hudSave(); hudSelShow(); };
+$('hb-reset').onclick = resetHud; $('hud-reset').onclick = resetHud;
+window.addEventListener('keydown', (e) => { if (hudEdit && e.key === 'Escape') { e.preventDefault(); hudEditMode(false); } });
+document.querySelector('.tab[data-pane="p-hud"]').addEventListener('click', () => setTimeout(renderHudList, 0));
+applyHud();
 function hud(me) {
   { // vivos de cada time (em cima)
     let a = 0, b = 0, n = 0; for (const p of sim.players.values()) { n++; if (p.alive) { if (p.team === 'A') a++; else b++; } }
@@ -3380,6 +3498,7 @@ function hud(me) {
     $('alive').innerHTML = `<span class="tA">🔵 ${a} vivo${a === 1 ? '' : 's'}</span><span style="color:var(--muted)">×</span><span class="tB">${b} vivo${b === 1 ? '' : 's'} 🔴</span>`;
   }
   $('h-hz').textContent = hazardText();
+  if ($('hw-hz')) $('hw-hz').style.display = $('h-hz').textContent || hudEdit ? '' : 'none'; // aviso solto: some quando não tem evento
   updateModeHud(me, performance.now());
   let h = ''; for (let i = 0; i < P.lives; i++) h += `<span class="${i < me.lives && me.alive ? '' : 'lost'}">❤️</span>`;
   $('h-lives').innerHTML = h;
@@ -3453,6 +3572,7 @@ window.addEventListener('storage', (e) => {
   if ((e.key !== 'pb3d_edits' && e.key !== 'pb3d_edits_on') || netMode || !sim) return;
   const me = sim.players.get('me'), keep = me && { x: me.x, y: me.y, z: me.z, yaw: me.yaw, pitch: me.pitch };
   newGame();
+  if (EDIT3D) { EDIT3D.externalChange(); return; }
   const m2 = sim.players.get('me'); if (keep && m2) { Object.assign(m2, keep); m2.vx = m2.vy = m2.vz = 0; }
 });
 const lerp = (a, b, k) => a + (b - a) * k;
@@ -4204,7 +4324,13 @@ function frame(now) {
   if ($('board').style.display === 'block' && Math.floor(now / 250) !== Math.floor((now - dtR * 1000) / 250)) renderBoard();
   // killcam final (última kill do round/partida): começa meio segundo depois, pra gravar o fim do tiro
   if (pendingKc && now >= pendingKc.at) { const lk = pendingKc.lk; pendingKc = null; killcam.startFinal(lk, now); }
+  // fim do round (sozinho): o próximo só começa a contar depois que a killcam final terminar
+  if (!netMode && sim.phase === 'roundEnd' && (pendingKc || killcam.active)) sim.phaseUntil = Math.max(sim.phaseUntil, sim.time + 0.6);
+  // contagem do round: tela quase preto e branco e a cor volta aos poucos (normal 0,5 s antes de começar)
+  { let sat = 1; if (sim.phase === 'countdown' && !EDIT3D) { const rem = sim.phaseUntil - sim.time, tot = Math.max(0.6, (sim.startDelay || 3) - 0.5); sat = Math.max(0.06, Math.min(1, 1 - (rem - 0.5) / tot)); }
+    if (Math.abs(sat - (canvas._sat || 1)) > 0.01) { canvas._sat = sat; canvas.style.filter = sat >= 0.999 ? '' : `saturate(${sat.toFixed(2)}) brightness(${(0.85 + 0.15 * sat).toFixed(2)})`; } }
   const kcOn = killcam.apply(now);
+  if (EDIT3D && EDIT3D.fly) { EDIT3D.frame(dtR, now); $('cross').style.display = 'none'; }
   renderPortals(me, now); // o que aparece dentro dos portais
   if (kcOn && killcam.lensK > 0.01) renderWithLens(killcam.lensK, now);
   else renderer.render(scene, camera);
@@ -4286,8 +4412,18 @@ loadModels().then(() => {
   $('loading').textContent = 'Pronto! Clique em Jogar';
   newGame();
   requestAnimationFrame(frame);
+  if (EDIT3D_MAP) { // editor de mapa em 3D: sem menu, câmera voando
+    showMenu(false);
+    import('/demo3d/edit3d.js').then((m) => {
+      EDIT3D = m.createEdit3D({ THREE, scene, camera, canvas, VIEW, mapId: S.map,
+        mapGroup: () => mapGroup, mapInfo: () => mapInfo, me: () => sim && sim.players.get('me'),
+        ceilingY: () => (mapInfo && CEILING_Y[mapInfo.mapId] != null ? CEILING_Y[mapInfo.mapId] : null),
+        rebuild: () => newGame(),
+        play: (x, z, yaw) => { const me = sim.players.get('me'); if (me) { me.x = Math.max(40, Math.min(mapInfo.W - 40, x)); me.z = Math.max(40, Math.min(mapInfo.H - 40, z)); me.y = 400; me.vx = me.vz = me.vy = 0; me.yaw = yaw; me.pitch = 0; me.grounded = false; } SFX.init(); lockPointer(); } });
+    }).catch((e) => console.error('editor 3D', e));
+  }
 }).catch((e) => { $('loading').textContent = 'Erro ao carregar os bonecos: ' + e.message; console.error(e); });
 window.__pb3d = { get sim() { return sim; }, get mapInfo() { return mapInfo; }, killcam, lock: (v) => { locked = v; showMenu(!v); }, keys,
-  get BASE() { return BASE; }, get scene() { return scene; },
+  get BASE() { return BASE; }, get scene() { return scene; }, get camera() { return camera; }, get edit3d() { return EDIT3D; },
   fx: { eruptFx: (x, z, d) => eruptFx(x, z, 84, performance.now(), d) },
   step: (sec) => { const now = performance.now(); for (let i = 0; i < Math.round(sec * 60); i++) { const evs = sim.step(STEP); killcam.record(sim); for (const e of evs) handleEvent(e, now); } } }; // testes
