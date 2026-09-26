@@ -47,7 +47,8 @@ function cleanLook(l) {
 
 async function setup3D(io, CFG) {
   const { Sim3D } = await import('./public/demo3d/sim3d.js');
-  const { world3D, simOptions } = await import('./public/demo3d/world3d.js');
+  const { world3D, simOptions, MAPS3D } = await import('./public/demo3d/world3d.js');
+  const ALL_MAPS = Object.assign({}, MAPS, MAPS3D); // mapas do 2D + os que só existem no 3D
   const rooms = new Map();
   const key = (code) => '3d:' + code;
   detectLocation();
@@ -118,7 +119,7 @@ async function setup3D(io, CFG) {
 
   function startMatch(room) {
     // o mundo 3D (mapa 40% maior, caverna, iglus, portas, andar de cima dos portais...) é montado igual ao do navegador
-    const world = world3D(room.map, G, MAPS, CFG);
+    const world = world3D(room.map, G, ALL_MAPS, CFG);
     const sim = new Sim3D(world.walls, world.W, world.H, Object.assign(simOptions(world), {
       mode: room.mode, rounds: room.rounds, killLimit: room.killLimit, hillTarget: room.hillTarget,
       matchTime: room.mode === 'rounds' ? 0 : room.roundTime
@@ -137,7 +138,7 @@ async function setup3D(io, CFG) {
       const evs = sim.step(dt);
       if (evs.length) pending.push(...evs);
       // acabou a partida (limite de abates / pontos / rounds / tempo): mostra o resultado uns segundos e volta pra sala
-      if (sim.result && !room.endTimer) room.endTimer = setTimeout(() => { room.endTimer = null; if (room.sim === sim) endMatch(room, sim.result); }, 7500); // dá tempo da killcam final
+      if (sim.result && !room.endTimer) room.endTimer = setTimeout(() => { room.endTimer = null; if (room.sim === sim) endMatch(room, sim.result); }, 9000); // dá tempo da killcam final (espera 1,6 s + replay)
       if (++tick % every === 0) {
         io.to(key(room.code)).emit('3d_state', { s: sim.snapshot(), e: pending });
         pending = [];
@@ -180,7 +181,7 @@ async function setup3D(io, CFG) {
       const code = name.toUpperCase();
       if (rooms.has(code)) return ack({ ok: false, error: 'Já existe uma sala 3D com esse nome.' });
       const room = {
-        code, password: pass, map: MAPS[d.map] && d.map !== 'teste' ? d.map : 'deserto',
+        code, password: pass, map: ALL_MAPS[d.map] && d.map !== 'teste' ? d.map : 'deserto',
         hostId: null, creatorPid: pidOf(d.clientId), phase: 'lobby', members: new Map(),
         sim: null, loop: null, closeTimer: null, bots: { A: [], B: [] }, botLevel: 'amador',
         roundTime: 300, mode: 'tdm', rounds: 3, killLimit: 30, hillTarget: 100
@@ -234,7 +235,7 @@ async function setup3D(io, CFG) {
 
     socket.on('3d_update_settings', (d) => {
       const { room, m } = ctx(); if (!m || room.hostId !== m.pid || room.phase !== 'lobby') return;
-      if (d && MAPS[d.map] && d.map !== 'teste') room.map = d.map;
+      if (d && ALL_MAPS[d.map] && d.map !== 'teste') room.map = d.map;
       if (d && VALID_LEVELS.includes(d.botLevel)) room.botLevel = d.botLevel;
       if (d && d.botsA != null) setBots(room, d.botsA, 'A');
       if (d && d.botsB != null) setBots(room, d.botsB, 'B');
