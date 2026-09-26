@@ -14,8 +14,26 @@
   #top { top: 12px; left: 12px; font-size: 12px; color: var(--muted); }
   #top b { color: #86efac; font-variant-numeric: tabular-nums; }
   #hud { left: 12px; bottom: 12px; min-width: 230px; }
-  #hud .big { font-size: 26px; font-weight: 800; }
-  #hud .row { display: flex; gap: 10px; align-items: center; margin-top: 3px; }
+  .hwp .big { font-size: 26px; font-weight: 800; }
+  .hwp { display: flex; gap: 10px; align-items: center; margin-top: 3px; }
+  .hwsep { margin: 0; padding: 6px 10px; white-space: nowrap; }
+  .hw-nobg { background: none !important; border-color: transparent !important; box-shadow: none !important; text-shadow: 0 1px 3px #000; }
+  .hw-hide { display: none !important; }
+  /* editando o HUD: tudo aparece com contorno e dá pra arrastar */
+  body.hudedit .hwx { outline: 2px dashed rgba(255,204,51,.8); outline-offset: 2px; cursor: move; pointer-events: auto !important; user-select: none; }
+  body.hudedit .hwx.hwsel { outline: 2px solid #ffcc33; }
+  body.hudedit .hwx.hw-hide { display: block !important; opacity: .3 !important; }
+  body.hudedit #alive, body.hudedit #score { display: flex !important; }
+  body.hudedit #score { display: block !important; min-width: 140px; min-height: 20px; }
+  body.hudedit #feed:empty::before { content: '💀 mortes (kill feed)'; background: var(--panel); border-radius: 6px; padding: 4px 8px; font-weight: 700; font-size: 13px; }
+  body.hudedit #cross { display: none !important; }
+  #hudbar { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 30; display: none; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; max-width: 560px; background: rgba(10,14,22,.92); border: 1px solid var(--acc); border-radius: 12px; padding: 10px 14px; color: var(--text); }
+  #hudbar span { color: var(--muted); font-size: 12px; }
+  #hudbar button { background: #1c2636; color: var(--text); border: 1px solid #2d3a52; border-radius: 7px; padding: 5px 10px; cursor: pointer; font: inherit; }
+  #hudbar button.acc { background: var(--acc); color: #1b1300; border-color: var(--acc); font-weight: 700; }
+  #hb-sel { width: 100%; display: none; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; border-top: 1px solid var(--line); padding-top: 8px; font-size: 12px; }
+  #hb-sel input[type=range] { width: 110px; accent-color: var(--acc); }
+  body.hudedit #hudbar { display: flex; }
   #slots { bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; padding: 6px; }
   .slot { min-width: 74px; text-align: center; padding: 5px 8px; border-radius: 7px; border: 1px solid #2b3a55; color: var(--muted); font-size: 12px; }
   .slot b { display: block; color: var(--text); font-size: 13px; }
@@ -93,11 +111,14 @@
 <div class="panel" id="bombwarn"></div>
 <div class="panel" id="top">POINT BALL 3D · THREE.JS · FPS <b id="fps">--</b> <span>(segue o Hz do monitor)</span> <b id="h-clock" style="display:none;margin-left:10px;color:var(--acc)"></b> <b id="h-hz" style="margin-left:10px;color:#fca5a5"></b></div>
 <div class="panel" id="hud">
-  <div class="row"><span id="h-lives"></span></div>
-  <div class="row"><span class="big" id="h-ammo">20</span><span id="h-mags"></span></div>
-  <div class="row" id="h-weapon" style="color:var(--muted)"></div>
-  <div class="row" id="h-jump"></div>
+  <div class="hwp" id="hw-lives"><span id="h-lives"></span></div>
+  <div class="hwp" id="hw-ammo"><span class="big" id="h-ammo">20</span><span id="h-mags"></span></div>
+  <div class="hwp" id="hw-weapon"><span id="h-weapon" style="color:var(--muted)"></span></div>
+  <div class="hwp" id="hw-jump"><span id="h-jump"></span></div>
 </div>
+<div id="hudbar"><b>🖥️ Editando o HUD</b> <span>arraste as caixas · rodinha em cima = tamanho · clique = opções</span>
+  <button id="hb-split">Separar vida/tiro/arma/pulo</button><button id="hb-reset">Padrão</button><button id="hb-done" class="acc">Pronto</button>
+  <div id="hb-sel"></div></div>
 <div class="panel" id="slots"></div>
 <div class="panel" id="feed"></div>
 <canvas id="minimap" width="220" height="140"></canvas>
@@ -117,6 +138,7 @@
     <div class="tab" data-pane="p-weapon">Arma</div>
     <div class="tab" data-pane="p-cross">Mira</div>
     <div class="tab" data-pane="p-keys">Controles</div>
+    <div class="tab" data-pane="p-hud">HUD</div>
     <div class="tab" data-pane="p-test">Sala de teste</div>
     <div class="tab" data-pane="p-mp">Multiplayer</div>
     <a class="tablink" href="/demo3d/editor.html" target="_blank" title="Abre o editor de mapa e de efeitos numa aba nova">🛠️ Editor de mapa</a>
@@ -168,6 +190,11 @@
     <label class="field"><span>Espessura do X</span><input type="range" id="x-hitw" min="0.5" max="4" step="0.5"><span class="v" id="v-x-hitw"></span></label>
     <div class="wdesc">O X pisca <b style="color:#facc15">amarelo</b> quando acerta e <b style="color:#ef4444">vermelho</b> quando elimina.</div>
     <div class="row2"><button class="btn" id="x-reset">Voltar a mira padrão</button></div>
+  </div>
+  <div class="pane" id="p-hud">
+    <div class="wdesc" style="margin-bottom:8px">Muda o lugar, o tamanho e a transparência de cada informação da tela. "Editar na tela" fecha o menu e deixa você arrastar tudo com o mouse. Fica salvo neste navegador.</div>
+    <div class="row2" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><button class="btn" id="hud-edit">✏️ Editar na tela</button><button class="btn" id="hud-split">Separar vida/tiro/arma/pulo</button><button class="btn" id="hud-reset">Voltar ao padrão</button></div>
+    <div id="hud-list"></div>
   </div>
   <div class="pane" id="p-keys">
     <label class="field"><span>Sensibilidade do mouse</span><input type="range" id="o-sens" min="0.2" max="6" step="0.05"><span class="v" id="v-sens"></span></label>

@@ -31,10 +31,12 @@
   #tools button { width: 40px; height: 40px; padding: 0; font-size: 18px; }
   #tools .sep { height: 1px; background: var(--line); margin: 4px 0; }
   #center { position: relative; min-width: 0; min-height: 0; display: grid; }
-  #center.split { grid-template-rows: 1fr 1fr; }
-  #cv { width: 100%; height: 100%; display: block; background: #070a10; cursor: crosshair; touch-action: none; }
+  #center { grid-template-rows: minmax(0, 1fr); }
+  #center.split { grid-template-rows: minmax(0, 1fr) minmax(0, 1.3fr); }
+  #cv { width: 100%; height: 100%; min-height: 0; display: block; background: #070a10; cursor: crosshair; touch-action: none; }
   #pv { width: 100%; height: 100%; border: 0; border-top: 1px solid var(--line); display: none; background: #000; }
   #center.split #pv { display: block; }
+  #center.split #hint, #center.split #coord { display: none; }
   #hint { position: absolute; left: 10px; bottom: 10px; color: var(--muted); font-size: 11px; background: rgba(7,10,16,.8); padding: 6px 8px; border-radius: 6px; pointer-events: none; max-width: 70%; }
   #coord { position: absolute; right: 10px; bottom: 10px; color: var(--muted); font-size: 11px; background: rgba(7,10,16,.8); padding: 4px 8px; border-radius: 6px; pointer-events: none; }
   aside { border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 10px 12px; }
@@ -71,7 +73,7 @@
     <button id="undo" title="Desfazer (Ctrl+Z)">↶</button><button id="redo" title="Refazer (Ctrl+Y)">↷</button>
     <button id="mirror" class="on" title="Mexe junto no item igual do outro lado do mapa">⇋ Espelhar lados</button>
     <button id="snap" class="on" title="Encaixa de 10 em 10">▦ Grade</button>
-    <button id="prev" title="Mostra o mapa em 3D embaixo (dá pra andar dentro)">🎮 Prévia 3D</button>
+    <button id="prev" title="Mostra o mapa em 3D embaixo: dá pra voar, clicar nas peças e mexer nelas lá também">🧊 Editar em 3D</button><button id="prev3d" title="Abre o editor 3D numa aba nova (tela cheia)">⛶</button>
     <label title="Seu jogo (sozinho, neste navegador) usa o rascunho do editor"><input type="checkbox" id="useme"> usar no meu jogo</label>
     <span class="sp"></span>
     <span id="status"></span>

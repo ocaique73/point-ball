@@ -28,16 +28,21 @@ export function editableItems(w) {
 }
 function applyMapEdits(mapId, out, walls, W, H) {
   const E = activeEdits().maps && activeEdits().maps[mapId];
-  if (!E || !Array.isArray(E.items)) return walls;
+  if (!E || !Array.isArray(E.items)) { // sem ajuste: numera as peças na mesma ordem do editor (pra achar a peça clicando no 3D)
+    let k = 0; for (const R of walls) if (isEditable(R)) R.item = k++;
+    for (const S of out.segs || []) if (S.user) S.item = k++;
+    for (const q of out.pyramids || []) q.item = k++;
+    return walls;
+  }
   const keep = walls.filter((R) => !isEditable(R)), n = (v, d) => (Number.isFinite(+v) ? +v : d);
   const pyr = [];
-  for (const it of E.items) {
-    if (it.t === 'box') keep.push(Object.assign({ x: n(it.x, 0) * W, y: n(it.z, 0) * H, w: Math.max(4, n(it.w, 0.02) * W), h: Math.max(4, n(it.h, 0.02) * H), top: n(it.top, 120) }, it.y0 ? { y0: n(it.y0, 0) } : {}, it.tint ? { tint: String(it.tint).slice(0, 9) } : {}, it.style ? { style: String(it.style).slice(0, 12) } : {}));
-    else if (it.t === 'tree') keep.push({ x: n(it.x, 0.5) * W - TREE.r, y: n(it.z, 0.5) * H - TREE.r, w: TREE.r * 2, h: TREE.r * 2, tree: true, top: TREE.top });
-    else if (it.t === 'dune') { const ax = n(it.ax, 0) * W, az = n(it.az, 0) * H, bx = n(it.bx, 0) * W, bz = n(it.bz, 0) * H; keep.push({ x: Math.min(ax, bx) - 12, y: Math.min(az, bz) - 12, w: Math.abs(bx - ax) + 24, h: Math.abs(bz - az) + 24, top: 120, crest: [ax, az, bx, bz], dune: [n(it.hk, 1), n(it.wk, 2)] }); }
-    else if (it.t === 'wall2') { out.segs = out.segs || []; out.segs.push({ ax: n(it.ax, 0) * W, az: n(it.az, 0) * H, bx: n(it.bx, 0) * W, bz: n(it.bz, 0) * H, t: Math.max(4, n(it.th, 24)) / 2, top: n(it.top, 120), user: true }); }
-    else if (it.t === 'pyr') pyr.push({ x: n(it.x, 0.5) * W, z: n(it.z, 0.5) * H, half: n(it.half, 230), top: n(it.top, 26), h: n(it.h, 270) });
-  }
+  E.items.forEach((it, item) => {
+    if (it.t === 'box') keep.push(Object.assign({ item, x: n(it.x, 0) * W, y: n(it.z, 0) * H, w: Math.max(4, n(it.w, 0.02) * W), h: Math.max(4, n(it.h, 0.02) * H), top: n(it.top, 120) }, it.y0 ? { y0: n(it.y0, 0) } : {}, it.tint ? { tint: String(it.tint).slice(0, 9) } : {}, it.style ? { style: String(it.style).slice(0, 12) } : {}));
+    else if (it.t === 'tree') keep.push({ item, x: n(it.x, 0.5) * W - TREE.r, y: n(it.z, 0.5) * H - TREE.r, w: TREE.r * 2, h: TREE.r * 2, tree: true, top: TREE.top });
+    else if (it.t === 'dune') { const ax = n(it.ax, 0) * W, az = n(it.az, 0) * H, bx = n(it.bx, 0) * W, bz = n(it.bz, 0) * H; keep.push({ item, x: Math.min(ax, bx) - 12, y: Math.min(az, bz) - 12, w: Math.abs(bx - ax) + 24, h: Math.abs(bz - az) + 24, top: 120, crest: [ax, az, bx, bz], dune: [n(it.hk, 1), n(it.wk, 2)] }); }
+    else if (it.t === 'wall2') { out.segs = out.segs || []; out.segs.push({ ax: n(it.ax, 0) * W, az: n(it.az, 0) * H, bx: n(it.bx, 0) * W, bz: n(it.bz, 0) * H, t: Math.max(4, n(it.th, 24)) / 2, top: n(it.top, 120), user: true, item }); }
+    else if (it.t === 'pyr') pyr.push({ item, x: n(it.x, 0.5) * W, z: n(it.z, 0.5) * H, half: n(it.half, 230), top: n(it.top, 26), h: n(it.h, 270) });
+  });
   if (mapId === 'deserto' || pyr.length) out.pyramids = pyr;
   return keep;
 }
@@ -179,7 +184,7 @@ function portalWorld(W, H, t) {
 // deserto: cristas de areia [ax, az, bx, bz, altura (x108), largura (x150), no meio?] e pirâmides [x, z, meia-base, topo, altura]
 // (cada uma aparece de novo girada no outro lado do mapa, menos as marcadas "no meio")
 export const DESERT_LAYOUT = {
-  pyramids: [[0.14, 0.22, 230, 26, 270]],
+  pyramids: [[0.14, 0.22, 230, 26, 270], [0.14, 0.78, 230, 26, 270]], // 2 em cada base: uma em cada ponta
   dunes: [
     [0.5, 0.33, 0.5, 0.67, 2.35, 2.5, 1], // montanha alta bem no meio (tampa a visão de lado a lado)
     [0.5, 0.06, 0.5, 0.2, 1.3, 2.0], // no meio em cima (e embaixo, girada)
@@ -187,7 +192,6 @@ export const DESERT_LAYOUT = {
     [0.37, 0.62, 0.43, 0.76, 1.2, 2.1],
     [0.28, 0.44, 0.28, 0.58, 0.9, 1.8], // no meio do caminho entre a base e o meio
     [0.3, 0.86, 0.4, 0.9, 0.5, 1.9], // larga e baixinha
-    [0.13, 0.72, 0.2, 0.84, 0.85, 1.8], // no canto da base sem pirâmide
     [0.3, 0.1, 0.36, 0.16, 0.45, 1.7] // baixinha perto da pirâmide
   ]
 };
@@ -476,7 +480,7 @@ export function world3D(mapId, G, MAPS, CFG) {
     // todas as paredes com a mesma altura
     out.holes = [];
   } else if (mapId === 'deserto') {
-    // uma pirâmide em cada base (no canto, com areia baixinha em volta) e as montanhas de areia no meio;
+    // duas pirâmides em cada base (uma em cada ponta, com areia baixinha em volta) e as montanhas de areia no meio;
     // a mais alta fica bem no meio pra tampar a visão de um lado a outro. Simetria girando o mapa (cada time igual).
     walls = walls.filter((R) => R.border);
     const D = DESERT_LAYOUT, rot = ([ax, az, bx, bz, hk, wk]) => [1 - ax, 1 - az, 1 - bx, 1 - bz, hk, wk];

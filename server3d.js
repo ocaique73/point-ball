@@ -122,7 +122,8 @@ async function setup3D(io, CFG) {
     const world = world3D(room.map, G, ALL_MAPS, CFG);
     const sim = new Sim3D(world.walls, world.W, world.H, Object.assign(simOptions(world), {
       mode: room.mode, rounds: room.rounds, killLimit: room.killLimit, hillTarget: room.hillTarget,
-      matchTime: room.mode === 'rounds' ? 0 : room.roundTime
+      matchTime: room.mode === 'rounds' ? 0 : room.roundTime,
+      endDelay: 7 // fim do round: espera a killcam final passar antes da contagem do próximo
     }));
     room.matchInfo = { map: room.map, roundTime: room.mode === 'rounds' ? 0 : room.roundTime, mode: room.mode };
     for (const m of room.members.values()) {
