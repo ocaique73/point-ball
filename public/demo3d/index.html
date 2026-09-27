@@ -129,6 +129,7 @@
 <div id="banner"></div>
 <div id="kc"><b>KILLCAM FINAL</b><span id="kc-who"></span></div>
 <div id="heal"></div>
+<div id="shieldfx" style="position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .2s;box-shadow:inset 0 0 140px 36px rgba(96,165,250,.55);z-index:4"></div>
 
 <div id="menu"><div class="card">
   <header><h2>Point Ball 3D <span id="paused-tag" style="display:none;font-size:14px;color:#facc15;vertical-align:middle">⏸ pausado</span></h2><span id="loading" style="color:var(--muted)">Carregando os bonecos...</span></header>
@@ -144,6 +145,7 @@
     <a class="tablink" href="/demo3d/editor.html" target="_blank" title="Abre o editor de mapa e de efeitos numa aba nova">🛠️ Editor de mapa</a>
   </div>
   <div class="pane on" id="p-game">
+    <label class="field"><span>Modo magia ✨</span><select id="o-magic"><option value="0">Desligado</option><option value="1">Ligado — Q = magia do seu personagem, segurar Espaço no ar = vassoura</option></select><span></span></label>
     <label class="field"><span>Pausar no menu (Esc)</span><select id="o-pause"><option value="1">Pausa quando abro o menu (jogando sozinho)</option><option value="0">Não pausa</option></select><span></span></label>
     <label class="field"><span>Câmera</span><select id="o-cam"><option value="1">1ª pessoa</option><option value="3">3ª pessoa (por trás)</option></select><span></span></label>
     <label class="field"><span>Mapa</span><select id="o-map"><option value="deserto">Deserto</option><option value="neve">Neve</option><option value="floresta">Floresta</option><option value="nave">Nave espacial (base lunar)</option><option value="portal">Portais</option><option value="vulcao">Vulcão</option><option value="escuro">Sala escura</option><option value="cidade">Cidade à noite</option><option value="metro">Estação de metrô</option><option value="mar">Plataforma no mar</option><option value="obra">Canteiro de obras</option><option value="fabrica">Fábrica</option><option value="castelo">Castelo</option><option value="navio">Navio na tempestade</option><option value="teste">Sala de teste</option></select><span></span></label>

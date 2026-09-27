@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 27/09/2026 — v0.29.0 (Three.js): braços da 1ª pessoa = os braços do próprio boneco (com ajuste de tamanho/comprimento/grossura), frascos redondos iguais, faca de lado e varinha em pé, ponte do castelo de volta e rio raso, fábrica em Z com o meio maior, navio mais claro e o app instalável (Electron) pra jogar em LAN.
+Última atualização: 27/09/2026 — v0.30.0 (Three.js): MODO MAGIA (1 magia por personagem + vassoura pra todos), braços da 1ª pessoa que nunca mostram o fim, faca com corte na horizontal e braço do lado certo, animação de puxar todas as armas, fábrica com elevadores na curva do Z e esteiras pro meio, câmera da 3ª pessoa sem atravessar parede.
 
 ---
 
@@ -323,6 +323,13 @@
 - [x] Godot: mecânica da **Sala escura** (luz apaga/acende sozinha, com lanterna fraca pra dar pra jogar) e do **Vulcão** (4 poças de lava espelhadas que alternam ativa/inativa e doem quando ativas).
 - [ ] Godot: falta a mecânica de **Portais** (teletransporte — é a mais complexa, precisa abrir buracos na parede e sincronizar posição/velocidade) e da **Cidade à noite** (postes que acendem/apagam ao levar tiro; hoje o mapa não é permanentemente escuro ainda).
 - [ ] Godot: **multiplayer do zero** (o Godot não usa o servidor Node/Socket.IO da versão web — precisa de servidor dedicado ENet, salas, times, dono da sala). Fase grande, ainda não iniciada.
+
+- [x] v0.30.0 (Three.js): décima terceira rodada (fechando a semana)
+  - [x] **Modo magia** (menu Jogo → Modo magia, e na sala online o dono liga): cada personagem tem 1 magia na tecla **Q** — Maga: **escudo** (segura 2 tiros), Ladino de capuz: **olho** (puxa os tiros inimigos pra ele), Ladino: **teleporte** curto, Cavaleiro: **parede de pedra**, Bárbaro: **investida** (joga longe, não tira vida); todo mundo: **vassoura** (segurar Espaço no ar = plana caindo devagar e vai pra frente); a aba Personagem mostra a magia de cada um; bots também usam
+  - [x] **1ª pessoa**: o braço continua bem comprido pra trás (o fim dele nunca aparece, nem correndo); besta correndo solta a mão de apoio e levanta só com a direita; faca com o braço vindo da direita (igual à varinha), apontando pra cima correndo e **corte na horizontal** (na 3ª pessoa também, sem mexer a cabeça); **animação de puxar** a besta, o estilingue, a bola de neve e a varinha (mais curta que a da faca)
+  - [x] **Fábrica**: o elevador da ponta fica na curva do Z (no fim da ponte de cima); as esteiras da ponte da diagonal levam pro meio do mapa
+  - [x] **3ª pessoa**: encostado numa parede e olhando de lado, a câmera não vai mais pra dentro/atrás dela (a parede não some); colado demais, o seu boneco some pra não tampar a tela
+  - [ ] Testar o modo magia com os amigos (LAN ou online)
 
 - [x] v0.29.0 (Three.js): décima segunda rodada de ajustes do Caique (só no 3D)
   - [x] **1ª pessoa – braços do próprio boneco**: os braços e as mãos são os mesmos da 3ª pessoa (mesmo personagem, roupa, luvas e manga do time), mais grossinhos; configurações novas **tamanho / comprimento / grossura dos braços** (salvas no navegador)

@@ -20,7 +20,7 @@ const VALID_HILL = [50, 75, 100, 150];
 const PRIMARY_IDS = ['arco', 'estilingue', 'mao', 'varinha']; // armas principais (as mesmas do sim3d)
 // regras de armas da sala: quais armas principais valem (pelo menos 1) e se faca / granada / fumaça estão liberadas
 function cleanWeapons(list) { const a = Array.isArray(list) ? PRIMARY_IDS.filter((w) => list.includes(w)) : []; return a.length ? a : PRIMARY_IDS.slice(); }
-function roomRules(room) { return { allowed: room.weapons.length < PRIMARY_IDS.length ? room.weapons.slice() : null, noKnife: !!room.noKnife, noNade: !!room.noNade, noSmoke: !!room.noSmoke }; }
+function roomRules(room) { return { allowed: room.weapons.length < PRIMARY_IDS.length ? room.weapons.slice() : null, noKnife: !!room.noKnife, noNade: !!room.noNade, noSmoke: !!room.noSmoke, magic: !!room.magic }; }
 // sala sem nome: "1", "2"... até 9999; depois número + letra ("1A", "2A"...)
 function autoRoomName(rooms) {
   for (let n = 1; n <= 9999; n++) if (!rooms.has(String(n))) return String(n);
@@ -88,7 +88,7 @@ async function setup3D(io, CFG) {
   function publicState(room) {
     return {
       code: room.code, hasPassword: !!room.password, hidden: !!room.hidden, map: room.map, hostId: room.hostId, phase: room.phase,
-      weapons: room.weapons, noKnife: !!room.noKnife, noNade: !!room.noNade, noSmoke: !!room.noSmoke,
+      weapons: room.weapons, noKnife: !!room.noKnife, noNade: !!room.noNade, noSmoke: !!room.noSmoke, magic: !!room.magic,
       botLevel: room.botLevel, roundTime: room.roundTime, mode: room.mode, rounds: room.rounds, killLimit: room.killLimit, hillTarget: room.hillTarget,
       bots: { A: room.bots.A.map((b) => ({ id: b.id, name: b.name, team: 'A', bot: true })), B: room.bots.B.map((b) => ({ id: b.id, name: b.name, team: 'B', bot: true })) },
       members: [...room.members.values()].map((m) => ({ id: m.pid, name: m.name, status: m.status, team: m.team, connected: m.connected, inMatch: m.inMatch }))
@@ -258,7 +258,7 @@ async function setup3D(io, CFG) {
       if (d && VALID_KILLS.includes(Number(d.killLimit))) room.killLimit = Number(d.killLimit);
       if (d && VALID_HILL.includes(Number(d.hillTarget))) room.hillTarget = Number(d.hillTarget);
       if (d && d.weapons != null) room.weapons = cleanWeapons(d.weapons);
-      for (const k of ['noKnife', 'noNade', 'noSmoke', 'hidden']) if (d && typeof d[k] === 'boolean') room[k] = d[k];
+      for (const k of ['noKnife', 'noNade', 'noSmoke', 'hidden', 'magic']) if (d && typeof d[k] === 'boolean') room[k] = d[k];
       broadcastState(room);
     });
 
@@ -290,7 +290,7 @@ async function setup3D(io, CFG) {
       const p = room.sim.players.get(m.pid); if (!p || !p.alive) return;
       p.input.fwd = Math.max(-1, Math.min(1, Number(d.fwd) || 0));
       p.input.side = Math.max(-1, Math.min(1, Number(d.side) || 0));
-      p.input.fire = !!d.fire; p.input.sprint = !!d.sprint; p.input.aim = !!d.aim; p.fp = !!d.fp; // fp = está em 1ª pessoa (killcam)
+      p.input.fire = !!d.fire; p.input.sprint = !!d.sprint; p.input.aim = !!d.aim; p.input.glide = !!d.glide; p.fp = !!d.fp; // fp = está em 1ª pessoa (killcam)
       if (Number.isFinite(d.yaw)) p.yaw = Number(d.yaw);
       if (Number.isFinite(d.pitch)) p.pitch = Math.max(-1.5, Math.min(1.5, Number(d.pitch)));
     });
@@ -300,6 +300,7 @@ async function setup3D(io, CFG) {
       const p = room.sim.players.get(m.pid); if (!p) return;
       if (d.t === 'jump') room.sim.jump(p);
       else if (d.t === 'reload') room.sim.reload(p);
+      else if (d.t === 'ability') room.sim.ability(p); // (modo magia)
       else if (d.t === 'weapon' && typeof d.w === 'string') room.sim.setWeapon(p, d.w);
       else if (d.t === 'cycle') room.sim.cycleWeapon(p, d.dir > 0 ? 1 : -1);
       else if (d.t === 'primary' && typeof d.w === 'string') room.sim.setPrimary(p, d.w);

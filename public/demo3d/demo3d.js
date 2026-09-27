@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { Sim3D, WEAPONS, WEAPON_IDS, P, PORTAL, HOLE, DuneField, holeEdgeR, TRAIN, WAVE, CEILING_Y, LAMP, TREE, TORNADO, FROST, METEOR, PLAT, AIM, DRINK, DOOR_HOLD, CRANE, craneAngle, pistonTop, DRAGON, dragonX } from '/demo3d/sim3d.js';
+import { Sim3D, MAGIC_NAME, WEAPONS, WEAPON_IDS, P, PORTAL, HOLE, DuneField, holeEdgeR, TRAIN, WAVE, CEILING_Y, LAMP, TREE, TORNADO, FROST, METEOR, PLAT, AIM, DRINK, DOOR_HOLD, CRANE, craneAngle, pistonTop, DRAGON, dragonX } from '/demo3d/sim3d.js';
 import { world3D, simOptions, IGLOO, TREEHOUSE, MAPS3D, TOWER, SHIP, setEditOverride, activeEdits } from '/demo3d/world3d.js';
 import { FX_DEFAULT } from '/demo3d/fx3d.js';
 import { CHARS, TEAM_PAL, LEATHER, HAIR, SKIN, HATS, SLOTS, LOOK_DEFAULT, normLook, botLook, dressModel } from '/demo3d/looks3d.js';
@@ -20,7 +20,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 // ---------- configurações (ficam salvas neste navegador) ----------
 const DEFAULTS = {
-  cam: '1', map: 'deserto', bots: '2', allies: '0', level: 'amador', shadow: '1', fov: 80, camDist: 150, camSide: '1', streamer: '0', gunDist: 100, pause: '1', armSize: 100, armLen: 100, armW: 100, weapon: 'arco', sens: 1.6, invert: '0',
+  cam: '1', map: 'deserto', bots: '2', allies: '0', level: 'amador', shadow: '1', fov: 80, camDist: 150, camSide: '1', streamer: '0', gunDist: 100, pause: '1', armSize: 100, armLen: 100, armW: 100, magic: '0', weapon: 'arco', sens: 1.6, invert: '0',
   mode: 'tdm', kills: '30', rounds: '3', hill: '100', mtime: '300', kc: '1', sfx: {}, adszoom: '1',
   die: '1', speed: P.speed, jumpv: P.jumpV, tweapon: WEAPON_IDS[0], wtune: {},
   x: { color: '#ffffff', outline: '1', len: 7, thick: 2, gap: 4, dot: '1', dotsize: 2, ring: '1', ringr: 22, ringw: 2, hit: '1', hitlen: 10, hitw: 1 }
@@ -2920,6 +2920,8 @@ function splitClips(anims) {
       upper: new THREE.AnimationClip(clip.name + '_U', clip.duration, clip.tracks.filter((t) => UPPER.has(bone(t)))),
       lower: new THREE.AnimationClip(clip.name + '_L', clip.duration, clip.tracks.filter((t) => !UPPER.has(bone(t))))
     };
+    // (v0.30) facada na 3ª pessoa: corte na horizontal só com o braço e o tronco (a cabeça não mexe)
+    if (clip.name === '1H_Melee_Attack_Slice_Horizontal' && !CLIPS.KnifeSlice) { const up = clip.tracks.filter((t) => UPPER.has(bone(t)) && !/^head/.test(bone(t))); CLIPS.KnifeSlice = { full: clip, upper: new THREE.AnimationClip('KnifeSlice_U', clip.duration, up), lower: CLIPS[clip.name].lower }; }
   }
 }
 const modelLoading = {};
@@ -3371,6 +3373,8 @@ function fpRefreshArms() {
   const box = new THREE.Box3().setFromObject(model), sc = CHAR_H / ((box.max.y - box.min.y) || 1);
   FPA.R = fpBake(model, /_ArmRight$/, 'handslotr', sc); FPA.L = fpBake(model, /_ArmLeft$/, 'handslotl', sc);
   // comprimento e grossura (configurações): estica ao longo do braço (a mão fica no lugar) e engrossa pros lados
+  // (v0.30) o braço continua bem comprido depois do cotovelo (pra trás, fora da tela): o fim dele nunca aparece, nem correndo
+  for (const A of [FPA.R, FPA.L]) if (A) { const a = A.axis, e = A.geo.attributes.position, v = new THREE.Vector3(); let dm = 0; for (let i = 0; i < e.count; i++) dm = Math.max(dm, v.fromBufferAttribute(e, i).dot(a)); const cut = dm * 0.5; for (let i = 0; i < e.count; i++) { v.fromBufferAttribute(e, i); const d = v.dot(a); if (d > cut) { v.addScaledVector(a, (d - cut) * 5); e.setXYZ(i, v.x, v.y, v.z); } } e.needsUpdate = true; A.geo.computeBoundingSphere(); }
   for (const A of [FPA.R, FPA.L]) if (A && (kL !== 1 || kW !== 1)) { const a = A.axis, e = A.geo.attributes.position, v = new THREE.Vector3(); for (let i = 0; i < e.count; i++) { v.fromBufferAttribute(e, i); const d = v.dot(a); v.multiplyScalar(kW).addScaledVector(a, d * (kL - kW)); e.setXYZ(i, v.x, v.y, v.z); } e.needsUpdate = true; A.geo.computeVertexNormals(); A.geo.computeBoundingSphere(); }
   for (const e of FPA.list) fpBuildArm(e);
 }
@@ -3381,7 +3385,8 @@ function fpBuildArm(e) {
   // gira: o eixo do braço (mão → ombro) aponta pro cotovelo e o eixo Y da mão (por onde passa o cabo) vira o "grip"
   const a = A.axis.clone(), g0 = new THREE.Vector3(0, 1, 0).addScaledVector(a, -a.y).normalize();
   const Lm = new THREE.Matrix4().makeBasis(a, g0, new THREE.Vector3().crossVectors(a, g0));
-  const Y = e.grip.clone().normalize(), ta = e.toE.clone().addScaledVector(Y, -e.toE.dot(Y)).normalize();
+  let Y = e.grip.clone().normalize(), ta = e.toE.clone().addScaledVector(Y, -e.toE.dot(Y)).normalize();
+  if (e.opt.free) { ta = e.toE.clone().normalize(); Y = e.grip.clone().normalize().addScaledVector(ta, -e.grip.clone().normalize().dot(ta)).normalize(); } // braço reto pro cotovelo (punho dobrado)
   const Tm = new THREE.Matrix4().makeBasis(ta, Y, new THREE.Vector3().crossVectors(ta, Y));
   m.quaternion.setFromRotationMatrix(Tm.multiply(Lm.transpose()));
   if (e.opt.roll) m.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(Y, e.opt.roll));
@@ -3464,7 +3469,8 @@ function animPotion(g, now) {
   const bowArc = new THREE.Mesh(new THREE.TorusGeometry(14, 0.9, 6, 20, Math.PI), mat(0x8b5a2b)); bowArc.rotation.z = Math.PI / 2;
   const str = m(new THREE.BoxGeometry(0.4, 28, 0.4), 0xf1f5f9, 0, 0, 0); str.userData.string = true;
   const arrow = m(new THREE.CylinderGeometry(0.6, 0.6, 30, 6), 0xe5d3a1, 0, 0, -8); arrow.rotation.x = Math.PI / 2; arrow.userData.arrow = true; arrow.userData.tint = 1;
-  const bowG = add('arco', [bowArc, str, arrow, fpArm([0.4, -2.3, 3.4], [0, 1, 0.4], [5, -16, 9], { s: 0.7 }), fpArm([-0.3, -2.0, -4.2], [0, 0.12, 1], [-8, -14, 2], { s: 0.7, left: true })]);
+  const bowL = fpArm([-0.3, -2.0, -4.2], [0, 0.12, 1], [-8, -14, 2], { s: 0.7, left: true });
+  const bowG = add('arco', [bowArc, str, arrow, fpArm([0.4, -2.3, 3.4], [0, 1, 0.4], [5, -16, 9], { s: 0.7 }), bowL]); bowG.userData.leftArm = bowL; bowL.userData.rest = bowL.position.clone();
   bowG.rotation.z = 0.25; bowG.userData.bow = [bowArc, str];
   // varinha em pé, apontando pra cima e pra frente, segura como um pincel (a gente vê as costas da mão)
   { const wv = makeWandMesh('A', 0.9); wv.rotation.set(-0.45, 0, 0.25); wv.position.set(-1, 1, -3); wv.userData.wandView = true; wv.userData.tip.userData.wandTip = true;
@@ -3474,7 +3480,7 @@ function animPotion(g, now) {
   { const kp = new THREE.Group(); kp.position.set(KNIFE_HAND[0], KNIFE_HAND[1], KNIFE_HAND[2]); kp.userData.knifePivot = true;
     const kb = new THREE.Group(); kb.position.set(-KNIFE_HAND[0], -KNIFE_HAND[1], -KNIFE_HAND[2]); kp.add(kb); kp.userData.body = kb;
     const kf = new THREE.Group(); kf.position.copy(KNIFE_POS); kf.quaternion.copy(KNIFE_Q); kf.add(m(new THREE.BoxGeometry(1, 2.6, 16), 0xd1d5db, 0, 0, 3, { metalness: 0.8, roughness: 0.25 }), m(new THREE.BoxGeometry(2.2, 3, 6), 0x1f2937, 0, 0, -6.5)); kb.add(kf);
-    add('knife', [kp, fpArm(KNIFE_HAND, KNIFE_DIR.toArray(), [7, -15, 6], { s: 0.9 })]).userData.kp = kp; }
+    add('knife', [kp, fpArm(KNIFE_HAND, KNIFE_DIR.toArray(), [KNIFE_HAND[0] + 11, KNIFE_HAND[1] - 12, KNIFE_HAND[2] + 7], { s: 0.9, free: true })]).userData.kp = kp; }
   // granada e fumaça: frascos em cima da mão (palma pra cima)
   { const pn = potionMesh('nade'); pn.position.set(0, 1, -2); pn.scale.setScalar(1.03); add('nade', [pn, fpArm([0, -4.9, -2], [-1, 0, -0.3], [5, -18, 3], { s: 0.9 })]).userData.pot = pn; }
   { const ps = potionMesh('smoke'); ps.position.set(0, 1, -2); ps.scale.setScalar(1.03); add('smoke', [ps, fpArm([0, -4.9, -2], [-1, 0, -0.3], [5, -18, 3], { s: 0.9 })]).userData.pot = ps; }
@@ -3484,7 +3490,7 @@ function animPotion(g, now) {
 }
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 let nadeThrowAnim = null, camSmY = null, kick = 0, swing = 0, sprintFov = 0, adsK = 0, healFx = 0, caveK = 0, pendingKc = null;
-let fpRunK = 0, fpWalkK = 0, fpLastKey = null, knifeDrawT = -1e9; const _slRest = new THREE.Vector3(0, 9, -0.6), _slD = new THREE.Vector3();
+let fpRunK = 0, fpWalkK = 0, fpLastKey = null, knifeDrawT = -1e9, fpDrawT = -1e9; const _slRest = new THREE.Vector3(0, 9, -0.6), _slD = new THREE.Vector3();
 // munição na mão da arma (1ª pessoa) na cor do seu time
 let viewTeam = null;
 const _sleeveDark = new THREE.Color(0x1b2233);
@@ -3700,6 +3706,7 @@ function renderLobby() {
       // armas da sala: marque só uma (todo mundo com a mesma), todas, ou tire as que não quer; faca/granada/fumaça também
       + `<div class="field" style="grid-template-columns:130px 1fr"><span>Armas da sala</span><div class="row2" style="gap:10px;flex-wrap:wrap">${WEAPON_IDS.map((w) => `<label style="cursor:pointer"><input type="checkbox" data-mpw="${w}" ${(room3d.weapons || WEAPON_IDS).includes(w) ? 'checked' : ''}> ${WEAPON_SHORT[w] || w}</label>`).join('')}<button class="btn" id="mp-w-all" style="padding:2px 8px">Todas</button></div></div>`
       + `<div class="field" style="grid-template-columns:130px 1fr"><span>Extras</span><div class="row2" style="gap:10px;flex-wrap:wrap">${[['noKnife', 'Faca'], ['noNade', 'Granada'], ['noSmoke', 'Fumaça']].map(([k, t]) => `<label style="cursor:pointer"><input type="checkbox" data-mpx="${k}" ${room3d[k] ? '' : 'checked'}> ${t}</label>`).join('')}</div></div>`
+      + F('Modo magia ✨', 'mp-set-magic', [['0', 'Desligado'], ['1', 'Ligado (Q = magia, Espaço no ar = vassoura)']], room3d.magic ? '1' : '0')
       + `<label class="field" style="grid-template-columns:130px 1fr;cursor:pointer"><span>Lista de salas</span><span><input type="checkbox" id="mp-set-hidden" ${room3d.hidden ? 'checked' : ''}> esconder a sala da lista (entra só quem sabe o nome)</span></label>`;
     const send = (extra) => socket.emit('3d_update_settings', extra);
     document.querySelectorAll('[data-mpw]').forEach((c) => c.addEventListener('change', () => {
@@ -3711,6 +3718,7 @@ function renderLobby() {
     document.querySelectorAll('[data-mpx]').forEach((c) => c.addEventListener('change', () => send({ [c.dataset.mpx]: !c.checked })));
     $('mp-set-hidden').addEventListener('change', () => send({ hidden: $('mp-set-hidden').checked }));
     const on = (id, fn) => { const el = $(id); if (el) el.addEventListener('change', () => send(fn(el.value))); };
+    on('mp-set-magic', (v) => ({ magic: v === '1' }));
     on('mp-set-map', (v) => ({ map: v })); on('mp-set-mode', (v) => ({ mode: v })); on('mp-set-kills', (v) => ({ killLimit: Number(v) }));
     on('mp-set-rounds', (v) => ({ rounds: Number(v) })); on('mp-set-hill', (v) => ({ hillTarget: Number(v) })); on('mp-set-roundtime', (v) => ({ roundTime: Number(v) }));
     on('mp-set-botsA', (v) => ({ botsA: Number(v) })); on('mp-set-botsB', (v) => ({ botsB: Number(v) })); on('mp-set-level', (v) => ({ botLevel: v }));
@@ -3718,7 +3726,7 @@ function renderLobby() {
     const lim = md === 'rounds' ? `${room3d.rounds} rounds` : md === 'koth' ? `até ${room3d.hillTarget} pontos` : `até ${room3d.killLimit} abates`;
     const wl = room3d.weapons || WEAPON_IDS, ex = [['noKnife', 'faca'], ['noNade', 'granada'], ['noSmoke', 'fumaça']].filter(([k]) => room3d[k]).map(([, t]) => t);
     const armas = (wl.length >= WEAPON_IDS.length ? 'todas' : wl.length === 1 ? 'só ' + WEAPON_SHORT[wl[0]] : wl.map((w) => WEAPON_SHORT[w]).join(', ')) + (ex.length ? ' · sem ' + ex.join('/') : '');
-    $('mp-host-settings').innerHTML = `<div class="wdesc">Mapa: ${esc(MAPS[room3d.map] ? MAPS[room3d.map].name : room3d.map)} · ${MODE_NAME[md]} (${lim}) · Bots: ${(bots.A || []).length} azul / ${(bots.B || []).length} vermelho (${room3d.botLevel})${md !== 'rounds' ? ' · Tempo: ' + roundTimeLabel(room3d.roundTime) : ''} · Armas: ${armas}</div>`;
+    $('mp-host-settings').innerHTML = `<div class="wdesc">Mapa: ${esc(MAPS[room3d.map] ? MAPS[room3d.map].name : room3d.map)} · ${MODE_NAME[md]} (${lim}) · Bots: ${(bots.A || []).length} azul / ${(bots.B || []).length} vermelho (${room3d.botLevel})${md !== 'rounds' ? ' · Tempo: ' + roundTimeLabel(room3d.roundTime) : ''} · Armas: ${armas}${room3d.magic ? ' · ✨ Modo magia' : ''}</div>`;
   }
   const mine = room3d.members.find((m) => m.id === myPid);
   $('mp-start-row').innerHTML = room3d.phase === 'match'
@@ -3787,13 +3795,15 @@ function renderLookFields() {
   const L = S.look;
   const icons = (k) => `<div class="icrow">${LOOK_ICONS[k].map(([v, ic, t]) => `<button class="ic ${String(L[k]) === String(v) ? 'on' : ''}" data-lic="${k}" data-v="${v}" title="${t}"><span>${ic}</span><small>${t.split(' (')[0]}</small></button>`).join('')}</div>`;
   const row = (label, html) => `<div class="field" style="grid-template-columns:118px 1fr;display:grid;align-items:center"><span>${label}</span>${html}</div>`;
-  $('look-fields').innerHTML = row('Personagem', icons('m')) + row('Capa', icons('cp')) + row('Roupa', icons('o')) + row('Chapéu extra', icons('hat'))
+  const MAG_DESC = { mage: 'Escudo: bolha que segura 2 tiros', hood: 'Olho: puxa os tiros inimigos pra ele', rogue: 'Teleporte curto pra frente', knight: 'Parede de pedra na sua frente', barbarian: 'Investida que joga os inimigos longe' };
+  $('look-fields').innerHTML = row('Personagem', icons('m')) + row('Magia ✨', `<div class="wdesc" style="margin:0">${MAG_DESC[L.m] || ''} <span style="opacity:.7">(modo magia, tecla Q)</span></div>`) + row('Capa', icons('cp')) + row('Roupa', icons('o')) + row('Chapéu extra', icons('hat'))
     + SLOTS.filter(([k]) => !(k === 'p' && L.o) && !(k === 'hc' && L.hat === 'none')).map(([k, label, kind]) => row(label, lookSwatches(k, kind))).join('');
   document.querySelectorAll('[data-lic]').forEach((b) => b.addEventListener('click', (e) => { e.preventDefault(); const k = b.dataset.lic; S.look[k] = k === 'm' || k === 'hat' ? b.dataset.v : Number(b.dataset.v); lookChanged(); }));
   document.querySelectorAll('[data-lk]').forEach((b) => b.addEventListener('click', (e) => { e.preventDefault(); S.look[b.dataset.lk] = Number(b.dataset.li); lookChanged(); }));
 }
 function lookChanged() {
   S.look = normLook(S.look); save(); renderLookFields();
+  { const m = !netMode && sim && sim.players.get('me'); if (m) m.look = normLook(S.look); } // (troca a magia junto com o personagem)
   if (socket && room3d) socket.emit('3d_set_look', S.look);
   if (S.look.m) loadModel(S.look.m).then(() => { lookPrev.key = ''; }).catch(() => {});
 }
@@ -3842,6 +3852,7 @@ bindSetting('o-camdist', 'camDist');
 bindSetting('o-gundist', 'gunDist');
 for (const [id, k] of [['o-armsize', 'armSize'], ['o-armlen', 'armLen'], ['o-armw', 'armW']]) bindSetting(id, k, null, () => { FPA.key = ''; }); // braços da 1ª pessoa (refaz na hora)
 bindSetting('o-pause', 'pause');
+bindSetting('o-magic', 'magic', null, () => { if (!netMode) newGame(); });
 bindSetting('o-camside', 'camSide');
 bindSetting('o-weapon', 'weapon', null, () => {
   if (netMode) { if (sim.allowed && !sim.allowed.includes(S.weapon)) mpStatus('Essa arma está bloqueada nesta sala.', 'mp-status2'); else if (socket) socket.emit('3d_action', { t: 'primary', w: S.weapon }); }
@@ -3964,6 +3975,7 @@ window.addEventListener('keydown', (e) => {
   if (netMode) {
     if (!socket) return;
     if (e.code === 'Space') socket.emit('3d_action', { t: 'jump' });
+    else if (e.code === 'KeyQ') socket.emit('3d_action', { t: 'ability' }); // (modo magia)
     else if (e.code === 'KeyR') socket.emit('3d_action', { t: 'reload' });
     else if (e.code === 'Digit1') socket.emit('3d_action', { t: 'weapon', w: 'primary' });
     else if (e.code === 'Digit2') socket.emit('3d_action', { t: 'weapon', w: 'potion' });
@@ -3973,6 +3985,7 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (e.code === 'Space') sim.jump(me);
+  else if (e.code === 'KeyQ') sim.ability(me); // (modo magia: a magia do seu personagem)
   else if (e.code === 'KeyR') sim.reload(me);
   else if (e.code === 'Digit1') sim.setWeapon(me, 'primary');
   else if (e.code === 'Digit2') sim.setWeapon(me, 'potion');
@@ -4194,7 +4207,8 @@ function hud(me) {
   else { $('h-ammo').textContent = me.weapon === 'nade' ? 'GRANADA' : 'FUMAÇA'; $('h-mags').textContent = ''; }
   $('h-weapon').textContent = me.weapon === 'primary' ? w.name : '';
   const dj = sim.time >= me.djReadyAt;
-  $('h-jump').innerHTML = dj ? '🦘 Pulo duplo <b style="color:#86efac">PRONTO</b> (Espaço 2x)' : `🦘 Pulo duplo em ${Math.ceil(me.djReadyAt - sim.time)}s`;
+  $('h-jump').innerHTML = (dj ? '🦘 Pulo duplo <b style="color:#86efac">PRONTO</b> (Espaço 2x)' : `🦘 Pulo duplo em ${Math.ceil(me.djReadyAt - sim.time)}s`)
+    + (sim.magic ? (() => { const k = sim.magicOf(me), left = (me.magicReady || 0) - sim.time; return `<br>✨ Q: ${MAGIC_NAME[k]} ` + (left <= 0 ? '<b style="color:#c4b5fd">PRONTO</b>' : `em ${Math.ceil(left)}s`) + ' · 🧹 segure Espaço no ar'; })() : '');
   const slot = (k, name, off) => `<div class="slot ${me.weapon === k ? 'on' : ''} ${off ? 'off' : ''}"><b>${SLOT_NAMES[k]}</b>${name}</div>`;
   $('slots').innerHTML = slot('primary', w.name.split(' ')[0]) + slot('potion', `Poção ×${me.potions}`, !me.potions || me.lives >= P.lives) + (sim.noKnife ? '' : slot('knife', 'Faca')) + (sim.noNade ? '' : slot('nade', `Granada ×${me.nades}`, !me.nades)) + (sim.noSmoke ? '' : slot('smoke', `Fumaça ×${me.smokes}`, !me.smokes)); // (armas bloqueadas na sala somem)
   if (!me.alive) {
@@ -4235,12 +4249,13 @@ function newGame() {
   const wd = mapInfo.world;
   sim = new Sim3D(wd.walls, wd.W, wd.H, Object.assign(simOptions(wd), {
     godIds: S.die === '0' ? ['me'] : [], // "você pode morrer: não" = só você não morre; os bots morrem normal
+    magic: S.magic === '1', // modo magia
     mode: isTestRoom ? 'livre' : S.mode, killLimit: Number(S.kills), rounds: Number(S.rounds), hillTarget: Number(S.hill), matchTime: Number(S.mtime),
     params: Object.assign({}, simOptions(wd).params || {}, S.speed !== P.speed ? { speed: S.speed } : {}, S.jumpv !== P.jumpV ? { jumpV: S.jumpv } : {}),
     weapons: (() => { const a = simOptions(wd).weapons || {}, o = {}; for (const k of WEAPON_IDS) o[k] = Object.assign({}, a[k] || {}, (S.wtune || {})[k] || {}); return o; })()
   }));
   void map;
-  sim.addPlayer({ id: 'me', name: 'Você', team: 'A', primary: S.weapon });
+  sim.addPlayer({ id: 'me', name: 'Você', team: 'A', primary: S.weapon, look: normLook(S.look) }); // (o personagem decide a magia)
   const n = isTestRoom ? 0 : Number(S.bots), na = isTestRoom ? 0 : Number(S.allies), names = BOTS.randomNames(n + na);
   // sozinho: os bots usam a mesma arma que você (no multiplayer cada um escolhe a sua)
   for (let i = 0; i < n; i++) sim.addPlayer({ id: 'bot' + i, name: names[i], team: 'B', bot: true, level: S.level, primary: S.weapon });
@@ -4301,6 +4316,7 @@ function applySnapshot(snap, evs) {
       reloadUntil: sp.reloadUntil, nades: sp.nades, smokes: sp.smokes, potions: sp.potions,
       djReadyAt: sp.djReadyAt, k: sp.k, d: sp.d, a: sp.a, charge0: sp.charge0, nade0: sp.nade0 || 0, fireReady: sp.fireReady,
       protectUntil: sp.protectUntil, respawnAt: sp.respawnAt, deadAt: sp.deadAt, lastHitBy: sp.lastHitBy || {},
+      shieldUntil: sp.shield ? snap.time + 1 : 0, shieldHits: sp.shield || 0, gliding: !!sp.gliding, magicReady: sp.magicReady || 0, dashUntil: sp.dash ? snap.time + 0.1 : 0,
       look: sp.look || null, slowUntil: sp.slowUntil || 0, spin: sp.spin, climb: !!sp.climb, sprinting: sp.sprinting, aiming: sp.aiming, aimT0: sp.aimT0 || 0, drinkUntil: sp.drinkUntil || 0, slip: !!sp.slip,
       input: { fwd: 0, side: 0, fire: false }
     };
@@ -4324,6 +4340,7 @@ function applySnapshot(snap, evs) {
   sim.doorsT = snap.doorsT || null;
   sim.meteors = snap.meteors || []; sim.meteorFall = snap.meteorFall; sim.ceilHoles = snap.ceilHoles || [];
   sim.lastKill = snap.lastKill || null;
+  sim.magic = !!snap.magic; sim.eyes = snap.eyes || []; sim.magicWalls = snap.mwalls || []; // (modo magia)
   for (const k of ['mode', 'phase', 'phaseUntil', 'hzStart', 'score', 'round', 'totalRounds', 'killLimit', 'hillTarget', 'matchTime', 'hill', 'result']) if (snap[k] !== undefined) sim[k] = snap[k];
   const prevRecvT = netRecvT; netRecvT = now;
   if (prevRecvT) netInterval = Math.max(60, Math.min(400, now - prevRecvT));
@@ -4714,16 +4731,20 @@ function dispScale(p, dt) {
   return cur;
 }
 // câmera de 3ª pessoa (atrás do ombro, sem atravessar muro nem passar do teto) — usada no jogo e na killcam
+let thirdCamD = 999; // (câmera muito colada no boneco: esconde o seu boneco pra não tampar a tela)
 function thirdCam(x, y, z, yaw, pitch, ignoreId) {
   const dx = Math.cos(pitch) * Math.cos(yaw), dy = Math.sin(pitch), dz = Math.cos(pitch) * Math.sin(yaw);
   // distância e lado (ombro direito/esquerdo/meio) vêm das configurações
   // (v0.28) com FOV maior a câmera chega mais perto: o boneco fica do mesmo tamanho na tela
   const fovK = Math.tan(40 * Math.PI / 180) / Math.tan(Math.max(50, Math.min(120, Number(S.fov) || 80)) * Math.PI / 360);
-  const side = Number(S.camSide), sh = 30 * (Number.isFinite(side) ? side : 1), want = Math.max(50, Math.min(300, Number(S.camDist) || 150)) * fovK;
-  const hx = x, hy = y + 60 + (sh === 0 ? 14 : 0), hz = z, rx = -Math.sin(yaw), rz = Math.cos(yaw);
-  const bx = -dx, by = -dy * 0.9 + 0.18 + (sh === 0 ? 0.08 : 0), bz = -dz, bl = Math.hypot(bx, by, bz);
+  const side = Number(S.camSide), sh0 = 30 * (Number.isFinite(side) ? side : 1), want = Math.max(50, Math.min(300, Number(S.camDist) || 150)) * fovK;
+  const hx = x, hy = y + 60 + (sh0 === 0 ? 14 : 0), hz = z, rx = -Math.sin(yaw), rz = Math.cos(yaw);
+  // (v0.30) encostado numa parede do lado do ombro: o ombro da câmera encolhe (senão a câmera ia pra dentro/atrás da parede e ela sumia)
+  let sh = sh0; if (sh0) { const hs = sim.raycast(hx, hy, hz, rx * Math.sign(sh0), 0, rz * Math.sign(sh0), Math.abs(sh0) + 14, ignoreId); sh = Math.sign(sh0) * Math.max(0, Math.min(Math.abs(sh0), hs - 14)); }
+  const bx = -dx, by = -dy * 0.9 + 0.18 + (sh0 === 0 ? 0.08 : 0), bz = -dz, bl = Math.hypot(bx, by, bz);
   const hit = sim.raycast(hx + rx * sh, hy, hz + rz * sh, bx / bl, by / bl, bz / bl, want, ignoreId);
-  const d = Math.max(20, Math.min(want, hit - 12));
+  const d = Math.max(3, Math.min(want, hit - 10)); // (nunca atrás da parede: chega perto do boneco se precisar)
+  if (ignoreId === 'me') thirdCamD = d;
   const cy2 = sim.ceilingY != null ? sim.ceilingY - 12 : 1e9;
   return [hx + rx * sh + bx / bl * d, Math.min(cy2, Math.max(10, hy + by / bl * d)), hz + rz * sh + bz / bl * d];
 }
@@ -4737,6 +4758,7 @@ function frame(now) {
   me.input.fwd = locked ? f : 0; me.input.side = locked ? sd : 0;
   me.input.sprint = locked && !!(keys.ShiftLeft || keys.ShiftRight); // Shift = correr (sem atirar)
   me.input.aim = locked && aimHeld; // botão direito = mirar
+  me.input.glide = locked && !!keys.Space; // (modo magia: segurando Espaço no ar = vassoura)
   me.fp = S.cam === '1'; // (killcam: começa na mesma câmera que você estava)
   if (!locked) me.input.fire = false;
   if (netMode) {
@@ -4744,7 +4766,7 @@ function frame(now) {
     me.yaw = netYaw; me.pitch = netPitch;
     if (locked && socket && now - netInputT > 50) {
       netInputT = now;
-      socket.emit('3d_input', { fwd: me.input.fwd, side: me.input.side, fire: netFireHeld, sprint: me.input.sprint, aim: me.input.aim, yaw: netYaw, pitch: netPitch, fp: S.cam === '1' });
+      socket.emit('3d_input', { fwd: me.input.fwd, side: me.input.side, fire: netFireHeld, sprint: me.input.sprint, aim: me.input.aim, glide: me.input.glide, yaw: netYaw, pitch: netPitch, fp: S.cam === '1' });
     }
   } else {
     // sozinho: com o menu (Esc) aberto o jogo fica pausado (no online nunca pausa)
@@ -4787,6 +4809,7 @@ function frame(now) {
   if (mapInfo && mapInfo.mapId === 'castelo') updateDragonFx(now, dtR);
   if (shipFx) updateShipFx(now, dtR);
   updateStormFx(sim.storm, now, dtR);
+  updateMagicFx(now);
   updatePortalViews(dtR); updateDoors(); updateMeteorFx(now, dtR); updateMetroFx(now); updateSeaFx(now, dtR); updateObraFx(now, dtR); updateFactoryFx(dtR);
   // vulcão: quando a erupção abre um buraco novo, refaz o chão
   if (volcano) {
@@ -4844,7 +4867,7 @@ function frame(now) {
     { const lean = p.slip && sim.swayState ? -Math.sign(sim.swayState.roll || 0) * 0.22 : 0; a.root.rotation.x += (lean - a.root.rotation.x) * Math.min(1, dtR * 6); } // escorregando: corpo inclinado pra cima do convés
     const sc = dispScale(p, dtR); // cresce/diminui com animação (poção / levou tiro)
     a.model.scale.setScalar(a.baseScale * sc); a.ring.scale.setScalar(sc);
-    a.root.visible = p.alive && !(p.id === 'me' && firstPerson) && !(sim.time < p.protectUntil && Math.floor(now / 100) % 2 === 0);
+    a.root.visible = p.alive && !(p.id === 'me' && (firstPerson || thirdCamD < 22)) && !(sim.time < p.protectUntil && Math.floor(now / 100) % 2 === 0);
     a.ring.visible = false;
     if (a.label) a.label.visible = (!darkMap || (aimed === p.id && litAt(p))) && bodyVisible(p, now) >= 0.7; // nome só com 70% do corpo à vista
     a.setFrozen(sim.time < (p.slowUntil || 0));
@@ -4954,7 +4977,7 @@ function frame(now) {
   const wkey = drinking ? 'potion' : throwing ? nadeThrowAnim.kind : me.weapon === 'primary' ? me.primary : me.weapon;
   for (const k2 in VIEW) VIEW[k2].visible = firstPerson && me.alive && k2 === wkey;
   const vg = VIEW[wkey];
-  if (wkey !== fpLastKey) { if (wkey === 'knife' && fpLastKey != null) knifeDrawT = now; fpLastKey = wkey; } // puxou a faca: gira na mão
+  if (wkey !== fpLastKey) { if (fpLastKey != null) { if (wkey === 'knife') knifeDrawT = now; else fpDrawT = now; } fpLastKey = wkey; } // puxou a faca: gira na mão; as outras: sobem rapidinho
   if (firstPerson) fpRefreshArms(); // braços do seu boneco (refaz se mudou a roupa/o time)
   { const spd = Math.hypot(me.vx, me.vz), k = Math.min(1, dtR * 8);
     fpRunK += ((me.sprinting && spd > 30 ? 1 : 0) - fpRunK) * k; fpWalkK += ((me.grounded && spd > 30 && !me.sprinting ? 1 : 0) - fpWalkK) * k; }
@@ -4988,15 +5011,25 @@ function frame(now) {
     const run = fpRunK * (1 - adsK), wb = fpWalkK * (1 - adsK), ph = now / (run > 0.5 ? 120 : 165);
     const bobX = Math.cos(ph) * (0.55 * wb + 0.9 * run), bobY = Math.abs(Math.sin(ph)) * (0.6 * wb + 1.1 * run);
     const throwK = wkey === 'mao' ? swing : 0; // bola de neve: joga por cima (a mão vai pra frente e desce, igual arremesso)
-    const sw = throwK ? 0 : swing, ta = Math.sin(Math.min(1, (1 - throwK)) * Math.PI) * (throwK > 0 ? 1 : 0); // ta: meio do arremesso
+    const sw = throwK || wkey === 'knife' ? 0 : swing, ta = Math.sin(Math.min(1, (1 - throwK)) * Math.PI) * (throwK > 0 ? 1 : 0); // ta: meio do arremesso
     vg.position.set(base[0] - adsK * 1.2 + ox + bobX - 1.5 * run - 4 * throwK, base[1] - adsK * 0.8 + oy + sw * 5 + bobY + 3.2 * run + 3 * ta - 4 * throwK * throwK, base[2] + kick * 3 * (throwK ? 0 : 1) - sw * 6 + 2 * run - 12 * throwK);
     vg.rotation.x = kick * 0.25 * (throwK ? 0 : 1) + rx - sw * 0.6 + 0.62 * run - 1.2 * throwK;
     vg.rotation.y = 0.28 * run;
     vg.rotation.z = (wkey === 'arco' && !vg.userData.cb ? 0.25 : 0) + rz + 0.22 * run; // (arco antigo era inclinado; a besta não)
     if (wkey === 'knife' && vg.userData.kp) { // saque da faca: sobe girando 2 voltas em volta do dedo (tipo karambit) e para na mão
       const u = clamp01((now - knifeDrawT) / 650), e = 1 - Math.pow(1 - u, 3);
-      vg.userData.kp.rotation.set(-(1 - e) * 0.7, (1 - e) * Math.PI * 4, (1 - e) * 0.4); vg.position.y -= (1 - e) * 5; vg.rotation.x -= (1 - e) * 0.5;
+      vg.userData.kp.rotation.set(-(1 - e) * 0.7, (1 - e) * Math.PI * 4, (1 - e) * 0.4 - 0.85 * run); vg.position.y -= (1 - e) * 5; vg.rotation.x -= (1 - e) * 0.5; // (correndo: lâmina pra cima)
+      if (swing > 0) { // (v0.30) facada na horizontal (tipo CS/Valorant): puxa pra direita, corta pra esquerda e volta
+        const q = 1 - swing, sm2 = (t) => { t = clamp01(t); return t * t * (3 - 2 * t); };
+        const x = q < 0.25 ? 5 * sm2(q / 0.25) : q < 0.65 ? 5 - 17 * sm2((q - 0.25) / 0.4) : -12 * (1 - sm2((q - 0.65) / 0.35)), a = Math.sin(Math.PI * q);
+        vg.position.x += x; vg.position.y -= a * 1.5; vg.position.z -= a * 5; vg.rotation.y += x * 0.07; vg.rotation.z -= a * 0.95; vg.rotation.x -= a * 0.25;
+      }
+    } else { // puxou a besta / estilingue / bola de neve / varinha: sobe de baixo girando um pouco (mais rápido que a faca)
+      const u = clamp01((now - fpDrawT) / 320), e = 1 - Math.pow(1 - u, 3);
+      if (e < 1) { vg.position.y -= (1 - e) * 7; vg.rotation.x -= (1 - e) * 0.7; vg.rotation.z += (1 - e) * 0.35; }
     }
+    // besta correndo: solta a mão de apoio da frente (ela desce, sai da tela) e levanta a besta só com a direita
+    if (vg.userData.leftArm) { const L = vg.userData.leftArm, r0 = L.userData.rest; L.position.set(r0.x + 2 * run, r0.y - 16 * run, r0.z + 8 * run); L.rotation.x = 0.6 * run; }
     const hasAmmo = me.ammo[me.primary] > 0;
     vg.traverse((o) => {
       // besta: a corda puxa pra trás (engatilha) e a flecha nova desliza pro lugar
@@ -5017,7 +5050,7 @@ function frame(now) {
         o.scale.setScalar(Math.max(0.05, 0.35 + 0.65 * u)); o.position.x = shake; o.visible = (reloading ? ru > 0.35 : hasAmmo) && swing < 0.3; // (saiu da mão no arremesso)
       }
       // varinha: dá uma volta na mão e a pontinha recarrega o brilho
-      if (o.userData.wandView) o.rotation.y = reloading ? sm(0.1, 0.9, ru) * Math.PI * 4 : 0;
+      if (o.userData.wandView) o.rotation.y = reloading ? sm(0.1, 0.9, ru) * Math.PI * 4 : wkey === 'varinha' ? (1 - clamp01((now - fpDrawT) / 320)) * Math.PI * 2 : 0; // (puxou: dá uma volta)
       if (o.userData.wandTip) {
         const u = reloading ? sm(0.3, 1, ru) : sm(0, 1, cu);
         o.scale.setScalar(0.35 + 0.65 * u + (reloading ? Math.sin(now / 50) * 0.35 * dip : 0)); o.material.emissiveIntensity = 0.6 + 1.6 * u;
@@ -5065,13 +5098,90 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
+// ---------- modo magia: escudo (mago), olho (capuz), teleporte (ladino), parede de pedra (cavaleiro), investida (bárbaro)
+// e a vassoura de todo mundo (segurar Espaço no ar) ----------
+const MAGIC_FX = { eyes: new Map(), walls: new Map() };
+const _shieldGeo = new THREE.SphereGeometry(1, 24, 16);
+let _wallMat = null, fpBroom = null;
+function makeBroom() {
+  const g = new THREE.Group(), wood = mat(0x7a4f2a), straw = mat(0xd9b36a);
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.7, 80, 8), wood); stick.rotation.x = Math.PI / 2; stick.position.z = 6; g.add(stick);
+  const br = new THREE.Mesh(new THREE.ConeGeometry(8, 30, 12), straw); br.rotation.x = Math.PI / 2; br.position.z = -44; g.add(br); // vassoura (a palha fica atrás)
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.6, 3.5, 10), mat(0x8b2e2e)); band.rotation.x = Math.PI / 2; band.position.z = -30; g.add(band);
+  return g;
+}
+function makeEye(team) {
+  const g = new THREE.Group(), col = TEAM_EMIS[team] || 0xffffff;
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(10, 20, 14), new THREE.MeshStandardMaterial({ color: 0xf4f1ea, roughness: 0.35, emissive: 0x333333 })));
+  const iris = new THREE.Mesh(new THREE.SphereGeometry(5.2, 16, 10), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 1.2 })); iris.position.z = 7; g.add(iris);
+  const pupil = new THREE.Mesh(new THREE.SphereGeometry(2.4, 10, 8), mat(0x05060a)); pupil.position.z = 10.6; g.add(pupil);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW_TEX, color: col, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending })); glow.scale.setScalar(70); g.add(glow);
+  return g;
+}
+// brilho que abre e some (teleporte, investida, bloqueio do escudo...)
+function magicPuff(x, y, z, color, size, n, now) {
+  const objs = [];
+  for (let i = 0; i < (n || 6); i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW_TEX, color, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending })); s.position.set(x + (Math.random() - 0.5) * 20, y + Math.random() * 40, z + (Math.random() - 0.5) * 20); s.scale.setScalar(size * (0.5 + Math.random() * 0.6)); s.userData.v = [(Math.random() - 0.5) * 60, 30 + Math.random() * 60, (Math.random() - 0.5) * 60]; scene.add(s); objs.push(s); }
+  effects.push({ t0: now, d: 650, objs, upd: (t, dt) => { for (const s of objs) { s.position.x += s.userData.v[0] * dt; s.position.y += s.userData.v[1] * dt; s.position.z += s.userData.v[2] * dt; s.material.opacity = 0.9 * (1 - t); s.scale.multiplyScalar(1 + dt * 1.5); } }, end: () => { for (const s of objs) s.material.dispose(); } });
+}
+function magicEvent(e, now) {
+  const p = e.id != null ? sim.players.get(e.id) : null, col = p ? (TEAM_EMIS[p.team] || 0xffffff) : 0xc4b5fd;
+  if (e.type === 'magic') {
+    sfxAt('magic', e.x, e.z, e.id === 'me' ? undefined : { far: true, pitch: 0.8, gain: 0.6 });
+    if (e.kind === 'blink') { magicPuff(e.x0, e.y, e.z0, 0xa78bfa, 44, 8, now); magicPuff(e.x1, e.y, e.z1, 0xa78bfa, 44, 8, now); }
+    else if (e.kind === 'dash') magicPuff(e.x, e.y, e.z, 0xf59e0b, 36, 6, now);
+    else if (e.kind === 'shield') magicPuff(e.x, e.y + 10, e.z, col, 50, 5, now);
+    else if (e.kind === 'eye') magicPuff(e.ex, e.ey - 20, e.ez, col, 40, 5, now);
+    else if (e.kind === 'wall') magicPuff(e.x, e.y, e.z, 0xb8a98c, 40, 6, now);
+    if (e.id === 'me') feed('✨ ' + (MAGIC_NAME[e.kind] || 'Magia') + '!');
+  }
+  if (e.type === 'shield_block') { magicPuff(e.x, e.y - 20, e.z, 0x93c5fd, 30, 4, now); sfxAt('bounce', e.x, e.z); }
+  if (e.type === 'eye_absorb') { magicPuff(e.x, e.y - 20, e.z, 0xffffff, 22, 2, now); }
+  if (e.type === 'dash_hit') { sfxAt('hit', e.x, e.z); if (e.victim === 'me') feed('💥 Levou uma investida!'); }
+}
+function updateMagicFx(now) {
+  const on = !!(sim && sim.magic);
+  for (const [id, a] of avatars) {
+    const p = sim.players.get(id); if (!p) continue;
+    const sh = on && p.alive && (p.shieldUntil || 0) > sim.time;
+    if (sh && !a.shieldM) { a.shieldM = new THREE.Mesh(_shieldGeo, new THREE.MeshStandardMaterial({ color: TEAM_EMIS[p.team] || 0xffffff, emissive: TEAM_EMIS[p.team] || 0xffffff, emissiveIntensity: 0.6, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide })); a.root.add(a.shieldM); }
+    if (a.shieldM) { a.shieldM.visible = sh; if (sh) { const k = 1 + 0.04 * Math.sin(now / 120); a.shieldM.scale.set(36 * k, 46 * k, 36 * k); a.shieldM.position.y = 32; a.shieldM.material.opacity = ((p.shieldHits || 1) > 1 ? 0.22 : 0.13) + 0.05 * Math.sin(now / 90); } }
+    const gl = on && p.alive && !!p.gliding;
+    if (gl && !a.broomG) { a.broomG = makeBroom(); a.root.add(a.broomG); }
+    if (a.broomG) { a.broomG.visible = gl; if (gl) { a.broomG.rotation.y = a.model.rotation.y; a.broomG.position.y = 12 + Math.sin(now / 200) * 1.5; } }
+  }
+  const seenE = new Set();
+  if (on) for (const E of sim.eyes || []) {
+    seenE.add(E.id); let m = MAGIC_FX.eyes.get(E.id);
+    if (!m) { m = makeEye(E.team); scene.add(m); MAGIC_FX.eyes.set(E.id, m); }
+    m.position.set(E.x, E.y + Math.sin(now / 300) * 3, E.z); m.rotation.y = now / 600; const left = E.until - sim.time; m.scale.setScalar(left < 0.4 ? Math.max(0.05, left / 0.4) : 1);
+  }
+  for (const [id, m] of MAGIC_FX.eyes) if (!seenE.has(id)) { scene.remove(m); MAGIC_FX.eyes.delete(id); }
+  const seenW = new Set();
+  if (on) for (const Wd of sim.magicWalls || []) {
+    seenW.add(Wd.id); let m = MAGIC_FX.walls.get(Wd.id); const b = Wd.box, h = b.top - b.y0;
+    if (!m) {
+      if (!_wallMat) { const t = wallTexture('#8d877c', 'stone'); t.wrapS = t.wrapT = THREE.RepeatWrapping; _wallMat = new THREE.MeshStandardMaterial({ map: t, roughness: 0.95 }); }
+      const w = b.x1 - b.x0, d = b.z1 - b.z0, g = new THREE.BoxGeometry(w, h, d); boxUV(g, w, h, d, 1 / 64);
+      m = new THREE.Mesh(g, _wallMat); m.position.set((b.x0 + b.x1) / 2, b.y0 + h / 2, (b.z0 + b.z1) / 2); m.castShadow = m.receiveShadow = true; m.userData.t0 = now; scene.add(m); MAGIC_FX.walls.set(Wd.id, m);
+    }
+    const k = Math.min(1, (now - m.userData.t0) / 220), left = Wd.until - sim.time, sy = Math.max(0.02, k * (left < 0.3 ? Math.max(0, left) / 0.3 : 1)); // sobe do chão e afunda no fim
+    m.scale.y = sy; m.position.y = b.y0 + h * sy / 2;
+  }
+  for (const [id, m] of MAGIC_FX.walls) if (!seenW.has(id)) { scene.remove(m); m.geometry.dispose(); MAGIC_FX.walls.delete(id); }
+  const me = sim.players.get('me');
+  $('shieldfx').style.opacity = on && me && me.alive && (me.shieldUntil || 0) > sim.time ? '1' : '0';
+  if (!fpBroom) { fpBroom = makeBroom(); fpBroom.scale.setScalar(0.35); fpBroom.position.set(2, -15, -20); fpBroom.rotation.set(0.35, 0.15, 0); fpBroom.visible = false; fpCam.add(fpBroom); } // (1ª pessoa: o cabo da vassoura embaixo)
+  fpBroom.visible = on && !!me && me.alive && !!me.gliding && S.cam === '1';
+}
 function handleEvent(e, now) {
   addEffect(e, now);
+  if (e.type === 'magic' || e.type === 'shield_block' || e.type === 'eye_absorb' || e.type === 'dash_hit') magicEvent(e, now);
   const a = avatars.get(e.id), p = e.id && sim.players.get(e.id);
   const pos = p ? [p.x, p.z] : (a ? [a.root.position.x, a.root.position.z] : null);
   if (e.type === 'shot' && p && e.id !== 'me') shotSeen.set(e.id, { t: now, x: p.x, z: p.z }); // aparece no minimapa quando atira
   if (e.type === 'shot' && a) { const s = SHOOT_ANIM[e.weapon]; a.trigger(s[0], s[1], now); if (e.id === 'me') { kick = 1; if (e.weapon === 'mao' || e.weapon === 'disco') swing = 1; } if (pos) sfxAt(e.weapon === 'varinha' ? 'magic' : 'shot', pos[0], pos[1], e.id === 'me' ? undefined : { far: true, pitch: 0.62, gain: 0.5 }); } // tiro dos outros: mais baixo e mais grave
-  if (e.type === 'knife' && a) { a.trigger('1H_Melee_Attack_Stab', 1.9, now); if (e.id === 'me') swing = 1; if (pos) sfxAt('knife', pos[0], pos[1]); }
+  if (e.type === 'knife' && a) { a.trigger(CLIPS.KnifeSlice ? 'KnifeSlice' : '1H_Melee_Attack_Stab', 1.9, now); if (e.id === 'me') swing = 1; if (pos) sfxAt('knife', pos[0], pos[1]); }
   if ((e.type === 'nade_throw' || e.type === 'smoke_throw') && a) { a.trigger('Throw', 2.2, now); if (e.id === 'me') { nadeThrowAnim = { t: now, kind: e.type === 'nade_throw' ? 'nade' : 'smoke', k: e.k != null ? e.k : 0.6 }; SFX.play('throw', 1); } } // (arremesso dos outros não faz som)
   if (e.type === 'drink' && a) { a.trigger('Use_Item', 1.1, now); if (e.id === 'me') { healFx = 1.2; feed('🧪 +1 vida'); } if (pos) sfxAt('drink', pos[0], pos[1]); }
   if (e.type === 'pickup' && e.id === 'me') { feed(e.kind === 'potion' ? '🧪 Poção reabastecida' : '💣 Granada/fumaça reabastecida'); SFX.play('pickup', 1); }
@@ -5154,7 +5264,7 @@ loadModels().then(() => {
     }).catch((e) => console.error('editor 3D', e));
   }
 }).catch((e) => { $('loading').textContent = 'Erro ao carregar os bonecos: ' + e.message; console.error(e); });
-window.__pb3d = { get sim() { return sim; }, get mapInfo() { return mapInfo; }, killcam, lock: (v) => { locked = v; showMenu(!v); }, keys,
+window.__pb3d = { get sim() { return sim; }, get camD() { return thirdCamD; }, get mapInfo() { return mapInfo; }, killcam, lock: (v) => { locked = v; showMenu(!v); }, keys,
   get BASE() { return BASE; }, get scene() { return scene; }, get camera() { return camera; }, get edit3d() { return EDIT3D; },
   fx: { eruptFx: (x, z, d) => eruptFx(x, z, 84, performance.now(), d) },
   step: (sec) => { const now = performance.now(); for (let i = 0; i < Math.round(sec * 60); i++) { const evs = sim.step(STEP); killcam.record(sim); for (const e of evs) handleEvent(e, now); } } }; // testes

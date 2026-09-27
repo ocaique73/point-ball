@@ -1,6 +1,7 @@
 # Ideias de habilidades especiais (pra aplicar depois)
 
-> Só ideias — **nada disso está no jogo ainda**. Estilo "minibruxo": cada personagem com uma habilidade própria.
+> Estilo "minibruxo": cada personagem com uma habilidade própria.
+> **v0.30: já estão no jogo (Modo magia)** — Escudo (Maga), Olho (Ladino de capuz), Teleporte (Ladino), Parede de pedra (Cavaleiro), Investida (Bárbaro) e a Vassoura (todo mundo). O resto da lista continua só como ideia.
 
 ## Como funcionaria
 - **1 habilidade por personagem** na tecla **Q**, com recarga de **20 a 30 s**.
