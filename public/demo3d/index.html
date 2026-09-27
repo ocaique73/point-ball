@@ -131,7 +131,7 @@
 <div id="heal"></div>
 
 <div id="menu"><div class="card">
-  <header><h2>Point Ball 3D</h2><span id="loading" style="color:var(--muted)">Carregando os bonecos...</span></header>
+  <header><h2>Point Ball 3D <span id="paused-tag" style="display:none;font-size:14px;color:#facc15;vertical-align:middle">⏸ pausado</span></h2><span id="loading" style="color:var(--muted)">Carregando os bonecos...</span></header>
   <div class="tabs">
     <div class="tab on" data-pane="p-game">Jogo</div>
     <div class="tab" data-pane="p-look">Personagem</div>
@@ -144,6 +144,7 @@
     <a class="tablink" href="/demo3d/editor.html" target="_blank" title="Abre o editor de mapa e de efeitos numa aba nova">🛠️ Editor de mapa</a>
   </div>
   <div class="pane on" id="p-game">
+    <label class="field"><span>Pausar no menu (Esc)</span><select id="o-pause"><option value="1">Pausa quando abro o menu (jogando sozinho)</option><option value="0">Não pausa</option></select><span></span></label>
     <label class="field"><span>Câmera</span><select id="o-cam"><option value="1">1ª pessoa</option><option value="3">3ª pessoa (por trás)</option></select><span></span></label>
     <label class="field"><span>Mapa</span><select id="o-map"><option value="deserto">Deserto</option><option value="neve">Neve</option><option value="floresta">Floresta</option><option value="nave">Nave espacial (base lunar)</option><option value="portal">Portais</option><option value="vulcao">Vulcão</option><option value="escuro">Sala escura</option><option value="cidade">Cidade à noite</option><option value="metro">Estação de metrô</option><option value="mar">Plataforma no mar</option><option value="obra">Canteiro de obras</option><option value="fabrica">Fábrica</option><option value="castelo">Castelo</option><option value="navio">Navio na tempestade</option><option value="teste">Sala de teste</option></select><span></span></label>
     <label class="field"><span>Modo de jogo</span><select id="o-mode"><option value="tdm">Mata-mata em equipe</option><option value="rounds">Rounds (eliminação)</option><option value="ffa">Mata-mata cada um por si</option><option value="koth">Rei da colina</option><option value="livre">Treino livre (sem fim)</option></select><span></span></label>
@@ -157,7 +158,8 @@
     <label class="field"><span>Killcam final (última kill do round/partida)</span><select id="o-kc"><option value="1">Ligada</option><option value="0">Desligada</option></select><span></span></label>
     <label class="field"><span>Zoom ao mirar (botão direito)</span><select id="o-adszoom"><option value="1">Com zoom</option><option value="0">Sem zoom</option></select><span></span></label>
     <label class="field"><span>Sombras</span><select id="o-shadow"><option value="1">Ligadas</option><option value="0">Desligadas</option></select><span></span></label>
-    <label class="field"><span>Campo de visão (FOV)</span><input type="range" id="o-fov" min="60" max="110" step="1"><span class="v" id="v-fov"></span></label>
+    <label class="field"><span>Campo de visão (FOV) — não muda o tamanho da arma nem do boneco</span><input type="range" id="o-fov" min="60" max="110" step="1"><span class="v" id="v-o-fov"></span></label>
+    <label class="field"><span>Distância da arma (1ª pessoa, %)</span><input type="range" id="o-gundist" min="60" max="150" step="5"><span class="v" id="v-o-gundist"></span></label>
     <label class="field"><span>Distância da câmera (3ª pessoa)</span><input type="range" id="o-camdist" min="80" max="280" step="5"><span class="v" id="v-o-camdist"></span></label>
     <label class="field"><span>Lado do personagem (3ª pessoa)</span><select id="o-camside"><option value="1">Câmera no ombro direito</option><option value="-1">Câmera no ombro esquerdo</option><option value="0">Câmera no meio</option></select><span></span></label>
   </div>
@@ -199,7 +201,7 @@
     <div id="hud-list"></div>
   </div>
   <div class="pane" id="p-keys">
-    <label class="field"><span>Sensibilidade do mouse</span><input type="range" id="o-sens" min="0.2" max="6" step="0.05"><span class="v" id="v-sens"></span></label>
+    <label class="field"><span>Sensibilidade do mouse</span><input type="range" id="o-sens" min="0.2" max="6" step="0.05"><span class="v" id="v-o-sens"></span></label>
     <label class="field"><span>Inverter mouse (Y)</span><select id="o-invert"><option value="0">Não</option><option value="1">Sim</option></select><span></span></label>
     <label class="field"><span>Som</span><select id="o-mute"><option value="0">Ligado</option><option value="1">Mudo</option></select><span></span></label>
     <div class="keys">

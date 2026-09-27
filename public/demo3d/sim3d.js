@@ -334,6 +334,7 @@ export class Sim3D {
     this.slopes = opts.slopes || [];
     // navio: fora do casco é mar (cai e morre); o navio balança (inclina e sobe/desce) e isso mexe no pulo
     this.spawnX = opts.spawnX || null; // faixa (x) onde o time A nasce (o B é espelhado)
+    this.spawnOpen = !!opts.spawnOpen; // (navio) só nasce onde não tem nada em cima (nem convés alto, nem degrau)
     this.spawnZ = opts.spawnZ || null; this.spawnRot = !!opts.spawnRot; // faixa (z) do time A; spawnRot: o B nasce girado 180° (fábrica em Z)
     this.moat = opts.moat || null; // castelo: lago em volta da ilha
     this.outM = opts.outM || 80; // até onde o tiro vai fora do mapa (mar: até o navio da torcida)
@@ -570,7 +571,7 @@ export class Sim3D {
       const x = ffa ? 70 + Math.random() * (this.W - 140) : p.team === 'A' ? sxv : this.W - sxv;
       let z = 80 + Math.random() * (this.H - 160);
       if (this.spawnZ && !ffa) { const zz = this.spawnZ[0] + Math.random() * (this.spawnZ[1] - this.spawnZ[0]); z = p.team === 'A' || !this.spawnRot ? zz : this.H - zz; } // (fábrica em Z: o vermelho nasce girado)
-      if (this.boxes.some((b) => b.y0 < this.P.height && this.circleBox(x, z, r, b)) || this.holeAt(x, z, -r - 20) || !this.inside(x, z, r + 4) || this.slopes.some((S) => x > S.x0 - r && x < S.x1 + r && z > S.z0 - r && z < S.z1 + r) || (this.dunes && i < 50 && this.dunes.at(x, z) > 25)) continue; // (deserto: nasce no chão, não em cima da pirâmide)
+      if (this.boxes.some((b) => (this.spawnOpen || b.y0 < this.P.height) && this.circleBox(x, z, r, b)) || (this.spawnOpen && this.ladders && this.ladders.some((L) => Math.hypot(L.x - x, L.z - z) < r + 40)) || this.holeAt(x, z, -r - 20) || !this.inside(x, z, r + 4) || this.slopes.some((S) => x > S.x0 - r && x < S.x1 + r && z > S.z0 - r && z < S.z1 + r) || (this.dunes && i < 50 && this.dunes.at(x, z) > 25)) continue; // (deserto: nasce no chão, não em cima da pirâmide)
       if (!ffa) { p.x = x; p.z = z; break; }
       let d = 1e9; for (const q of this.players.values()) if (q !== p && q.alive) d = Math.min(d, Math.hypot(q.x - x, q.z - z));
       if (d > bestD) { bestD = d; p.x = x; p.z = z; }
