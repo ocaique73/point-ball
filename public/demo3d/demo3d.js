@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { Sim3D, WEAPONS, WEAPON_IDS, P, PORTAL, HOLE, DuneField, holeEdgeR, TRAIN, WAVE, CEILING_Y, LAMP, TREE, TORNADO, FROST, METEOR, PLAT, AIM, DRINK, DOOR_HOLD, CRANE, craneAngle, pistonTop, DRAGON, dragonX } from '/demo3d/sim3d.js';
 import { world3D, simOptions, IGLOO, TREEHOUSE, MAPS3D, TOWER, SHIP, setEditOverride, activeEdits } from '/demo3d/world3d.js';
 import { FX_DEFAULT } from '/demo3d/fx3d.js';
@@ -20,7 +21,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 // ---------- configurações (ficam salvas neste navegador) ----------
 const DEFAULTS = {
-  cam: '1', map: 'deserto', bots: '2', allies: '0', level: 'amador', shadow: '1', fov: 80, camDist: 150, camSide: '1', streamer: '0', weapon: 'arco', sens: 1.6, invert: '0',
+  cam: '1', map: 'deserto', bots: '2', allies: '0', level: 'amador', shadow: '1', fov: 80, camDist: 150, camSide: '1', streamer: '0', gunDist: 100, pause: '1', weapon: 'arco', sens: 1.6, invert: '0',
   mode: 'tdm', kills: '30', rounds: '3', hill: '100', mtime: '300', kc: '1', sfx: {}, adszoom: '1',
   die: '1', speed: P.speed, jumpv: P.jumpV, tweapon: WEAPON_IDS[0], wtune: {},
   x: { color: '#ffffff', outline: '1', len: 7, thick: 2, gap: 4, dot: '1', dotsize: 2, ring: '1', ringr: 22, ringw: 2, hit: '1', hitlen: 10, hitw: 1 }
@@ -255,7 +256,7 @@ const SFX = (() => {
       ['Mudo', () => {}]
     ],
     wave: [
-      ['Onda quebrando (novo)', (v, o) => { noise(2.2, 0.42 * v, O(o, { type: 'lowpass', freq: 180, sweep: 520, attack: 0.45 })); noise(1.6, 0.36 * v, O(o, { type: 'lowpass', freq: 2400, sweep: 500, attack: 0.03, delay: 0.5 })); noise(2.4, 0.08 * v, O(o, { type: 'highpass', freq: 3200, attack: 0.3, delay: 0.7 })); tone(48, 1.4, 'sine', 0.2 * v, O(o, { delay: 0.45 })); }],
+      ['Onda quebrando (grave)', (v, o) => { noise(2.4, 0.5 * v, O(o, { type: 'lowpass', freq: 150, sweep: 330, attack: 0.5 })); noise(1.8, 0.34 * v, O(o, { type: 'lowpass', freq: 560, sweep: 260, attack: 0.08, delay: 0.5 })); tone(44, 1.6, 'sine', 0.26 * v, O(o, { delay: 0.45 })); tone(70, 0.7, 'sine', 0.14 * v, O(o, { delay: 0.5 })); }], // (v0.28: sem o chiado agudo)
       ['Onda (rugido)', (v, o) => noise(1.8, 0.5 * v, O(o, { type: 'lowpass', freq: 300, sweep: 1400 }))],
       ['Mar batendo', (v, o) => { noise(1.2, 0.45 * v, O(o, LP(700))); noise(0.6, 0.3 * v, O(o, Object.assign(HP(2000), { delay: 0.8 }))); }],
       ['Trovão de água', (v, o) => { noise(1.5, 0.5 * v, O(o, LP(250))); tone(50, 1.2, 'sine', 0.3 * v, o); }],
@@ -339,7 +340,8 @@ const camera = new THREE.PerspectiveCamera(S.fov, 1, 1.5, 8000);
 scene.add(camera);
 // arma/mãos da 1ª pessoa numa cena própria, desenhada por cima (limpa só a profundidade): a arma nunca entra no chão,
 // na parede ou na escada, e a luz dela não depende do lugar (só segue a cor/força da luz do mapa)
-const fpScene = new THREE.Scene(), fpCam = new THREE.PerspectiveCamera(S.fov, 1, 1.5, 400); fpScene.add(fpCam);
+const FP_FOV = 74; // (v0.28) a arma tem o próprio campo de visão: mudar o FOV do jogo não muda o tamanho dela
+const fpScene = new THREE.Scene(), fpCam = new THREE.PerspectiveCamera(FP_FOV, 1, 1, 600); fpScene.add(fpCam);
 const fpHemi = new THREE.HemisphereLight(0xffffff, 0x445566, 1.3), fpSun = new THREE.DirectionalLight(0xffffff, 1.6); fpSun.position.set(0.45, 1, 0.7); fpScene.add(fpHemi, fpSun);
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
@@ -1479,14 +1481,14 @@ function buildMetro(w) {
     const m = new THREE.Mesh(new THREE.ShapeGeometry(sh, 20), dark); m.position.set(x, 0, z); m.rotation.y = ry; mapGroup.add(m);
     const fr = new THREE.Mesh(new THREE.TorusGeometry(84, 7, 6, 20, Math.PI), frameM); fr.position.set(x, 150, z); fr.rotation.y = ry; mapGroup.add(fr);
   }
-  // mezanino de cada base (laje em cima de colunas) e as escadas de degraus com faixa amarela
+  // mezanino de cada base (laje presa na parede do fundo) e as escadas de degraus com faixa amarela
   const conc = mat(0xb9b4a6), concD = mat(0x8f8a7e), yel = mat(0xf2c300), metal = mat(0x6b7280, { metalness: 0.7, roughness: 0.35 });
   for (const R of w.walls) {
     if (R.mezz) {
       const slab = new THREE.Mesh(new THREE.BoxGeometry(R.w, R.top - R.y0, R.h), conc); slab.position.set(R.x + R.w / 2, (R.top + R.y0) / 2, R.y + R.h / 2); slab.castShadow = slab.receiveShadow = true; mapGroup.add(slab);
       const inner = R.x < W / 2 ? R.x + R.w : R.x; // beirada virada pro mapa
       const edge = new THREE.Mesh(new THREE.BoxGeometry(4, 3, R.h), yel); edge.position.set(inner + (R.x < W / 2 ? -2 : 2), R.top + 1.5, R.y + R.h / 2); mapGroup.add(edge);
-      for (let zz = R.y + 14; zz < R.y + R.h; zz += Math.max(60, (R.h - 28) / Math.max(1, Math.round((R.h - 28) / 220)))) { const col = new THREE.Mesh(new THREE.BoxGeometry(14, R.y0, 14), concD); col.position.set(inner + (R.x < W / 2 ? -10 : 10), R.y0 / 2, zz); col.castShadow = true; mapGroup.add(col); }
+      // (v0.28: sem as colunas embaixo — a laje fica presa na parede do fundo)
       // corrimão baixinho no fundo (só visual)
       const rail = new THREE.Mesh(new THREE.BoxGeometry(3, 3, R.h), metal); rail.position.set(R.x < W / 2 ? R.x + 4 : R.x + R.w - 4, R.top + 40, R.y + R.h / 2); mapGroup.add(rail);
     }
@@ -2366,7 +2368,7 @@ function buildCastle(w) {
     for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; brackets.push([T.x + Math.cos(a) * (TW.R + TW.bal * 0.4), B + TW.top - 24, T.z + Math.sin(a) * (TW.R + TW.bal * 0.4), TW.bal * 0.8, 20, 10, -a]); }
     // janelas acesas na parede da torre (por fora e por dentro)
     const pil = new THREE.Mesh(new THREE.CylinderGeometry(TW.pillar + 7, TW.pillar + 9, TW.wallTop, 16), stone(2, 4)); pil.position.set(T.x, B + TW.wallTop / 2, T.z); pil.castShadow = pil.receiveShadow = true; mapGroup.add(pil); // coluna redonda
-    for (const [yy0, da] of [[220, 1.2], [220, -2.2], [480, 2.6], [480, -0.9], [760, 0.4], [960, -1.6]]) { const yy = B + yy0;
+    for (const [yy0, da] of [[190, 1.2], [190, -2.2], [410, 2.6], [410, -0.9], [640, 0.4], [820, -1.6]]) { const yy = B + yy0;
       const a = T.a0 + da, q = new THREE.Mesh(new THREE.PlaneGeometry(22, 44), winM); q.position.set(T.x + Math.cos(a) * (TW.R + TW.half + 0.6), yy, T.z + Math.sin(a) * (TW.R + TW.half + 0.6)); q.rotation.y = -a + Math.PI / 2; mapGroup.add(q);
     }
     // arco de pedra em cima das portas
@@ -2388,7 +2390,7 @@ function buildCastle(w) {
     for (const Br of w.bridges || []) {
       const L = Br.x1 - Br.x0, ang = Math.atan2(Br.h1 - Br.h0, L), len = Math.hypot(L, Br.h1 - Br.h0), mid = (Br.h0 + Br.h1) / 2, zc = (Br.z0 + Br.z1) / 2, wd = Br.z1 - Br.z0;
       const g = new THREE.BoxGeometry(len, 18, wd + 20); boxUV(g, len, 18, wd + 20, 1 / 96);
-      const deck = new THREE.Mesh(g, brM); deck.position.set((Br.x0 + Br.x1) / 2, mid - 9, zc); deck.rotation.z = ang; deck.castShadow = deck.receiveShadow = true; mapGroup.add(deck);
+      const deck = new THREE.Mesh(g, brM); deck.position.set((Br.x0 + Br.x1) / 2, mid - 10.5, zc); // (um tiquinho abaixo: não pisca com o chão da ilha) deck.rotation.z = ang; deck.castShadow = deck.receiveShadow = true; mapGroup.add(deck);
       for (const sz of [-1, 1]) { const rg = new THREE.BoxGeometry(len, 36, 10); boxUV(rg, len, 36, 10, 1 / 96); const rail = new THREE.Mesh(rg, brM); rail.position.set((Br.x0 + Br.x1) / 2, mid + 18, zc + sz * (wd / 2 + 5)); rail.rotation.z = ang; mapGroup.add(rail); }
       for (const u of [0.35, 0.62]) { const x = Br.x0 + L * u, h = Br.h0 + (Br.h1 - Br.h0) * u, pg = new THREE.BoxGeometry(34, h - M.water + 10, wd); boxUV(pg, 34, h - M.water + 10, wd, 1 / 96); const pier = new THREE.Mesh(pg, brM); pier.position.set(x, (h + M.water - 10) / 2 - 9, zc); mapGroup.add(pier); } // pilares dentro d'água
     }
@@ -2715,7 +2717,10 @@ function buildMap(mapId) {
       const sh = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(W, 0), new THREE.Vector2(W, -H), new THREE.Vector2(0, -H)]);
       const hole = new THREE.Path(); hole.absarc(M.cx, -M.cz, M.r1, 0, Math.PI * 2, true); sh.holes.push(hole);
       const g = new THREE.ShapeGeometry(sh, 48); g.rotateX(-Math.PI / 2); uvXZ(g); const m = new THREE.Mesh(g, gm); m.receiveShadow = true; mapGroup.add(m);
-      const gi = new THREE.CircleGeometry(M.r0, 64); gi.rotateX(-Math.PI / 2); gi.translate(M.cx, 0, M.cz); uvXZ(gi); const mi = new THREE.Mesh(gi, gm); mi.position.y = world.castleBase || 0; mi.receiveShadow = true; mapGroup.add(mi);
+      // ilha: com um buraco onde fica o salão (o chão de pedra do salão não briga com a grama = não pisca)
+      const ish = new THREE.Shape(); ish.absarc(M.cx, -M.cz, M.r0, 0, Math.PI * 2, false);
+      if (world.hall) { const Hh = world.hall, kt = Hh.kt, hp = new THREE.Path(); hp.moveTo(Hh.kx0 + kt, -(Hh.kz0 + kt)); hp.lineTo(Hh.kx0 + kt, -(Hh.kz1 - kt)); hp.lineTo(Hh.kx1 - kt, -(Hh.kz1 - kt)); hp.lineTo(Hh.kx1 - kt, -(Hh.kz0 + kt)); hp.lineTo(Hh.kx0 + kt, -(Hh.kz0 + kt)); ish.holes.push(hp); }
+      const gi = new THREE.ShapeGeometry(ish, 64); gi.rotateX(-Math.PI / 2); uvXZ(gi); const mi = new THREE.Mesh(gi, gm); mi.position.y = world.castleBase || 0; mi.receiveShadow = true; mapGroup.add(mi);
     } else {
       const ground = new THREE.Mesh(new THREE.PlaneGeometry(W, H), gm);
       ground.rotation.x = -Math.PI / 2; ground.position.set(W / 2, 0, H / 2); ground.receiveShadow = true;
@@ -2841,14 +2846,9 @@ function buildMap(mapId) {
   // teto que ricocheteia tiro (folhas da floresta / vidro da nave / teto da sala escura e dos portais)
   const ceilY = CEILING_Y[mapId];
   if (ceilY && (mapId === 'escuro' || mapId === 'portal' || mapId === 'metro' || mapId === 'fabrica')) buildCeiling(mapId, ceilY, W, H);
-  else if (mapId === 'mar') { // teto de vidro (o tiro ricocheteia nele): vidro clarinho com estrutura de metal e colunas finas nos cantos
-    const glass = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshStandardMaterial({ color: 0xd9efff, transparent: true, opacity: 0.16, roughness: 0.05, metalness: 0.2, depthWrite: false, side: THREE.DoubleSide }));
+  else if (mapId === 'mar') { // teto de vidro liso, quase transparente (o tiro ricocheteia nele) — sem estrutura nem colunas
+    const glass = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshStandardMaterial({ color: 0xe4f4ff, transparent: true, opacity: 0.1, roughness: 0.02, metalness: 0.3, depthWrite: false, side: THREE.DoubleSide }));
     glass.rotation.x = -Math.PI / 2; glass.position.set(W / 2, ceilY, H / 2); mapGroup.add(glass);
-    const fr = [], stepX = W / Math.round(W / 280), stepZ = H / Math.round(H / 280);
-    for (let x = 0; x <= W + 1; x += stepX) fr.push([x, ceilY + 3, H / 2, 6, 6, H]);
-    for (let z = 0; z <= H + 1; z += stepZ) fr.push([W / 2, ceilY + 3, z, W, 6, 6]);
-    for (const [x, z] of [[0, 0], [W, 0], [0, H], [W, H], [W / 2, 0], [W / 2, H], [0, H / 2], [W, H / 2]]) fr.push([x, ceilY / 2, z, 10, ceilY, 10]);
-    instanced(new THREE.BoxGeometry(1, 1, 1), mat(0x9aa4ae, { metalness: 0.7, roughness: 0.35 }), fr);
   }
   else if (mapId === 'nave') buildNaveRoof([]);
   else if (ceilY) {
@@ -3264,10 +3264,8 @@ function makeBullet(b) {
   return s;
 }
 function makeNade(g) {
-  if (g.smoke) { const c = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 14, 10), mat(0x94a3b8, { metalness: 0.4 })); return c; }
-  const grp = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.IcosahedronGeometry(P.nadeR, 1), mat(0x3f5f3a)); grp.add(body);
-  const led = new THREE.Mesh(new THREE.SphereGeometry(2, 6, 4), new THREE.MeshBasicMaterial({ color: 0xff3b30 })); led.position.y = P.nadeR; grp.add(led); grp.userData.led = led;
+  // (v0.28) as granadas são poções: frasco de fumaça e frasco comprido de pólvora com faíscas
+  const grp = potionMesh(g.smoke ? 'smoke' : 'nade'); grp.scale.setScalar(g.smoke ? 2.1 : 1.7);
   return grp;
 }
 // textura suave (gradiente radial) pro fogo da explosão — sem serrilhado de geometria de baixo poli
@@ -3324,7 +3322,7 @@ function addEffect(e, now) {
 // ---------- arma na tela (1ª pessoa) ----------
 const VIEW = {};
 // mãos e braços da 1ª pessoa (arredondados, no estilo dos bonecos): pele da sua roupa e manga na cor do time
-const FPM = { skin: new THREE.MeshStandardMaterial({ color: SKIN[S.look.sk || 0], roughness: 0.62 }), sleeve: new THREE.MeshStandardMaterial({ color: 0x2c4a86, roughness: 0.9 }), cuff: new THREE.MeshStandardMaterial({ color: 0xe8e4da, roughness: 0.85 }), sk: S.look.sk };
+const FPM = { skin: new THREE.MeshStandardMaterial({ color: SKIN[S.look.sk || 0], roughness: 0.62 }), sleeve: new THREE.MeshStandardMaterial({ color: 0x2c4a86, roughness: 0.9 }), cuff: new THREE.MeshStandardMaterial({ color: 0xe8e4da, roughness: 0.85 }), glove: new THREE.MeshStandardMaterial({ color: 0x1c1e23, roughness: 0.5, metalness: 0.05 }), sk: S.look.sk };
 const _fpSph = new THREE.SphereGeometry(1, 16, 12), _fpUp = new THREE.Vector3(0, 1, 0);
 function fpLimb(a, b, r, m) {
   const d = new THREE.Vector3().subVectors(b, a), L = d.length();
@@ -3332,36 +3330,82 @@ function fpLimb(a, b, r, m) {
   o.position.copy(a).addScaledVector(d, 0.5); o.quaternion.setFromUnitVectors(_fpUp, d.normalize()); return o;
 }
 // c = centro da mão, grip = eixo do que ela segura (cabo), elbow = cotovelo (fora da tela) — tudo nas coordenadas da arma.
-// opt.R = raio do que ela segura; opt.cup = mão aberta por baixo (bola de neve, granada, garrafinha); opt.left = mão esquerda
+// opt.R = raio do que ela segura; opt.claw = bola de neve segura por cima; opt.left = mão esquerda
 function fpArm(c, grip, elbow, opt = {}) {
-  const s = opt.s || 1, R = opt.R || 1.1, C = new THREE.Vector3(...c), Y = new THREE.Vector3(...grip).normalize(), E = new THREE.Vector3(...elbow);
+  // (v0.28) luva preta no estilo dos bonecos (blocos com canto arredondado, dedos curtos) e manga longa na cor do time
+  const s = opt.s || 1, R = opt.R || 1.0, C = new THREE.Vector3(...c), Y = new THREE.Vector3(...grip).normalize(), E = new THREE.Vector3(...elbow);
   const arm = new THREE.Group(); arm.position.copy(C); arm.userData.fpArm = true;
   const toE = E.clone().sub(C), X = toE.clone().addScaledVector(Y, -toE.dot(Y)).normalize(), Z = new THREE.Vector3().crossVectors(X, Y);
-  const hand = new THREE.Group(); hand.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z)); arm.add(hand);
-  const sk = FPM.skin, zs = opt.left ? -1 : 1, V = (x, y, z) => new THREE.Vector3(x, y, z);
-  const sp = (x, y, z, sx, sy, sz) => { const o = new THREE.Mesh(_fpSph, sk); o.position.set(x, y, z); o.scale.set(sx, sy, sz); hand.add(o); return o; };
+  const hand = new THREE.Group(); arm.add(hand);
+  if (!opt.claw) hand.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z));
+  const zs = opt.left ? -1 : 1;
+  const rb = (w, h, d, x, y, z, r, rx, ry, rz) => { const o = new THREE.Mesh(fpRB(w, h, d, r), FPM.glove); o.position.set(x, y, z); o.rotation.set(rx || 0, ry || 0, rz || 0); hand.add(o); return o; };
   let wr;
-  if (opt.cup) {
-    // mão aberta por baixo: palma embaixo/atrás, dedos subindo pelo lado da frente e o polegar do lado
-    const pa = -Math.PI * 0.36, px = Math.cos(pa) * (R + 0.5 * s), py = Math.sin(pa) * (R + 0.5 * s);
-    const palm = sp(px, py, 0, 1.9 * s, 0.85 * s, 2.1 * s); palm.rotation.z = pa + Math.PI / 2;
-    for (const z of [0.95 * s, -0.95 * s]) { const t = new THREE.Mesh(new THREE.TorusGeometry(R + 0.45 * s, 0.68 * s, 8, 16, Math.PI * 0.62), sk); t.rotation.z = -Math.PI * 1.02; t.position.z = z; hand.add(t); }
-    hand.add(fpLimb(V(px, py + 0.2 * s, zs * 1.5 * s), V(Math.cos(-Math.PI * 0.12) * R * 0.75, -R * 0.25, zs * (R * 0.8 + 0.4 * s)), 0.62 * s, sk)); // polegar
-    wr = V(px + 1.6 * s, py - 0.5 * s, 0);
+  if (opt.claw) {
+    // bola de neve segura por cima, com a palma atrás e os dedos por cima (pronta pra jogar, não "entregando")
+    const r = R;
+    rb(3.1 * s, 3.3 * s, 1.6 * s, 0.25 * s, -r * 0.55, r * 0.8 + 0.3 * s, 0.6 * s, 0.5);
+    for (let i = 0; i < 4; i++) {
+      const x = (-1.2 + i * 0.8) * s, sh = i === 0 || i === 3 ? -0.25 * s : 0;
+      rb(0.72 * s, 0.82 * s, 2.3 * s, x, r * 0.86 + 0.25 * s + sh, r * 0.42, 0.3 * s, -0.55);
+      rb(0.7 * s, 0.8 * s, 1.5 * s, x, r * 0.62 + sh, -r * 0.35, 0.3 * s, -1.25);
+    }
+    rb(0.95 * s, 2.3 * s, 0.95 * s, -r * 0.78 - 0.3 * s, -r * 0.15, r * 0.35, 0.35 * s, 0, 0, 0.35); // polegar do lado de dentro
+    rb(3.3 * s, 3.0 * s, 1.3 * s, 0.35 * s, -r * 0.55 - 1.0 * s, r * 0.8 + 1.4 * s, 0.5 * s, 0.5); // punho da luva
+    wr = new THREE.Vector3(0.35 * s, -r * 0.55 - 1.4 * s, r * 0.8 + 1.9 * s);
   } else {
-    // mão fechada: costas da mão do lado do braço, 2 anéis de dedos em volta do cabo e o polegar por cima
-    sp(R + 0.85 * s, 0, 0, 1.2 * s, 2.0 * s, 1.5 * s);
-    for (const y of [0.82 * s, -0.82 * s]) { const t = new THREE.Mesh(new THREE.TorusGeometry(R + 0.5 * s, 0.7 * s, 8, 16, Math.PI * 1.4), sk); t.rotation.set(Math.PI / 2, 0, Math.PI * 0.3); t.position.y = y; hand.add(t); }
-    hand.add(fpLimb(V(R + 0.7 * s, 1.1 * s, zs * 1.2 * s), V(R * 0.15, 1.7 * s, zs * (R + 0.25 * s)), 0.6 * s, sk)); // polegar
-    wr = V(R + 1.9 * s, -0.3 * s, 0);
+    // mão fechada em volta do cabo: palma do lado do braço, 4 dedos curtinhos na frente, polegar por cima fechando
+    rb(2.2 * s, 3.3 * s, 3.0 * s, R + 1.0 * s, 0, 0, 0.7 * s);
+    for (let i = 0; i < 4; i++) rb(1.7 * s, 0.76 * s, 2.8 * s, -(R + 0.4 * s), (1.17 - i * 0.78) * s, 0, 0.3 * s);
+    rb(2 * R + 2.3 * s, 3.1 * s, 1.0 * s, 0.3 * s, 0, -zs * (R + 0.45 * s), 0.4 * s); // lado dos dedos (fecha a volta)
+    rb(2.3 * s, 0.95 * s, 1.05 * s, 0.25 * s, 1.1 * s, zs * (R + 0.45 * s), 0.4 * s, 0, 0, 0.2); // polegar
+    rb(1.4 * s, 3.5 * s, 3.4 * s, R + 2.6 * s, -0.15 * s, 0, 0.5 * s); // punho da luva
+    wr = new THREE.Vector3(R + 3.1 * s, -0.15 * s, 0);
   }
-  // pulso -> cotovelo: antebraço de pele, depois a manga do time com o punho claro
+  // punho -> cotovelo: manga comprida do time (com a barra um pouco mais larga)
   const W = wr.applyQuaternion(hand.quaternion), dir = toE.clone().sub(W).normalize();
-  arm.add(fpLimb(W, toE, 1.12 * s, sk));
-  const m0 = W.clone().lerp(toE, 0.24), m1 = toE.clone().addScaledVector(dir, 8);
-  const sl = fpLimb(m0, m1, 1.6 * s, FPM.sleeve); sl.userData.tint = 4; arm.add(sl);
-  const cf = new THREE.Mesh(new THREE.TorusGeometry(1.55 * s, 0.42 * s, 6, 16), FPM.cuff); cf.position.copy(m0); cf.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir); arm.add(cf);
+  const sl = fpLimb(W.clone().addScaledVector(dir, 1.2 * s), toE.clone().addScaledVector(dir, 10), 1.35 * s, FPM.sleeve); sl.userData.tint = 4; arm.add(sl);
+  const hem = new THREE.Mesh(new THREE.CylinderGeometry(1.6 * s, 1.6 * s, 1.3 * s, 16), FPM.sleeve); hem.userData.tint = 4; hem.position.copy(W).addScaledVector(dir, 1.1 * s); hem.quaternion.setFromUnitVectors(_fpUp, dir); arm.add(hem);
   return arm;
+}
+// caixinha com canto arredondado (guardada pra reaproveitar)
+const _fpRB = new Map();
+function fpRB(w, h, d, r) { const k = [w, h, d, r].map((v) => v.toFixed(2)).join(); if (!_fpRB.has(k)) _fpRB.set(k, new RoundedBoxGeometry(w, h, d, 2, Math.min(r, w / 2, h / 2, d / 2) * 0.98)); return _fpRB.get(k); }
+// granadas viraram poções: fumaça = frasco redondo com fumaça cinza dentro; explosiva = frasco comprido com pólvora e faísquinhas
+const POT_GLASS = new THREE.MeshStandardMaterial({ color: 0xe6f6ff, transparent: true, opacity: 0.3, roughness: 0.05, metalness: 0.1, depthWrite: false });
+const POT_CORK = new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 0.9 }), POT_BRASS = new THREE.MeshStandardMaterial({ color: 0xc9a64a, roughness: 0.35, metalness: 0.7 });
+function potionMesh(kind) {
+  const g = new THREE.Group(), fx = []; g.userData.potFx = fx;
+  const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); g.add(o); return o; };
+  if (kind === 'smoke') {
+    const body = add(new THREE.SphereGeometry(3, 20, 16), POT_GLASS, 0, 0, 0); body.scale.y = 0.92; body.renderOrder = 2;
+    const pm = new THREE.MeshStandardMaterial({ color: 0x9aa3ad, roughness: 1, transparent: true, opacity: 0.8 });
+    for (const [x, y, z, r] of [[0.6, -0.8, 0.3, 1.5], [-0.8, -0.5, -0.4, 1.3], [0.2, 0.6, -0.5, 1.2], [-0.3, 0.9, 0.7, 1.0], [0.9, 0.3, 0.8, 0.9]]) { const p = add(new THREE.SphereGeometry(1, 10, 8), pm, x, y, z); p.scale.setScalar(r); p.userData.puff = [x, y, z, r, Math.random() * 6]; fx.push(p); }
+    add(new THREE.CylinderGeometry(0.85, 1.05, 2.4, 14), POT_GLASS, 0, 3.4, 0);
+    add(new THREE.TorusGeometry(0.95, 0.22, 6, 14), POT_BRASS, 0, 2.5, 0).rotation.x = Math.PI / 2;
+    add(new THREE.CylinderGeometry(0.95, 0.8, 1.4, 12), POT_CORK, 0, 5.1, 0);
+  } else {
+    const body = add(new THREE.CylinderGeometry(1.5, 1.5, 7, 18, 1, true), POT_GLASS, 0, 0, 0); body.renderOrder = 2;
+    add(new THREE.SphereGeometry(1.5, 18, 10, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), POT_GLASS, 0, -3.5, 0);
+    const pw = new THREE.MeshStandardMaterial({ color: 0x2b2622, roughness: 1 });
+    add(new THREE.CylinderGeometry(1.3, 1.3, 4.4, 14), pw, 0, -1.3, 0);
+    add(new THREE.SphereGeometry(1.3, 14, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), pw, 0, -3.5, 0);
+    const sm = new THREE.MeshBasicMaterial({ color: 0xffb347 });
+    for (let i = 0; i < 7; i++) { const a = i * 2.4, rr = 0.6 + (i % 3) * 0.25, y = -3.2 + i * 0.6; const sp = add(new THREE.OctahedronGeometry(0.3, 0), sm, Math.cos(a) * rr, y, Math.sin(a) * rr); sp.userData.spark = i; fx.push(sp); }
+    for (const y of [2.6, -2.4]) add(new THREE.TorusGeometry(1.55, 0.2, 6, 16), POT_BRASS, 0, y, 0).rotation.x = Math.PI / 2;
+    add(new THREE.CylinderGeometry(0.8, 1.2, 1.6, 14), POT_GLASS, 0, 4.3, 0);
+    add(new THREE.CylinderGeometry(0.9, 0.75, 1.3, 12), POT_CORK, 0, 5.6, 0);
+    add(new THREE.CylinderGeometry(0.12, 0.12, 1.4, 5), new THREE.MeshStandardMaterial({ color: 0x3a2e24 }), 0.2, 6.9, 0).rotation.z = -0.3; // pavio
+    const tip = add(new THREE.SphereGeometry(0.28, 8, 6), sm, 0.42, 7.6, 0); tip.userData.spark = 9; fx.push(tip);
+  }
+  return g;
+}
+// faísca piscando / fumaça girando devagar dentro do frasco
+function animPotion(g, now) {
+  for (const o of g.userData.potFx || []) {
+    if (o.userData.spark != null) { const k = Math.sin(now / 55 + o.userData.spark * 7.3); o.visible = k > -0.2; o.scale.setScalar(0.6 + 0.6 * Math.max(0, k)); }
+    else if (o.userData.puff) { const [x, y, z, r, ph] = o.userData.puff, t = now / 900 + ph; o.position.set(x + Math.sin(t) * 0.35, y + Math.cos(t * 0.8) * 0.3, z + Math.cos(t) * 0.35); o.scale.setScalar(r * (0.9 + 0.12 * Math.sin(t * 1.7))); }
+  }
 }
 {
   const add = (name, parts) => { const g = new THREE.Group(); parts.forEach((p) => g.add(p)); g.visible = false; fpCam.add(g); VIEW[name] = g; return g; };
@@ -3388,7 +3432,7 @@ function fpArm(c, grip, elbow, opt = {}) {
   {
     const snowB = new THREE.Mesh(new THREE.SphereGeometry(4.5, 16, 12), new THREE.MeshStandardMaterial({ color: 0x93c5fd, roughness: 0.95 })); snowB.position.set(0, 2.5, -3); snowB.userData.tint = 2; snowB.userData.snow = true;
     const bg = new THREE.Group(); bg.scale.setScalar(0.6); bg.add(snowB);
-    add('mao', [bg, fpArm([0, 1.5, -1.8], [0, 1, 0], [8, -13, 15], { cup: true, R: 2.75 })]);
+    add('mao', [bg, fpArm([0, 1.5, -1.8], [0, 1, 0], [8, -13, 15], { claw: true, R: 2.75 })]);
   }
   // arco antigo (antes do modelo da besta carregar) + as 2 mãos da besta: a direita no cabo (gatilho) e a esquerda embaixo da frente
   const bowArc = new THREE.Mesh(new THREE.TorusGeometry(14, 0.9, 6, 20, Math.PI), mat(0x8b5a2b)); bowArc.rotation.z = Math.PI / 2;
@@ -3404,8 +3448,8 @@ function fpArm(c, grip, elbow, opt = {}) {
     const kb = new THREE.Group(); kb.position.set(-0.5, 2, -3); kp.add(kb); kp.userData.body = kb;
     kb.add(m(new THREE.BoxGeometry(1, 2.6, 16), 0xd1d5db, 0, 0, -8, { metalness: 0.8, roughness: 0.25 }), m(new THREE.BoxGeometry(2.2, 3, 6), 0x1f2937, 0, 0, 2));
     add('knife', [kp, fpArm([0.95, -0.43, 2.86], [-0.247, 0.332, -0.91], [8, -13, 16], { R: 0.95 })]).userData.kp = kp; }
-  add('nade', [m(new THREE.IcosahedronGeometry(4.5, 1), 0x3f5f3a, 0, 0, -2), m(new THREE.TorusGeometry(1.6, 0.4, 5, 10), 0xd1d5db, 0, 4.8, -2), fpArm([0, 0, -2], [0, 1, 0], [8, -13, 14], { cup: true, R: 4.6 })]);
-  add('smoke', [m(new THREE.CylinderGeometry(3.6, 3.6, 10, 16), 0x94a3b8, 0, 0, -2, { metalness: 0.4 }), fpArm([0, -1, -2], [0, 1, 0], [8, -13, 14], { R: 3.7 })]);
+  { const pn = potionMesh('nade'); pn.position.set(0, 2, -2); pn.scale.setScalar(1.35); add('nade', [pn, fpArm([0, -2.6, -2], [0, 1, 0], [8, -13, 14], { R: 2.05 })]).userData.pot = pn; }
+  { const ps = potionMesh('smoke'); ps.position.set(0, -1.8, -2); ps.scale.setScalar(1.2); add('smoke', [ps, fpArm([0, 2.3, -2], [0, 1, 0], [8, -13, 14], { R: 1.15 })]).userData.pot = ps; }
   // poção: garrafinha de vidro com líquido (animação de beber em updatePotionView)
   const bottle = new THREE.Group();
   const glass = new THREE.Mesh(new THREE.SphereGeometry(4.6, 14, 10), new THREE.MeshStandardMaterial({ color: 0xdbeafe, transparent: true, opacity: 0.35, roughness: 0.05, metalness: 0.1 }));
@@ -3414,7 +3458,7 @@ function fpArm(c, grip, elbow, opt = {}) {
   const neck = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.8, 5, 10), new THREE.MeshStandardMaterial({ color: 0xdbeafe, transparent: true, opacity: 0.45 })); neck.position.y = 6;
   const cork = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.3, 2.4, 8), mat(0x9a6b3f)); cork.position.y = 9.3; cork.userData.cork = true;
   bottle.add(glass, liquid, neck, cork); bottle.userData.bottle = true;
-  add('potion', [bottle, fpArm([0, 0, 0], [0, 1, 0], [8, -14, 13], { cup: true, R: 4.7 })]);
+  add('potion', [bottle, fpArm([0, 6.2, 0], [0, 1, 0], [8, -14, 13], { R: 1.55 })]);
 }
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 let nadeThrowAnim = null, camSmY = null, kick = 0, swing = 0, sprintFov = 0, adsK = 0, healFx = 0, caveK = 0, pendingKc = null;
@@ -3773,6 +3817,8 @@ bindSetting('o-level', 'level', null, () => { for (const p of sim.players.values
 bindSetting('o-shadow', 'shadow', null, () => { renderer.shadowMap.enabled = S.shadow === '1'; scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => (m.needsUpdate = true)); }); });
 bindSetting('o-fov', 'fov');
 bindSetting('o-camdist', 'camDist');
+bindSetting('o-gundist', 'gunDist');
+bindSetting('o-pause', 'pause');
 bindSetting('o-camside', 'camSide');
 bindSetting('o-weapon', 'weapon', null, () => {
   if (netMode) { if (sim.allowed && !sim.allowed.includes(S.weapon)) mpStatus('Essa arma está bloqueada nesta sala.', 'mp-status2'); else if (socket) socket.emit('3d_action', { t: 'primary', w: S.weapon }); }
@@ -4510,10 +4556,14 @@ const lensScene = new THREE.Scene(), lensCam = new THREE.OrthographicCamera(-1, 
 function renderFP() {
   let any = false; for (const k in VIEW) if (VIEW[k].visible) { any = true; break; }
   if (!any) return;
-  fpCam.projectionMatrix.copy(camera.projectionMatrix); fpCam.projectionMatrixInverse.copy(camera.projectionMatrixInverse);
+  if (fpCam.aspect !== camera.aspect) { fpCam.aspect = camera.aspect; fpCam.updateProjectionMatrix(); }
+  // distância da arma (configuração): afasta/aproxima a arma da câmera sem mudar onde ela aparece na tela
+  const gk = Math.max(0.6, Math.min(1.5, (Number(S.gunDist) || 100) / 100)), moved = [];
+  for (const k in VIEW) { const g = VIEW[k]; if (g.visible) { moved.push([g, g.position.clone()]); g.position.multiplyScalar(gk); } }
   fpHemi.color.copy(hemi.color); fpHemi.groundColor.copy(hemi.groundColor); fpHemi.intensity = Math.min(1.5, Math.max(0.6, hemi.intensity));
   fpSun.color.copy(sun.color); fpSun.intensity = Math.min(1.8, Math.max(0.55, sun.intensity * 0.7));
   const ac = renderer.autoClear; renderer.autoClear = false; renderer.clearDepth(); renderer.render(fpScene, fpCam); renderer.autoClear = ac;
+  for (const [g, p] of moved) g.position.copy(p);
 }
 function renderWithLens(k, now) {
   const v = new THREE.Vector2(); renderer.getDrawingBufferSize(v);
@@ -4644,7 +4694,9 @@ function dispScale(p, dt) {
 function thirdCam(x, y, z, yaw, pitch, ignoreId) {
   const dx = Math.cos(pitch) * Math.cos(yaw), dy = Math.sin(pitch), dz = Math.cos(pitch) * Math.sin(yaw);
   // distância e lado (ombro direito/esquerdo/meio) vêm das configurações
-  const side = Number(S.camSide), sh = 30 * (Number.isFinite(side) ? side : 1), want = Math.max(60, Math.min(300, Number(S.camDist) || 150));
+  // (v0.28) com FOV maior a câmera chega mais perto: o boneco fica do mesmo tamanho na tela
+  const fovK = Math.tan(40 * Math.PI / 180) / Math.tan(Math.max(50, Math.min(120, Number(S.fov) || 80)) * Math.PI / 360);
+  const side = Number(S.camSide), sh = 30 * (Number.isFinite(side) ? side : 1), want = Math.max(50, Math.min(300, Number(S.camDist) || 150)) * fovK;
   const hx = x, hy = y + 60 + (sh === 0 ? 14 : 0), hz = z, rx = -Math.sin(yaw), rz = Math.cos(yaw);
   const bx = -dx, by = -dy * 0.9 + 0.18 + (sh === 0 ? 0.08 : 0), bz = -dz, bl = Math.hypot(bx, by, bz);
   const hit = sim.raycast(hx + rx * sh, hy, hz + rz * sh, bx / bl, by / bl, bz / bl, want, ignoreId);
@@ -4665,12 +4717,17 @@ function frame(now) {
   me.fp = S.cam === '1'; // (killcam: começa na mesma câmera que você estava)
   if (!locked) me.input.fire = false;
   if (netMode) {
+    $('paused-tag').style.display = 'none'; // online: nunca pausa
     me.yaw = netYaw; me.pitch = netPitch;
     if (locked && socket && now - netInputT > 50) {
       netInputT = now;
       socket.emit('3d_input', { fwd: me.input.fwd, side: me.input.side, fire: netFireHeld, sprint: me.input.sprint, aim: me.input.aim, yaw: netYaw, pitch: netPitch, fp: S.cam === '1' });
     }
   } else {
+    // sozinho: com o menu (Esc) aberto o jogo fica pausado (no online nunca pausa)
+    const paused = menuOpen && S.pause !== '0' && !EDIT3D && !killcam.active;
+    $('paused-tag').style.display = paused ? '' : 'none';
+    if (paused) { acc = 0; if (offlineEndAt) offlineEndAt += dtR * 1000; }
     while (acc >= STEP) {
       prevPos = new Map();
       for (const p of sim.players.values()) prevPos.set(p.id, [p.x, p.y, p.z]);
@@ -4807,7 +4864,7 @@ function frame(now) {
     nseen.add(g.id);
     let m = nadeMeshes.get(g.id); if (!m) { m = makeNade(g); scene.add(m); nadeMeshes.set(g.id, m); }
     const [x, y, z] = ip('n' + g.id, g); m.position.set(x, y, z); m.rotation.x = g.spin;
-    if (m.userData.led) m.userData.led.visible = Math.floor(now / (sim.time - g.t0 > P.nadeFuse - 0.6 ? 70 : 200)) % 2 === 0;
+    animPotion(m, now * (sim.time - g.t0 > P.nadeFuse - 0.6 ? 2.5 : 1)); // perto de explodir: faísca mais rápida
   }
   for (const [id, m] of nadeMeshes) if (!nseen.has(id)) { scene.remove(m); nadeMeshes.delete(id); }
   // fumaça
@@ -4886,7 +4943,8 @@ function frame(now) {
     const e = throwing ? sm(clamp01((u - 0.25) / 0.75)) : 0, pull = throwing ? (u < 0.25 ? sm(u / 0.25) : 1 - e) : 0;
     vg.position.set(8 + 3 * pull - 4 * e, -8.5 + 2.2 * pull - 6 * e + Math.sin(now / 90) * 0.15 * k, -23 - 1.5 * pull - 9 * e);
     vg.rotation.set(-0.7 * pull + 1.0 * e, 0.2 * pull, 0.3 * pull - 0.2 * e);
-    vg.children.forEach((o, i) => { if (i < (wkey === 'nade' ? 2 : 1)) o.visible = !throwing || u < 0.3; });
+    vg.children.forEach((o, i) => { if (i < 1) o.visible = !throwing || u < 0.3; });
+    if (vg.userData.pot) animPotion(vg.userData.pot, now);
   }
   else if (vg) {
     const w = sim.WEAPONS[me.primary], reloading = me.weapon === 'primary' && me.reloadUntil;
@@ -4894,7 +4952,7 @@ function frame(now) {
     const ru = reloading ? Math.max(0, Math.min(1, 1 - (me.reloadUntil - sim.time) / w.reload)) : 0;
     const cu = !reloading && me.weapon === 'primary' && me.fireReady > sim.time ? Math.max(0, Math.min(1, 1 - (me.fireReady - sim.time) / w.cd)) : 1;
     const dip = reloading ? Math.sin(Math.PI * ru) : 0, sm = (a, b, u) => { const t = Math.max(0, Math.min(1, (u - a) / (b - a))); return t * t * (3 - 2 * t); };
-    const base = wkey === 'arco' ? [6.5, -7.5, -22] : wkey === 'estilingue' ? [9, -9.5, -22] : wkey === 'mao' ? [8.5, -8.5, -21] : [8, -8, -22];
+    const base = wkey === 'arco' ? [6.5, -7.5, -22] : wkey === 'estilingue' ? [9, -9.5, -22] : wkey === 'mao' ? [8.5, -7.2, -21] : [8, -8, -22];
     let ox = 0, oy = 0, rz = 0, rx = 0;
     if (wkey === 'mao') { oy = -dip * 13; rx = dip * 0.3; } // abaixa a mão pra pegar/apertar outra bolinha
     else if (wkey === 'varinha') { rz = -dip * 0.7; oy = -dip * 3; } // gira a varinha recarregando a magia
@@ -4905,8 +4963,10 @@ function frame(now) {
     // correndo: a arma sobe e empina (não afunda no chão na escada/rampa) e balança no ritmo da corrida; andando: balanço leve
     const run = fpRunK * (1 - adsK), wb = fpWalkK * (1 - adsK), ph = now / (run > 0.5 ? 120 : 165);
     const bobX = Math.cos(ph) * (0.55 * wb + 0.9 * run), bobY = Math.abs(Math.sin(ph)) * (0.6 * wb + 1.1 * run);
-    vg.position.set(base[0] - adsK * 1.2 + ox + bobX - 1.5 * run, base[1] - adsK * 0.8 + oy + swing * 5 + bobY + 3.2 * run, base[2] + kick * 3 - swing * 6 + 2 * run);
-    vg.rotation.x = kick * 0.25 + rx - swing * 0.6 + 0.62 * run;
+    const throwK = wkey === 'mao' ? swing : 0; // bola de neve: joga por cima (a mão vai pra frente e desce, igual arremesso)
+    const sw = throwK ? 0 : swing, ta = Math.sin(Math.min(1, (1 - throwK)) * Math.PI) * (throwK > 0 ? 1 : 0); // ta: meio do arremesso
+    vg.position.set(base[0] - adsK * 1.2 + ox + bobX - 1.5 * run - 4 * throwK, base[1] - adsK * 0.8 + oy + sw * 5 + bobY + 3.2 * run + 3 * ta - 4 * throwK * throwK, base[2] + kick * 3 * (throwK ? 0 : 1) - sw * 6 + 2 * run - 12 * throwK);
+    vg.rotation.x = kick * 0.25 * (throwK ? 0 : 1) + rx - sw * 0.6 + 0.62 * run - 1.2 * throwK;
     vg.rotation.y = 0.28 * run;
     vg.rotation.z = (wkey === 'arco' && !vg.userData.cb ? 0.25 : 0) + rz + 0.22 * run; // (arco antigo era inclinado; a besta não)
     if (wkey === 'knife' && vg.userData.kp) { // saque da faca: sobe girando 2 voltas em volta do dedo (tipo karambit) e para na mão
@@ -4930,7 +4990,7 @@ function frame(now) {
       // mão: aperta a bolinha de neve nova (cresce e treme um pouquinho)
       if (o.userData.snow) {
         const u = reloading ? sm(0.4, 0.95, ru) : sm(0, 1, cu), shake = (reloading ? dip : 1 - cu) * Math.sin(now / 35) * 0.5;
-        o.scale.setScalar(Math.max(0.05, 0.35 + 0.65 * u)); o.position.x = shake; o.visible = reloading ? ru > 0.35 : hasAmmo;
+        o.scale.setScalar(Math.max(0.05, 0.35 + 0.65 * u)); o.position.x = shake; o.visible = (reloading ? ru > 0.35 : hasAmmo) && swing < 0.3; // (saiu da mão no arremesso)
       }
       // varinha: dá uma volta na mão e a pontinha recarrega o brilho
       if (o.userData.wandView) o.rotation.y = reloading ? sm(0.1, 0.9, ru) * Math.PI * 4 : 0;

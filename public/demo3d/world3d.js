@@ -55,7 +55,8 @@ function applyMapEdits(mapId, out, walls, W, H) {
 
 
 export const MAP_SCALE = 1.4;
-export const MAP_SCALE_OF = { deserto: 1.6, castelo: 2.2, navio: 2.0, obra: 1.65, fabrica: 1.7 }; // (obra/fábrica: o formato corta os cantos, então o mapa ficou maior)
+export const MAP_SCALE_OF = { deserto: 1.6, castelo: 2.2, navio: 2.0, obra: 1.65, fabrica: 1.7 };
+export const MAP_SCALE_H = { fabrica: 1.16 }; // (v0.28: fábrica em Z um pouco mais larga — as faixas do Z mais grossas) // (obra/fábrica: o formato corta os cantos, então o mapa ficou maior)
 
 const segRect = (s, W, H, t) => {
   const x1 = s[0] * W, y1 = s[1] * H, x2 = s[2] * W, y2 = s[3] * H;
@@ -97,7 +98,7 @@ const angDist = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)))
 export const SHIP = { castle: 110, house: 170, plankW: 84, plankL: 300, bowW: 60, sea: -150, kill: -185 };
 // castelo: ilha alta no meio (o castelo fica em cima), lago em volta e as pontes
 export const CASTLE = { base: 90, island: 800, moat: 960, bridgeW: 130, water: -40 };
-export const TOWER = { R: 112, half: 8, n: 28, pillar: 24, r0: 31, r1: 104, top: 760, turns: 4, wallTop: 1080, door: 48, lintel: 130, bal: 144, balDoor: 150 };
+export const TOWER = { R: 112, half: 8, n: 28, pillar: 24, r0: 31, r1: 104, top: 646, turns: 4, wallTop: 918, door: 48, lintel: 130, bal: 144, balDoor: 150 }; // (v0.28: torres 15% mais baixas)
 function towerParts(cx, cz, a0, dir) {
   const T = TOWER, segs = [], discs = [], spirals = [], boxes = [];
   const gd = [a0 - dir * 0.2], bd = a0 + dir * 0.42; // porta de baixo (logo antes do começo da rampa) e da sacada
@@ -331,7 +332,7 @@ function buildWalls3D(def, W, H, t, borderH) {
 export function world3D(mapId, G, MAPS, CFG) {
   if (MAPS3D[mapId] && !MAPS[mapId]) MAPS = Object.assign({}, MAPS, MAPS3D);
   const SC = MAP_SCALE_OF[mapId] || MAP_SCALE; // (deserto um pouco maior)
-  const W = Math.round(CFG.mapWidth * SC), H = Math.round(CFG.mapHeight * SC), t = CFG.wallThickness;
+  const W = Math.round(CFG.mapWidth * SC), H = Math.round(CFG.mapHeight * SC * (MAP_SCALE_H[mapId] || 1)), t = CFG.wallThickness;
   const cfg = Object.assign({}, CFG, { mapWidth: W, mapHeight: H });
   const out = { mapId, W, H, t, cfg, walls: [], portalSlots: [], lamps: null, holes: null, safeZones: [], cave: null, igloos: [], doors: [],
     terrain: mapId === 'deserto' ? 'dunes' : null, ceilingY: CEILING_Y[mapId] || null, borderH: BORDER_H[mapId] || null, hazard: MAPS[mapId] ? MAPS[mapId].hazard : null };
@@ -344,8 +345,8 @@ export function world3D(mapId, G, MAPS, CFG) {
   if (mapId === 'metro') {
     out.lanes = MAPS3D.metro.lanes.map((f) => f * W);
     // mezanino alto e comprido em cada base (encostado na parede de trás) + 2 ESCADAS de degrau baixinho (igual ao navio:
-    // a câmera quase não pula) que começam quase na parede do lado; o parapeito da escada é reto (inclinado, sem degrau)
-    const LH = 216, lw = 160, sw = 120, pw = 12, n = 18, sd = 14, run = n * sd, zs = t + 24, z0 = zs + run, z1 = H - z0;
+    // a câmera quase não pula) que começam um pouco afastadas da parede do lado; o parapeito da escada é reto (inclinado, sem degrau)
+    const LH = 216, lw = 160, sw = 120, pw = 12, n = 18, sd = 14, run = n * sd, zs = t + 85, z0 = zs + run, z1 = H - z0; // (v0.28: escada afastada da parede do lado)
     out.ramps = []; out.slopes = [];
     for (const mir of [0, 1]) {
       const X = (x, w) => (mir ? W - x - w : x);
@@ -528,16 +529,17 @@ export function world3D(mapId, G, MAPS, CFG) {
       out.slopes.push(mir ? { x0: W - bx1, x1: W - bx0, z0: H / 2 - hw, z1: H / 2 + hw, axis: 'x', h0: CH, h1: CH + 40, bow: true } : { x0: bx0, x1: bx1, z0: H / 2 - hw, z1: H / 2 + hw, axis: 'x', h0: CH + 40, h1: CH, bow: true });
       // proteção na frente do nascimento: espaço reto, escadinha subindo, um patamar alto e escadinha descendo;
       // no meio do patamar uma parede alta (a janela do capitão não acerta quem nasce) e 2 paredinhas de cada lado pra se proteger e atirar
-      const ra = 0.24 * W, n2 = 5, sd2 = 14, PH = 60, tw = 90, rz0 = 0.3 * H, rz1 = 0.7 * H;
+      const ra = 0.235 * W, n2 = 5, sd2 = 28, PH = 60, tw = 150, rz0 = 0.3 * H, rz1 = 0.7 * H; // (v0.28: escada 2x maior e patamar mais largo)
       for (let k = 1; k <= n2; k++) {
         walls.push({ x: X(ra + (k - 1) * sd2, sd2 + 0.01), y: rz0, w: sd2 + 0.01, h: rz1 - rz0, top: PH * k / n2, sstep: true, guard: true, tint: '#6e4c2d', style: 'plank' });
         walls.push({ x: X(ra + n2 * sd2 + tw + (n2 - k) * sd2, sd2 + 0.01), y: rz0, w: sd2 + 0.01, h: rz1 - rz0, top: PH * k / n2, sstep: true, guard: true, tint: '#6e4c2d', style: 'plank' });
       }
       const tx0 = ra + n2 * sd2; walls.push({ x: X(tx0, tw), y: rz0, w: tw, h: rz1 - rz0, top: PH, guard: true, tint: '#7a5634', style: 'plank' });
-      walls.push({ x: X(tx0, 12), y: 0.42 * H, w: 12, h: 0.16 * H, y0: PH, top: PH + 150, guard: true, tint: '#5e3f25', style: 'plank' }); // parede alta (na beirada de trás)
+      walls.push({ x: X(tx0, 12), y: 0.42 * H, w: 12, h: 0.16 * H, y0: PH, top: PH + 105, guard: true, tint: '#5e3f25', style: 'plank' }); // parede alta (na beirada de trás)
       for (const z of [0.31, 0.375, 0.6, 0.665]) walls.push({ x: X(tx0 + tw - 14, 14), y: z * H, w: 14, h: 0.025 * H, y0: PH, top: PH + 44, guard: true, tint: '#5e3f25', style: 'plank' }); // paredinhas na frente
     }
-    out.spawnX = [0.11 * W, 0.2 * W];
+    // nasce no convés aberto na frente do castelo de popa/proa e dos lados da proteção — nunca embaixo/dentro de nada
+    out.spawnX = [0.2 * W + 24, 0.31 * W]; out.spawnOpen = true;
     // cabine do meio (fechada, mais comprida, com porta pra cada base e uma parede no meio por dentro — o tiro não atravessa
     // o navio e dá pra brigar lá dentro); o teto dela dá pra subir pelas escadas dos 2 lados da porta
     const ha = 0.39 * W, hb = 0.61 * W, hza = 0.38 * H, hzb = 0.62 * H, HT = SH.house, HR = HT + 14, dz = 50, wt = 12;
@@ -655,5 +657,5 @@ export function world3D(mapId, G, MAPS, CFG) {
 // opções do Sim3D a partir do mundo montado
 export function simOptions(w) {
   const E = activeEdits();
-  return { weapons: E.weapons || undefined, params: Object.keys(E.player || {}).length ? E.player : undefined, nade: E.nade || undefined, cfg: w.cfg, hazard: w.hazard, portalSlots: w.portalSlots, holes: w.holes, terrain: w.terrain, ceilingY: w.ceilingY, borderH: w.borderH, lamps: w.lamps, safeZones: w.safeZones, pyramids: w.pyramids, lanes: w.lanes, ship: w.ship, moat: w.moat, ramps: w.ramps, discs: w.discs, spirals: w.spirals, slopes: w.slopes, deck: w.deck, spawnX: w.spawnX, spawnZ: w.spawnZ, spawnRot: w.spawnRot, navPath: w.navPath, outM: w.outM, respawnK: w.respawnK, rooms: w.rooms, ladders: w.ladders, belts: w.belts, segs: w.segs, shape: w.shape };
+  return { weapons: E.weapons || undefined, params: Object.keys(E.player || {}).length ? E.player : undefined, nade: E.nade || undefined, cfg: w.cfg, hazard: w.hazard, portalSlots: w.portalSlots, holes: w.holes, terrain: w.terrain, ceilingY: w.ceilingY, borderH: w.borderH, lamps: w.lamps, safeZones: w.safeZones, pyramids: w.pyramids, lanes: w.lanes, ship: w.ship, moat: w.moat, ramps: w.ramps, discs: w.discs, spirals: w.spirals, slopes: w.slopes, deck: w.deck, spawnX: w.spawnX, spawnOpen: w.spawnOpen, spawnZ: w.spawnZ, spawnRot: w.spawnRot, navPath: w.navPath, outM: w.outM, respawnK: w.respawnK, rooms: w.rooms, ladders: w.ladders, belts: w.belts, segs: w.segs, shape: w.shape };
 }

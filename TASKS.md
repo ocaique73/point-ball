@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 27/09/2026 — v0.27.0 (Three.js): fábrica em Z com ponte-esteira e 5 elevadores, navio com sala do capitão, proteção no nascimento, raios e escorregão, castelo maior numa ilha com fosso e pontes (torres 2x mais altas), obra no meio de uma cidade, 1ª pessoa com mãos/braços, faca girando no saque, câmera da 3ª pessoa nas configurações, armas da sala e modo streamer no online.
+Última atualização: 27/09/2026 — v0.28.0 (Three.js): mãos com luva preta e manga longa do time, granadas viraram poções, bola de neve jogada por cima, FOV separado da distância da arma, pausa no Esc (sozinho), castelo/mar/navio/fábrica/metrô ajustados; ideias de habilidades guardadas em demo3d/IDEIAS-HABILIDADES.md.
 
 ---
 
@@ -323,6 +323,20 @@
 - [x] Godot: mecânica da **Sala escura** (luz apaga/acende sozinha, com lanterna fraca pra dar pra jogar) e do **Vulcão** (4 poças de lava espelhadas que alternam ativa/inativa e doem quando ativas).
 - [ ] Godot: falta a mecânica de **Portais** (teletransporte — é a mais complexa, precisa abrir buracos na parede e sincronizar posição/velocidade) e da **Cidade à noite** (postes que acendem/apagam ao levar tiro; hoje o mapa não é permanentemente escuro ainda).
 - [ ] Godot: **multiplayer do zero** (o Godot não usa o servidor Node/Socket.IO da versão web — precisa de servidor dedicado ENet, salas, times, dono da sala). Fase grande, ainda não iniciada.
+
+- [x] v0.28.0 (Three.js): décima primeira rodada de ajustes do Caique (só no 3D)
+  - [x] **1ª pessoa – mãos**: luva preta no estilo dos bonecos (blocos com canto arredondado, dedos curtos) e manga comprida na cor do time em todas as armas; pegada nova da faca, besta (as 2 mãos), varinha e estilingue
+  - [x] **Granadas viraram poções**: fumaça = frasco redondo com fumaça cinza girando dentro; explosiva = frasco comprido com pólvora, faísquinhas piscando e pavio (na mão e voando)
+  - [x] **Bola de neve**: segura por cima (palma atrás, dedos em cima) e jogada por cima, igual arremesso de verdade
+  - [x] **FOV separado**: mudar o campo de visão não muda o tamanho da arma nem do boneco (3ª pessoa); opção nova **Distância da arma (1ª pessoa, %)**; os números aparecem nos controles (FOV, sensibilidade, distância da câmera e da arma)
+  - [x] **Pausa**: jogando sozinho, abrir o menu (Esc) pausa o jogo (dá pra desligar no menu Jogo); no online nunca pausa
+  - [x] **Castelo**: torres 15% mais baixas; chão da ilha não pisca mais (o salão não fica mais em cima da grama)
+  - [x] **Mar**: teto de vidro liso, quase transparente (sem colunas nem quadriculado); som da onda batendo grave (sem o chiado agudo)
+  - [x] **Navio**: ninguém nasce embaixo/dentro de nada (convés aberto na frente do castelo e dos lados da proteção); escada da proteção 2x maior, patamar mais largo e a parede de cima 30% mais baixa
+  - [x] **Fábrica**: mapa em Z um pouco mais largo
+  - [x] **Metrô**: sem as colunas embaixo do mezanino; escadas afastadas da parede do lado
+  - [x] Ideias de habilidades especiais guardadas em `demo3d/IDEIAS-HABILIDADES.md` (pra aplicar depois)
+  - [ ] Validar no PC e deixar a sua "distância da arma" como padrão quando o Salvar do editor funcionar
 
 - [x] v0.27.0 (Three.js): décima rodada de ajustes do Caique (só no 3D)
   - [x] **Fábrica**: o mapa agora é em **Z** (maior); a ponte de cima com esteira lenta segue o Z pelo mapa todo; 5 elevadores (2 em cada base + 1 no meio) sobem até a ponte; esteiras de baixo mais fortes; bots usam elevador/ponte e correm pelo caminho
