@@ -1,0 +1,56 @@
+{
+  "name": "point-ball-desktop",
+  "productName": "Point Ball",
+  "version": "0.29.0",
+  "description": "Point Ball instalável (Electron) — joga sozinho ou em LAN com os amigos (um PC hospeda, os outros entram)",
+  "main": "main.js",
+  "author": "Caique",
+  "license": "UNLICENSED",
+  "scripts": {
+    "copiar": "node copiar-jogo.js",
+    "start": "npm run copiar && electron .",
+    "dist": "npm run copiar && electron-builder --win nsis",
+    "dist:dir": "npm run copiar && electron-builder --win dir"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.caique.pointball",
+    "productName": "Point Ball",
+    "asar": false,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "launcher.html",
+      "icone.png",
+      "jogo/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "icone.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Point Ball"
+    },
+    "extraResources": [
+      {
+        "from": "jogo/node_modules/three",
+        "to": "app/jogo/node_modules/three"
+      }
+    ]
+  }
+}

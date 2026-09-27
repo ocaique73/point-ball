@@ -489,7 +489,7 @@ export class Sim3D {
   inMoat(x, z, m) { const M = this.moat; if (!M) return false; const d = Math.hypot(x - M.cx, z - M.cz); return d > M.r0 + (m || 0) && d < M.r1 - (m || 0); }
   floorAt(x, z, r) {
     if (this.holeAt(x, z, r * 0.35)) return -Infinity;
-    if (this.moat && this.inMoat(x, z, r * 0.3)) return -Infinity; // castelo: o lago em volta da ilha (só as pontes passam)
+    if (this.moat && this.inMoat(x, z, r * 0.3)) return this.moat.bed != null ? this.moat.bed : -Infinity; // castelo: o rio raso em volta da ilha (anda no fundo)
     if (this.deck && !this.onDeck(x, z, r * 0.3)) return -Infinity; // navio: fora do casco é mar
     return this.groundAt(x, z);
   }
@@ -845,7 +845,9 @@ export class Sim3D {
     const sprint = !!p.input.sprint && p.input.fwd > 0 && this.canAct() && !aiming;
     if (p.sprinting && !sprint) p.sprintOut = this.time + SPRINT.out;
     p.sprinting = sprint; if (sprint) p.charge0 = 0;
-    p.inWater = this.deck ? this.deckWater(p) : false; // navio: água no convés (só quem pisa nela fica lento)
+    const wasW = p.inWater;
+    p.inWater = this.deck ? this.deckWater(p) : this.moat ? p.y < this.moat.water && this.inMoat(p.x, p.z, 0) : false; // navio: água no convés; castelo: dentro do rio (só quem está na água fica lento)
+    if (this.moat && p.inWater && !wasW) this.events.push({ type: 'sea_splash', x: p.x, z: p.z });
     const spdK = (this.time < (p.slowUntil || 0) ? p.slowF : 1) * (sprint ? SPRINT.k : 1) * (p.aiming ? AIM.slow : 1) * (p.inWater ? 0.75 : 1);
     wx *= this.P.speed * spdK; wz *= this.P.speed * spdK;
     // subindo a montanha de areia: fica mais devagar conforme a subida
@@ -944,7 +946,7 @@ export class Sim3D {
     if (this.holes && p.y < -HOLE.kill) { this.lavaFall(p); return; }
     // navio: caiu no mar
     if (this.deck && p.y < this.deck.kill) { this.drown(p); return; }
-    if (this.moat && p.y < this.moat.water - 25) { this.drown(p); return; } // caiu no lago do castelo
+    if (this.moat && this.moat.bed == null && p.y < this.moat.water - 25) { this.drown(p); return; } // (lago fundo; o do castelo agora é raso)
     this.fireInput(p);
   }
   // atirar / usar
@@ -1767,7 +1769,13 @@ export class Sim3D {
     ai.wander = head + corr; ai.fwd = 1; ai.side = 0; ai.t = Math.max(ai.t, 0.3);
     p.yaw += Math.atan2(Math.sin(ai.wander - p.yaw), Math.cos(ai.wander - p.yaw)) * 0.25;
   }
-  nearMoat(p) { const M = this.moat; if (!M) return false; const d = Math.hypot(p.x - M.cx, p.z - M.cz); return d > M.r0 - 160 && d < M.r1 + 160; }
+  // bot dentro do rio: vai pra rampa de saída mais perto (primeiro o pé da rampa, depois o topo)
+  moatExit(p) {
+    const E = this.moat.exits; if (!E || !E.length) return null;
+    const e = E.reduce((a, b) => (Math.hypot(b[0] - p.x, b[1] - p.z) < Math.hypot(a[0] - p.x, a[1] - p.z) ? b : a));
+    return Math.abs(p.x - e[0]) < 40 && Math.abs(p.z - e[1]) < 160 ? [e[2], e[3]] : [e[0], e[1]]; // (já alinhado com a rampa: sobe)
+  }
+  nearMoat(p) { const M = this.moat; if (!M || p.y < -10) return false; const d = Math.hypot(p.x - M.cx, p.z - M.cz); return d > M.r0 - 160 && d < M.r1 + 160; }
   // castelo: atravessar o lago só pelas pontes (vai até a ponta da ponte e segue por ela)
   moatNav(p, q) {
     const M = this.moat, BE = this.bridgeEnds; if (!BE.length) return null;
@@ -1830,7 +1838,7 @@ export class Sim3D {
       else if (target && sees) { fwd = dist > 900 ? 1 : dist > 350 ? 0.6 : dist < 150 ? -0.4 : 0; side = this.nearMoat(p) ? 0 : Math.random() < 0.5 ? 1 : -1; } // longe: vai chegando; na ponte: sem andar de lado
       else if (target) {
         fwd = 1; side = (Math.random() - 0.5) * 0.8; ai.wander = Math.atan2(target.z - p.z, target.x - p.x) + (Math.random() - 0.5) * 1.2;
-        const nav = (this.moat ? this.moatNav(p, target) : null) || (this.rooms.length ? this.roomNav(p, target) : null) || (this.navPath ? this.pathNav(p, target) : null); // um dentro da sala e o outro fora: vai pela porta
+        const nav = (this.moat && p.y < -10 && this.moat.exits ? this.moatExit(p) : null) || (this.moat ? this.moatNav(p, target) : null) || (this.rooms.length ? this.roomNav(p, target) : null) || (this.navPath ? this.pathNav(p, target) : null); // um dentro da sala e o outro fora: vai pela porta
         if (nav) { ai.wander = Math.atan2(nav[1] - p.z, nav[0] - p.x); side = 0; ai.t = 0.3; }
       }
       else { ai.wander = Math.random() * Math.PI * 2; }
@@ -1890,7 +1898,8 @@ export class Sim3D {
       if (h) { p.input.fwd = 0; p.input.side = 0; ai.wander = Math.atan2(p.z - h.z, p.x - h.x); ai.t = Math.min(ai.t, 0.35); ai.stuck = 0; if (!sees) ai.fwd = 0; }
     }
     // castelo: não anda pra dentro do lago (só pelas pontes)
-    if (this.moat && p.grounded && (p.input.fwd || p.input.side)) {
+    if (this.moat && p.y < -10 && this.moat.exits) { const ex = this.moatExit(p); if (ex && !(target && sees)) { ai.wander = Math.atan2(ex[1] - p.z, ex[0] - p.x); p.yaw = ai.wander; p.input.fwd = 1; p.input.side = 0; } } // caiu no rio: sai pela rampa
+    else if (this.moat && p.grounded && (p.input.fwd || p.input.side)) {
       const fx = Math.cos(p.yaw), fz = Math.sin(p.yaw);
       const blk = (fw, sd) => { const wx = fx * fw - fz * sd, wz = fz * fw + fx * sd, wl = Math.hypot(wx, wz) || 1, ax = p.x + wx / wl * 70, az = p.z + wz / wl * 70; return this.inMoat(ax, az, 0) && !this.bridgeEnds.some((b) => ax > b.x0 && ax < b.x1 && az > b.z0 && az < b.z1); };
       if (!blk(p.input.fwd, p.input.side)) { /* ok */ }
