@@ -86,7 +86,8 @@ function makeHat(kind, color, w) {
 }
 
 // veste o boneco (clone do modelo): cores por time, capa, chapéu extra e as armas do ladino nas mãos
-export function dressModel(model, key, look, team, BASE) {
+export function dressModel(model, key, look, team, BASE, opts) {
+  const bare = opts && opts.bareHands; // (1ª pessoa: mão sem luva, na cor da pele)
   const parts = PARTS[key] || {};
   model.updateMatrixWorld(true);
   let headMesh = null;
@@ -94,7 +95,8 @@ export function dressModel(model, key, look, team, BASE) {
     if (!o.isMesh) return;
     if (/_Head/.test(o.name)) headMesh = o;
     const skin = key === 'knight' || key === 'barbarian' ? { 0: 'sk' } : { 0: 'sk', 30: 'sk', 31: 'sk' };
-    const cells = /^(Rogue|Knight|Barbarian|Mage)_/.test(o.name) ? Object.assign(skin, parts[o.name] || {}) : null; // (a pele entra em todas as peças)
+    let cells = /^(Rogue|Knight|Barbarian|Mage)_/.test(o.name) ? Object.assign(skin, parts[o.name] || {}) : null; // (a pele entra em todas as peças)
+    if (cells && bare && /_Arm(Left|Right)$/.test(o.name)) cells = Object.fromEntries(Object.entries(cells).map(([c, sl]) => [c, sl === 'g' ? 'sk' : sl]));
     if (cells && o.material.map && o.material.map.image) { o.material = o.material.clone(); o.material.map = recolorTex(o.material.map, cells, look, team); o.material.needsUpdate = true; }
     if (/_Cape$/.test(o.name)) o.visible = !!look.cp;
     if (HEADWEAR.includes(o.name) && look.hat !== 'none') o.visible = false;

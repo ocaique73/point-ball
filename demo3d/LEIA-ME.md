@@ -34,6 +34,8 @@ cadência/recarga de cada arma — ligar/desligar "você pode morrer" (os bots s
 
 Tem física 3D própria (`public/demo3d/sim3d.js`): tiro e granada seguem a mira, ricochete no muro e no chão, pulo duplo. 8 mapas e bots com 3 níveis.
 
+**Novidades da v0.29** (só no 3D): na 1ª pessoa os **braços são os do seu boneco** (dá pra ajustar tamanho, comprimento e grossura), faca de lado e varinha em pé, frascos redondos (fumaça de verdade dentro), ponte do castelo de volta e **rio raso** (não mata), fábrica com a diagonal maior e cheia de cobertura, navio mais claro, e o **app instalável pra jogar em LAN** (`desktop/LEIA-ME.md`).
+
 **Novidades da v0.28** (só no 3D): mãos com **luva preta** e manga comprida do time na 1ª pessoa, **granadas viraram poções** (fumaça e pólvora com faíscas), bola de neve jogada por cima, **distância da arma** separada do FOV, **pausa no Esc** jogando sozinho, torres do castelo mais baixas, vidro liso no mar, navio sem nascer embaixo de nada, fábrica mais larga e metrô sem colunas. Ideias de habilidades: `demo3d/IDEIAS-HABILIDADES.md`.
 
 **Novidades da v0.27** (só no 3D): **fábrica em Z** com ponte-esteira por cima e 5 elevadores, **navio** com sala do capitão, proteção no nascimento, raios e escorregão, **castelo** maior numa ilha com fosso e pontes (torres 2x mais altas, portas das torres viradas pro pátio), dragão novo (sem marcação, fogo em curva), **obra** no meio de uma cidade moderna, metrô com escada, mar com teto de vidro, **mãos e braços na 1ª pessoa** (faca girando no saque, arma sobe correndo), distância/lado da câmera da 3ª pessoa nas configurações e, no online, **armas da sala** e **modo streamer**.

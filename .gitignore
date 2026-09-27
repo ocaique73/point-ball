@@ -9,3 +9,8 @@ game-config.local.json
 
 # pasta local do Claude Code
 .claude/
+
+# app instalável (Electron): cópia do jogo, dependências e instaladores gerados
+desktop/jogo/
+desktop/node_modules/
+desktop/dist/

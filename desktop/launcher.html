@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Point Ball</title>
+<style>
+  :root { --bg: #0b1220; --card: #131c2e; --line: #26324a; --txt: #e5e7eb; --muted: #94a3b8; --gold: #facc15; --blue: #3b82f6; --red: #ef4444; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: radial-gradient(1200px 600px at 20% -10%, #1e3a8a55, transparent), radial-gradient(900px 500px at 110% 110%, #7f1d1d55, transparent), var(--bg); color: var(--txt); font: 15px/1.45 "Segoe UI", system-ui, sans-serif; display: grid; place-items: center; padding: 24px; }
+  main { width: min(920px, 100%); }
+  h1 { margin: 0 0 4px; font-size: 38px; letter-spacing: .5px; } h1 b { color: var(--gold); }
+  .sub { color: var(--muted); margin-bottom: 22px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
+  .card h2 { margin: 0 0 6px; font-size: 19px; }
+  .card p { margin: 0 0 12px; color: var(--muted); }
+  button { font: inherit; font-weight: 700; border: 0; border-radius: 10px; padding: 10px 16px; cursor: pointer; background: var(--gold); color: #111; }
+  button.sec { background: #22304a; color: var(--txt); }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  input { font: inherit; background: #0e1626; color: var(--txt); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; width: 190px; }
+  .list { margin-top: 10px; display: grid; gap: 6px; }
+  .item { display: flex; justify-content: space-between; align-items: center; background: #0e1626; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .ips b { color: var(--gold); }
+  .modo { margin: 14px 0 0; }
+  label.opt { margin-right: 14px; cursor: pointer; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Point <b>Ball</b></h1>
+  <div class="sub">Joga sozinho, ou em rede com os amigos: um PC <b>hospeda</b> e os outros <b>entram</b> (todos na mesma rede Wi-Fi/cabo).</div>
+  <div class="grid">
+    <section class="card">
+      <h2>🏠 Hospedar / jogar sozinho</h2>
+      <p>Liga o servidor do jogo neste PC. Os amigos veem esta partida na lista deles. Na primeira vez o Windows pergunta sobre o firewall: marque <b>Redes privadas</b> e permita.</p>
+      <button id="host">Hospedar partida</button>
+      <div class="ips muted" id="ips" style="margin-top:10px"></div>
+    </section>
+    <section class="card">
+      <h2>🎮 Entrar numa partida</h2>
+      <p>Partidas achadas na sua rede (atualiza sozinho):</p>
+      <div class="list" id="list"><div class="muted">Procurando partidas na rede...</div></div>
+      <p style="margin:12px 0 6px">Ou digite o IP do PC de quem está hospedando:</p>
+      <div class="row"><input id="ip" placeholder="ex: 192.168.0.15"><button class="sec" id="join">Entrar</button></div>
+    </section>
+  </div>
+  <div class="modo muted">Versão do jogo: <label class="opt"><input type="radio" name="modo" value="3d" checked style="width:auto"> 3D</label><label class="opt"><input type="radio" name="modo" value="2d" style="width:auto"> 2D</label> · F11 = tela cheia · no jogo, Esc abre o menu (Multiplayer → criar/entrar na sala)</div>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const modo = () => document.querySelector('input[name=modo]:checked').value;
+  window.pbApp.ips().then((l) => { $('ips').innerHTML = l.length ? 'Seu IP na rede: ' + l.map((a) => '<b>' + a.ip + '</b>').join(' · ') + ' (passe pros amigos, se a partida não aparecer na lista deles)' : 'Sem rede: dá pra jogar sozinho.'; });
+  $('host').onclick = () => { $('host').disabled = true; $('host').textContent = 'Abrindo...'; window.pbApp.hospedar(modo()); };
+  $('join').onclick = () => { const ip = $('ip').value.trim(); if (ip) window.pbApp.entrar(ip, modo()); };
+  $('ip').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('join').click(); });
+  window.pbApp.aoAcharPartidas((lista) => {
+    const el = $('list');
+    if (!lista.length) { el.innerHTML = '<div class="muted">Nenhuma partida achada ainda. Peça pro amigo clicar em "Hospedar partida".</div>'; return; }
+    el.innerHTML = '';
+    for (const p of lista) {
+      const d = document.createElement('div'); d.className = 'item';
+      d.innerHTML = '<span><b></b> <span class="muted"></span></span>'; d.querySelector('b').textContent = p.nome; d.querySelector('.muted').textContent = p.ip;
+      const b = document.createElement('button'); b.textContent = 'Entrar'; b.onclick = () => window.pbApp.entrar(p.ip + ':' + p.porta, modo()); d.appendChild(b); el.appendChild(d);
+    }
+  });
+</script>
+</body>
+</html>

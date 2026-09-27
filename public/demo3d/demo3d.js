@@ -6,7 +6,6 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { Sim3D, WEAPONS, WEAPON_IDS, P, PORTAL, HOLE, DuneField, holeEdgeR, TRAIN, WAVE, CEILING_Y, LAMP, TREE, TORNADO, FROST, METEOR, PLAT, AIM, DRINK, DOOR_HOLD, CRANE, craneAngle, pistonTop, DRAGON, dragonX } from '/demo3d/sim3d.js';
 import { world3D, simOptions, IGLOO, TREEHOUSE, MAPS3D, TOWER, SHIP, setEditOverride, activeEdits } from '/demo3d/world3d.js';
 import { FX_DEFAULT } from '/demo3d/fx3d.js';
@@ -21,7 +20,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 // ---------- configurações (ficam salvas neste navegador) ----------
 const DEFAULTS = {
-  cam: '1', map: 'deserto', bots: '2', allies: '0', level: 'amador', shadow: '1', fov: 80, camDist: 150, camSide: '1', streamer: '0', gunDist: 100, pause: '1', weapon: 'arco', sens: 1.6, invert: '0',
+  cam: '1', map: 'deserto', bots: '2', allies: '0', level: 'amador', shadow: '1', fov: 80, camDist: 150, camSide: '1', streamer: '0', gunDist: 100, pause: '1', armSize: 100, armLen: 100, armW: 100, weapon: 'arco', sens: 1.6, invert: '0',
   mode: 'tdm', kills: '30', rounds: '3', hill: '100', mtime: '300', kc: '1', sfx: {}, adszoom: '1',
   die: '1', speed: P.speed, jumpv: P.jumpV, tweapon: WEAPON_IDS[0], wtune: {},
   x: { color: '#ffffff', outline: '1', len: 7, thick: 2, gap: 4, dot: '1', dotsize: 2, ring: '1', ringr: 22, ringw: 2, hit: '1', hitlen: 10, hitw: 1 }
@@ -2356,7 +2355,7 @@ function buildCastle(w) {
   const stone = (rx, ry) => { const t = stoneT.clone(); t.needsUpdate = true; t.repeat.set(rx, ry); return new THREE.MeshStandardMaterial({ map: t, roughness: 0.9 }); };
   const rampM = stone(1, 1), slabM = stone(1, 1); rampM.side = THREE.DoubleSide; slabM.side = THREE.DoubleSide; const slate = mat(0x3d4658, { roughness: 0.7 }), winM = new THREE.MeshBasicMaterial({ map: WIN_TEX, transparent: true, alphaTest: 0.1, side: THREE.DoubleSide });
   for (const S of w.spirals || []) { const m = new THREE.Mesh(spiralGeo(S, S.th || 10), rampM); m.castShadow = m.receiveShadow = true; mapGroup.add(m); }
-  for (const D of w.discs || []) { if (D.roof) continue; mapGroup.add(ringSlab(D, slabM)); }
+  for (const D of w.discs || []) { if (D.roof || D.island) continue; mapGroup.add(ringSlab(D, slabM)); } // (a ilha é o chão de grama: sem laje por cima, senão pisca)
   const TW = TOWER, B = w.castleBase || 0, brackets = [];
   for (const T of w.towers || []) {
     // telhado em cone (ardósia azul-escura) com a ponta e uma bandeira do time daquele lado
@@ -2382,7 +2381,17 @@ function buildCastle(w) {
     const cliff = new THREE.Mesh(cl, new THREE.MeshStandardMaterial({ map: rockT, roughness: 1 })); cliff.position.set(M.cx, (B + M.water - 30) / 2, M.cz); cliff.receiveShadow = true; mapGroup.add(cliff);
     const bk = new THREE.CylinderGeometry(M.r1, M.r1 - 10, -M.water + 30, 72, 1, true); { const uv = bk.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 48, uv.getY(i) * 0.5); }
     const bank = new THREE.Mesh(bk, new THREE.MeshStandardMaterial({ map: rockT, roughness: 1, side: THREE.BackSide })); bank.position.set(M.cx, (M.water - 30) / 2, M.cz); mapGroup.add(bank);
-    const water = new THREE.Mesh(new THREE.RingGeometry(M.r0 - 10, M.r1 + 10, 96, 1), new THREE.MeshStandardMaterial({ color: 0x4a8796, roughness: 0.3, metalness: 0.1, emissive: 0x16363d })); water.rotation.x = -Math.PI / 2; water.position.set(M.cx, M.water, M.cz); mapGroup.add(water);
+    // (v0.29) rio raso: fundo de areia/pedra e a água meio transparente por cima (dá pra ver a perna de quem está dentro)
+    const bedY = M.bed != null ? M.bed : M.water - 30;
+    const bedM = new THREE.Mesh(new THREE.RingGeometry(M.r0 - 10, M.r1 + 10, 96, 1), new THREE.MeshStandardMaterial({ color: 0x6d6a55, roughness: 1 })); bedM.rotation.x = -Math.PI / 2; bedM.position.set(M.cx, bedY - 0.5, M.cz); mapGroup.add(bedM);
+    const water = new THREE.Mesh(new THREE.RingGeometry(M.r0 - 10, M.r1 + 10, 96, 1), new THREE.MeshStandardMaterial({ color: 0x4a8796, roughness: 0.3, metalness: 0.1, emissive: 0x16363d, transparent: true, opacity: 0.72, depthWrite: false })); water.rotation.x = -Math.PI / 2; water.position.set(M.cx, M.water, M.cz); water.renderOrder = 3; mapGroup.add(water);
+    // rampas de pedra pra sair do rio (norte e sul)
+    for (const S of w.slopes || []) {
+      if (!S.moatRamp) continue;
+      const wd = S.x1 - S.x0, sh = new THREE.Shape(); sh.moveTo(S.z0, bedY - 2); sh.lineTo(S.z1, bedY - 2); sh.lineTo(S.z1, S.h1); sh.lineTo(S.z0, S.h0); sh.lineTo(S.z0, bedY - 2);
+      const g = new THREE.ExtrudeGeometry(sh, { depth: wd, bevelEnabled: false }); { const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / 96, uv.getY(i) / 96); }
+      const rm = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: rockT, roughness: 0.95 })); rm.rotation.y = -Math.PI / 2; rm.position.x = S.x0 + wd; rm.receiveShadow = true; mapGroup.add(rm);
+    }
     const rnd2 = seeded(512), rocks = [];
     for (let i = 0; i < 70; i++) { const a = rnd2() * Math.PI * 2; if (Math.abs(Math.sin(a)) < 0.14) continue; const r = (rnd2() < 0.6 ? M.r0 + 30 : M.r1 - 25) + (rnd2() - 0.5) * 30, k = 14 + rnd2() * 26; rocks.push([M.cx + Math.cos(a) * r, M.water + k * 0.2, M.cz + Math.sin(a) * r, k * 1.3, k, k, rnd2() * 3]); }
     instanced(new THREE.DodecahedronGeometry(1, 0), mat(0x5e5a52, { roughness: 1 }), rocks);
@@ -2390,7 +2399,7 @@ function buildCastle(w) {
     for (const Br of w.bridges || []) {
       const L = Br.x1 - Br.x0, ang = Math.atan2(Br.h1 - Br.h0, L), len = Math.hypot(L, Br.h1 - Br.h0), mid = (Br.h0 + Br.h1) / 2, zc = (Br.z0 + Br.z1) / 2, wd = Br.z1 - Br.z0;
       const g = new THREE.BoxGeometry(len, 18, wd + 20); boxUV(g, len, 18, wd + 20, 1 / 96);
-      const deck = new THREE.Mesh(g, brM); deck.position.set((Br.x0 + Br.x1) / 2, mid - 10.5, zc); // (um tiquinho abaixo: não pisca com o chão da ilha) deck.rotation.z = ang; deck.castShadow = deck.receiveShadow = true; mapGroup.add(deck);
+      const deck = new THREE.Mesh(g, brM); deck.position.set((Br.x0 + Br.x1) / 2, mid - 10.5, zc); deck.rotation.z = ang; deck.castShadow = deck.receiveShadow = true; mapGroup.add(deck); // (um tiquinho abaixo: não pisca com o chão da ilha)
       for (const sz of [-1, 1]) { const rg = new THREE.BoxGeometry(len, 36, 10); boxUV(rg, len, 36, 10, 1 / 96); const rail = new THREE.Mesh(rg, brM); rail.position.set((Br.x0 + Br.x1) / 2, mid + 18, zc + sz * (wd / 2 + 5)); rail.rotation.z = ang; mapGroup.add(rail); }
       for (const u of [0.35, 0.62]) { const x = Br.x0 + L * u, h = Br.h0 + (Br.h1 - Br.h0) * u, pg = new THREE.BoxGeometry(34, h - M.water + 10, wd); boxUV(pg, 34, h - M.water + 10, wd, 1 / 96); const pier = new THREE.Mesh(pg, brM); pier.position.set(x, (h + M.water - 10) / 2 - 9, zc); mapGroup.add(pier); } // pilares dentro d'água
     }
@@ -2509,13 +2518,13 @@ void main(){ float v = (vW.z - uZ.x) / (uZ.y - uZ.x); if (uSide < 0.0) v = 1.0 -
 function buildShip(w) {
   const W = w.W, H = w.H, P = w.deck.poly, cx = W / 2, cz = H / 2, SH = SHIP;
   // casco: lados de tábua descendo até a água (vai afinando embaixo)
-  const plankT = wallTexture('#4a3220', 'plank');
+  const plankT = wallTexture('#6e4d33', 'plank'); // (v0.29: navio mais claro — dá pra ver os bonecos)
   { const pos = [], uv = [], idx = [], bot = P.map(([x, z]) => [cx + (x - cx) * 0.9, cz + (z - cz) * 0.62]); let L = 0;
     for (let i = 0; i <= P.length; i++) { const A = P[i % P.length], B = bot[i % P.length]; if (i) L += Math.hypot(A[0] - P[i - 1][0], A[1] - P[i - 1][1]); pos.push(A[0], 30, A[1], B[0], SH.sea - 70, B[1]); uv.push(L / 128, 1.6, L / 128, 0); }
     for (let i = 0; i < P.length; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 2, a + 1, a + 3); }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
     const t = plankT.clone(); t.needsUpdate = true; const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: t, roughness: 0.9, side: THREE.DoubleSide })); mapGroup.add(m); }
-  const gold = mat(0xb8913a, { metalness: 0.5, roughness: 0.45 }), darkW = mat(0x3a2716), mastM = mat(0x5a3d22);
+  const gold = mat(0xb8913a, { metalness: 0.5, roughness: 0.45 }), darkW = mat(0x5a3f26), mastM = mat(0x7d5835);
   for (let i = 0; i < P.length; i++) { const A = P[i], B = P[(i + 1) % P.length], L = Math.hypot(B[0] - A[0], B[1] - A[1]), s = new THREE.Mesh(new THREE.BoxGeometry(L, 5, 3), gold); s.position.set((A[0] + B[0]) / 2, 20, (A[1] + B[1]) / 2); s.rotation.y = -Math.atan2(B[1] - A[1], B[0] - A[0]); mapGroup.add(s); }
   // gurupés (a ponta que sai lá na frente): tábua inclinada em cima de um mastro deitado, e a cabeça de dragão na ponta
   for (const S of w.slopes || []) {
@@ -2782,6 +2791,8 @@ function buildMap(mapId) {
     box.castShadow = !(closed && (R.border || R.space)); box.receiveShadow = true; // mapa fechado: a borda alta não faz sombra dentro
     mapGroup.add(box);
     };
+  // navio: as estruturas (castelos, cabine, escadas, amurada) mais claras que antes — o chão do convés fica como está
+  if (mapId === 'navio') for (const R of mapWalls) if (R.tint && !R._lit) { const c = new THREE.Color(R.tint); c.offsetHSL(0, -0.04, 0.12); R.tint = '#' + c.getHexString(); R._lit = true; }
   for (const R of mapWalls) { const c0 = mapGroup.children.length; drawWall(R); if (R.item != null) for (let i = c0; i < mapGroup.children.length; i++) mapGroup.children[i].userData.item = R.item; } // (editor 3D: cada peça sabe qual item ela é)
   // paredes em diagonal do contorno (mapas de formato irregular)
   for (const S of world.segs || []) {
@@ -2883,7 +2894,7 @@ function buildMap(mapId) {
   else if (mapId === 'fabrica') { hemi.intensity = 0.95; hemi.color.set(0xfff0dc); sun.intensity = 1.1; }
   else if (mapId === 'obra') { hemi.intensity = 1.3; hemi.color.set(0xfff4e6); hemi.groundColor.set(0x9a8a74); sun.intensity = 2.5; sun.color.set(0xffefd6); }
   else if (mapId === 'castelo') { hemi.intensity = 1.1; hemi.color.set(0xffe6d6); hemi.groundColor.set(0x6a6478); sun.intensity = 2.1; sun.color.set(0xffc48a); }
-  else if (mapId === 'navio') { hemi.intensity = 0.75; hemi.color.set(0xa9b8cc); hemi.groundColor.set(0x1d2226); sun.intensity = 0.55; sun.color.set(0xc8d4e6); }
+  else if (mapId === 'navio') { hemi.intensity = 0.85; hemi.color.set(0xa9b8cc); hemi.groundColor.set(0x1d2226); sun.intensity = 0.55; sun.color.set(0xc8d4e6); }
   else if (mapId === 'mar') { hemi.intensity = 1.35; hemi.color.set(0xeaf6ff); hemi.groundColor.set(0x2a5877); sun.intensity = 2.6; sun.color.set(0xfff6e6); }
   else { hemi.intensity = 1.3; sun.intensity = 2.3; }
   baseLight = { hemi: hemi.intensity, sun: sun.intensity };
@@ -2940,7 +2951,7 @@ function makeKnifeView() {
   const kb = G2.userData.kp.userData.body; for (const o of kb.children.slice()) kb.remove(o);
   // a mesma faca da 3ª pessoa, maior e com a lâmina apontando pra frente e um pouco pra cima (dá pra ver inteira);
   // (v0.27) virada no eixo da lâmina: o fio fica pro lado de dentro
-  const k = new THREE.Group(), fl = new THREE.Group(); fl.rotation.z = Math.PI; fl.add(h); k.add(fl); k.rotation.set(0.35 + Math.PI, -0.25, -0.35); k.position.set(-1, 2, -4); kb.add(k); G2.userData.real = h;
+  const k = new THREE.Group(), fl = new THREE.Group(); fl.rotation.z = Math.PI; fl.add(h); k.add(fl); k.quaternion.copy(KNIFE_Q); k.position.copy(KNIFE_POS); kb.add(k); G2.userData.real = h;
 }
 function makeCrossbowView() {
   makeKnifeView();
@@ -2965,7 +2976,7 @@ function makeCrossbowView() {
 }
 async function loadModels() {
   await loadModel('hood'); await loadModel('rogue'); // os outros carregam por trás (aparecem quando chegarem)
-  makeCrossbowView();
+  makeCrossbowView(); fpRefreshArms();
   for (const k of CHAR_IDS) loadModel(k).catch((e) => console.warn('modelo', k, e));
 }
 function textSprite(text, color, h = 0.04) {
@@ -3321,6 +3332,10 @@ function addEffect(e, now) {
 
 // ---------- arma na tela (1ª pessoa) ----------
 const VIEW = {};
+// faca na 1ª pessoa: lâmina apontando pra cima/esquerda (um pouco pra frente), de lado pra câmera; a mão no cabo
+const KNIFE_DIR = new THREE.Vector3(-0.72, 0.58, -0.38).normalize(), KNIFE_HAND = [1.6, -1.6, 1.2];
+const KNIFE_POS = new THREE.Vector3(...KNIFE_HAND).addScaledVector(KNIFE_DIR, 6.5);
+const KNIFE_Q = (() => { const z = KNIFE_DIR.clone(), x = new THREE.Vector3().crossVectors(z, new THREE.Vector3(0, 0, 1)).normalize(), y = new THREE.Vector3().crossVectors(z, x); return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z)); })();
 // mãos e braços da 1ª pessoa (arredondados, no estilo dos bonecos): pele da sua roupa e manga na cor do time
 const FPM = { skin: new THREE.MeshStandardMaterial({ color: SKIN[S.look.sk || 0], roughness: 0.62 }), sleeve: new THREE.MeshStandardMaterial({ color: 0x2c4a86, roughness: 0.9 }), cuff: new THREE.MeshStandardMaterial({ color: 0xe8e4da, roughness: 0.85 }), glove: new THREE.MeshStandardMaterial({ color: 0x1c1e23, roughness: 0.5, metalness: 0.05 }), sk: S.look.sk };
 const _fpSph = new THREE.SphereGeometry(1, 16, 12), _fpUp = new THREE.Vector3(0, 1, 0);
@@ -3329,84 +3344,95 @@ function fpLimb(a, b, r, m) {
   const o = new THREE.Mesh(new THREE.CapsuleGeometry(r, Math.max(0.1, L), 4, 12), m);
   o.position.copy(a).addScaledVector(d, 0.5); o.quaternion.setFromUnitVectors(_fpUp, d.normalize()); return o;
 }
-// c = centro da mão, grip = eixo do que ela segura (cabo), elbow = cotovelo (fora da tela) — tudo nas coordenadas da arma.
-// opt.R = raio do que ela segura; opt.claw = bola de neve segura por cima; opt.left = mão esquerda
-function fpArm(c, grip, elbow, opt = {}) {
-  // (v0.28) luva preta no estilo dos bonecos (blocos com canto arredondado, dedos curtos) e manga longa na cor do time
-  const s = opt.s || 1, R = opt.R || 1.0, C = new THREE.Vector3(...c), Y = new THREE.Vector3(...grip).normalize(), E = new THREE.Vector3(...elbow);
-  const arm = new THREE.Group(); arm.position.copy(C); arm.userData.fpArm = true;
-  const toE = E.clone().sub(C), X = toE.clone().addScaledVector(Y, -toE.dot(Y)).normalize(), Z = new THREE.Vector3().crossVectors(X, Y);
-  const hand = new THREE.Group(); arm.add(hand);
-  if (!opt.claw) hand.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z));
-  const zs = opt.left ? -1 : 1;
-  const rb = (w, h, d, x, y, z, r, rx, ry, rz) => { const o = new THREE.Mesh(fpRB(w, h, d, r), FPM.glove); o.position.set(x, y, z); o.rotation.set(rx || 0, ry || 0, rz || 0); hand.add(o); return o; };
-  let wr;
-  if (opt.claw) {
-    // bola de neve segura por cima, com a palma atrás e os dedos por cima (pronta pra jogar, não "entregando")
-    const r = R;
-    rb(3.1 * s, 3.3 * s, 1.6 * s, 0.25 * s, -r * 0.55, r * 0.8 + 0.3 * s, 0.6 * s, 0.5);
-    for (let i = 0; i < 4; i++) {
-      const x = (-1.2 + i * 0.8) * s, sh = i === 0 || i === 3 ? -0.25 * s : 0;
-      rb(0.72 * s, 0.82 * s, 2.3 * s, x, r * 0.86 + 0.25 * s + sh, r * 0.42, 0.3 * s, -0.55);
-      rb(0.7 * s, 0.8 * s, 1.5 * s, x, r * 0.62 + sh, -r * 0.35, 0.3 * s, -1.25);
-    }
-    rb(0.95 * s, 2.3 * s, 0.95 * s, -r * 0.78 - 0.3 * s, -r * 0.15, r * 0.35, 0.35 * s, 0, 0, 0.35); // polegar do lado de dentro
-    rb(3.3 * s, 3.0 * s, 1.3 * s, 0.35 * s, -r * 0.55 - 1.0 * s, r * 0.8 + 1.4 * s, 0.5 * s, 0.5); // punho da luva
-    wr = new THREE.Vector3(0.35 * s, -r * 0.55 - 1.4 * s, r * 0.8 + 1.9 * s);
-  } else {
-    // mão fechada em volta do cabo: palma do lado do braço, 4 dedos curtinhos na frente, polegar por cima fechando
-    rb(2.2 * s, 3.3 * s, 3.0 * s, R + 1.0 * s, 0, 0, 0.7 * s);
-    for (let i = 0; i < 4; i++) rb(1.7 * s, 0.76 * s, 2.8 * s, -(R + 0.4 * s), (1.17 - i * 0.78) * s, 0, 0.3 * s);
-    rb(2 * R + 2.3 * s, 3.1 * s, 1.0 * s, 0.3 * s, 0, -zs * (R + 0.45 * s), 0.4 * s); // lado dos dedos (fecha a volta)
-    rb(2.3 * s, 0.95 * s, 1.05 * s, 0.25 * s, 1.1 * s, zs * (R + 0.45 * s), 0.4 * s, 0, 0, 0.2); // polegar
-    rb(1.4 * s, 3.5 * s, 3.4 * s, R + 2.6 * s, -0.15 * s, 0, 0.5 * s); // punho da luva
-    wr = new THREE.Vector3(R + 3.1 * s, -0.15 * s, 0);
-  }
-  // punho -> cotovelo: manga comprida do time (com a barra um pouco mais larga)
-  const W = wr.applyQuaternion(hand.quaternion), dir = toE.clone().sub(W).normalize();
-  const sl = fpLimb(W.clone().addScaledVector(dir, 1.2 * s), toE.clone().addScaledVector(dir, 10), 1.35 * s, FPM.sleeve); sl.userData.tint = 4; arm.add(sl);
-  const hem = new THREE.Mesh(new THREE.CylinderGeometry(1.6 * s, 1.6 * s, 1.3 * s, 16), FPM.sleeve); hem.userData.tint = 4; hem.position.copy(W).addScaledVector(dir, 1.1 * s); hem.quaternion.setFromUnitVectors(_fpUp, dir); arm.add(hem);
-  return arm;
+// (v0.29) os braços da 1ª pessoa são os braços do SEU boneco (o mesmo modelo, roupa, manga do time e mão da 3ª pessoa),
+// "congelados" na pose de descanso e virados pra segurar cada arma: c = onde fica o cabo (centro da mão), grip = direção
+// do cabo, elbow = pra onde vai o antebraço (fora da tela); opt.s = tamanho, opt.left = braço esquerdo
+const FPA = { key: '', R: null, L: null, list: [] }, FP_HAND = 0.95;
+function fpBake(model, re, slotName, sc) {
+  let src = null; model.traverse((o) => { if (o.isSkinnedMesh && re.test(o.name)) src = o; });
+  const slot = model.getObjectByName(slotName); if (!src || !slot) return null;
+  const p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(); slot.matrixWorld.decompose(p, q, s);
+  const inv = new THREE.Matrix4().compose(p, q, new THREE.Vector3(1, 1, 1)).invert();
+  const geo = src.geometry.clone(); geo.applyMatrix4(src.matrixWorld); geo.applyMatrix4(inv); geo.scale(sc, sc, sc);
+  if (geo.attributes.skinIndex) geo.deleteAttribute('skinIndex'); if (geo.attributes.skinWeight) geo.deleteAttribute('skinWeight');
+  geo.computeBoundingSphere();
+  const pos = geo.attributes.position, far = new THREE.Vector3(), v = new THREE.Vector3(); let best = 0; // ponta mais longe da mão = ombro
+  for (let i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i); const d = v.lengthSq(); if (d > best) { best = d; far.copy(v); } }
+  return { geo, mat: src.material, axis: far.normalize() };
 }
-// caixinha com canto arredondado (guardada pra reaproveitar)
-const _fpRB = new Map();
-function fpRB(w, h, d, r) { const k = [w, h, d, r].map((v) => v.toFixed(2)).join(); if (!_fpRB.has(k)) _fpRB.set(k, new RoundedBoxGeometry(w, h, d, 2, Math.min(r, w / 2, h / 2, d / 2) * 0.98)); return _fpRB.get(k); }
-// granadas viraram poções: fumaça = frasco redondo com fumaça cinza dentro; explosiva = frasco comprido com pólvora e faísquinhas
-const POT_GLASS = new THREE.MeshStandardMaterial({ color: 0xe6f6ff, transparent: true, opacity: 0.3, roughness: 0.05, metalness: 0.1, depthWrite: false });
-const POT_CORK = new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 0.9 }), POT_BRASS = new THREE.MeshStandardMaterial({ color: 0xc9a64a, roughness: 0.35, metalness: 0.7 });
+// refaz os braços quando muda a roupa, o personagem ou o time (ou quando o modelo termina de carregar)
+function fpRefreshArms() {
+  const look = normLook(S.look), team = viewTeam || 'A', mk = BASE[look.m] ? look.m : BASE.hood ? 'hood' : null;
+  if (!mk) return;
+  const kL = Math.max(0.5, Math.min(1.8, (Number(S.armLen) || 100) / 100)), kW = Math.max(0.5, Math.min(1.8, (Number(S.armW) || 100) / 100));
+  const key = JSON.stringify(look) + team + mk + '|' + kL + '|' + kW + '|' + S.armSize;
+  if (FPA.key === key) return; FPA.key = key;
+  const model = SkeletonUtils.clone(BASE[mk].scene); dressModel(model, mk, look, team, BASE); model.updateMatrixWorld(true); // (com as luvas do boneco, igual à 3ª pessoa)
+  const box = new THREE.Box3().setFromObject(model), sc = CHAR_H / ((box.max.y - box.min.y) || 1);
+  FPA.R = fpBake(model, /_ArmRight$/, 'handslotr', sc); FPA.L = fpBake(model, /_ArmLeft$/, 'handslotl', sc);
+  // comprimento e grossura (configurações): estica ao longo do braço (a mão fica no lugar) e engrossa pros lados
+  for (const A of [FPA.R, FPA.L]) if (A && (kL !== 1 || kW !== 1)) { const a = A.axis, e = A.geo.attributes.position, v = new THREE.Vector3(); for (let i = 0; i < e.count; i++) { v.fromBufferAttribute(e, i); const d = v.dot(a); v.multiplyScalar(kW).addScaledVector(a, d * (kL - kW)); e.setXYZ(i, v.x, v.y, v.z); } e.needsUpdate = true; A.geo.computeVertexNormals(); A.geo.computeBoundingSphere(); }
+  for (const e of FPA.list) fpBuildArm(e);
+}
+function fpBuildArm(e) {
+  const A = e.opt.left ? FPA.L : FPA.R; for (const c of e.g.children.slice()) e.g.remove(c);
+  if (!A) return;
+  const m = new THREE.Mesh(A.geo, A.mat); m.frustumCulled = false;
+  // gira: o eixo do braço (mão → ombro) aponta pro cotovelo e o eixo Y da mão (por onde passa o cabo) vira o "grip"
+  const a = A.axis.clone(), g0 = new THREE.Vector3(0, 1, 0).addScaledVector(a, -a.y).normalize();
+  const Lm = new THREE.Matrix4().makeBasis(a, g0, new THREE.Vector3().crossVectors(a, g0));
+  const Y = e.grip.clone().normalize(), ta = e.toE.clone().addScaledVector(Y, -e.toE.dot(Y)).normalize();
+  const Tm = new THREE.Matrix4().makeBasis(ta, Y, new THREE.Vector3().crossVectors(ta, Y));
+  m.quaternion.setFromRotationMatrix(Tm.multiply(Lm.transpose()));
+  if (e.opt.roll) m.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(Y, e.opt.roll));
+  if (e.opt.bend) m.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3().crossVectors(ta, Y).normalize(), -e.opt.bend)); // punho dobrado: o braço vem mais de baixo (varinha/estilingue)
+  m.scale.setScalar((e.opt.s || 1) * FP_HAND * Math.max(0.5, Math.min(1.8, (Number(S.armSize) || 100) / 100)));
+  e.g.add(m);
+}
+function fpArm(c, grip, elbow, opt = {}) {
+  const g = new THREE.Group(); g.position.set(...c); g.userData.fpArm = true;
+  const e = { g, grip: new THREE.Vector3(...grip), toE: new THREE.Vector3(...elbow).sub(new THREE.Vector3(...c)), opt };
+  FPA.list.push(e); if (FPA.R) fpBuildArm(e);
+  return g;
+}
+// frascos (todos redondos, do mesmo tamanho): cura = líquido verde; fumaça = fumaça cinza rodando dentro e anel dourado
+// no bico; explosiva = pólvora escura com faísquinhas e pavio aceso na rolha
+const POT_GLASS = new THREE.MeshStandardMaterial({ color: 0xe6f6ff, transparent: true, opacity: 0.28, roughness: 0.05, metalness: 0.1, depthWrite: false });
+const POT_CORK = new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 0.9 }), POT_BRASS = new THREE.MeshStandardMaterial({ color: 0xd4af4a, roughness: 0.3, metalness: 0.8 });
+const SPARK_TEX = canvasTex(32, 32, (g) => { const gr = g.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, 'rgba(255,255,220,1)'); gr.addColorStop(0.35, 'rgba(255,190,60,.9)'); gr.addColorStop(1, 'rgba(255,120,20,0)'); g.fillStyle = gr; g.fillRect(0, 0, 32, 32); });
+const POWDER_TEX = canvasTex(64, 64, (g) => { g.fillStyle = '#231f1c'; g.fillRect(0, 0, 64, 64); const r = seeded(9); for (let i = 0; i < 380; i++) { const c = 30 + r() * 50; g.fillStyle = `rgb(${c},${c * 0.9},${c * 0.8})`; g.fillRect(r() * 64, r() * 64, 1.5, 1.5); } }, true);
 function potionMesh(kind) {
   const g = new THREE.Group(), fx = []; g.userData.potFx = fx;
   const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); g.add(o); return o; };
-  if (kind === 'smoke') {
-    const body = add(new THREE.SphereGeometry(3, 20, 16), POT_GLASS, 0, 0, 0); body.scale.y = 0.92; body.renderOrder = 2;
-    const pm = new THREE.MeshStandardMaterial({ color: 0x9aa3ad, roughness: 1, transparent: true, opacity: 0.8 });
-    for (const [x, y, z, r] of [[0.6, -0.8, 0.3, 1.5], [-0.8, -0.5, -0.4, 1.3], [0.2, 0.6, -0.5, 1.2], [-0.3, 0.9, 0.7, 1.0], [0.9, 0.3, 0.8, 0.9]]) { const p = add(new THREE.SphereGeometry(1, 10, 8), pm, x, y, z); p.scale.setScalar(r); p.userData.puff = [x, y, z, r, Math.random() * 6]; fx.push(p); }
-    add(new THREE.CylinderGeometry(0.85, 1.05, 2.4, 14), POT_GLASS, 0, 3.4, 0);
-    add(new THREE.TorusGeometry(0.95, 0.22, 6, 14), POT_BRASS, 0, 2.5, 0).rotation.x = Math.PI / 2;
-    add(new THREE.CylinderGeometry(0.95, 0.8, 1.4, 12), POT_CORK, 0, 5.1, 0);
+  const R = 3.6;
+  if (kind === 'heal') { const lq = add(new THREE.SphereGeometry(R * 0.89, 16, 12, 0, Math.PI * 2, Math.PI * 0.35, Math.PI * 0.65), new THREE.MeshStandardMaterial({ color: 0x34d399, emissive: 0x10b981, emissiveIntensity: 0.9, roughness: 0.2 }), 0, 0, 0); lq.userData.liquid = true; }
+  else if (kind === 'smoke') {
+    const sm = new THREE.SpriteMaterial({ map: SMOKE_TEX, color: 0xb9c0c8, transparent: true, opacity: 0.85, depthWrite: false });
+    for (let i = 0; i < 6; i++) { const sp = new THREE.Sprite(sm.clone()); const a = i * 1.05; sp.userData.puff = [Math.cos(a) * 0.9, -0.6 + (i % 3) * 0.8, Math.sin(a) * 0.9, 3.4 + (i % 2) * 1.2, i * 1.3]; sp.renderOrder = 1; g.add(sp); fx.push(sp); }
+    add(new THREE.TorusGeometry(1.15, 0.28, 8, 18), POT_BRASS, 0, R * 0.86, 0).rotation.x = Math.PI / 2; // anel dourado em volta do bico
   } else {
-    const body = add(new THREE.CylinderGeometry(1.5, 1.5, 7, 18, 1, true), POT_GLASS, 0, 0, 0); body.renderOrder = 2;
-    add(new THREE.SphereGeometry(1.5, 18, 10, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), POT_GLASS, 0, -3.5, 0);
-    const pw = new THREE.MeshStandardMaterial({ color: 0x2b2622, roughness: 1 });
-    add(new THREE.CylinderGeometry(1.3, 1.3, 4.4, 14), pw, 0, -1.3, 0);
-    add(new THREE.SphereGeometry(1.3, 14, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), pw, 0, -3.5, 0);
-    const sm = new THREE.MeshBasicMaterial({ color: 0xffb347 });
-    for (let i = 0; i < 7; i++) { const a = i * 2.4, rr = 0.6 + (i % 3) * 0.25, y = -3.2 + i * 0.6; const sp = add(new THREE.OctahedronGeometry(0.3, 0), sm, Math.cos(a) * rr, y, Math.sin(a) * rr); sp.userData.spark = i; fx.push(sp); }
-    for (const y of [2.6, -2.4]) add(new THREE.TorusGeometry(1.55, 0.2, 6, 16), POT_BRASS, 0, y, 0).rotation.x = Math.PI / 2;
-    add(new THREE.CylinderGeometry(0.8, 1.2, 1.6, 14), POT_GLASS, 0, 4.3, 0);
-    add(new THREE.CylinderGeometry(0.9, 0.75, 1.3, 12), POT_CORK, 0, 5.6, 0);
-    add(new THREE.CylinderGeometry(0.12, 0.12, 1.4, 5), new THREE.MeshStandardMaterial({ color: 0x3a2e24 }), 0.2, 6.9, 0).rotation.z = -0.3; // pavio
-    const tip = add(new THREE.SphereGeometry(0.28, 8, 6), sm, 0.42, 7.6, 0); tip.userData.spark = 9; fx.push(tip);
+    const pw = new THREE.MeshStandardMaterial({ map: POWDER_TEX, roughness: 1 });
+    add(new THREE.SphereGeometry(R * 0.88, 16, 10, 0, Math.PI * 2, Math.PI * 0.45, Math.PI * 0.55), pw, 0, 0, 0); // pólvora (metade de baixo)
+    add(new THREE.CircleGeometry(R * 0.87, 18), pw, 0, R * 0.14, 0).rotation.x = -Math.PI / 2; // (tampa da pólvora)
+    const sm = new THREE.SpriteMaterial({ map: SPARK_TEX, color: 0xffffff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+    for (let i = 0; i < 7; i++) { const a = i * 2.3, rr = 0.6 + (i % 3) * 0.7, sp = new THREE.Sprite(sm); sp.position.set(Math.cos(a) * rr, R * 0.14 + 0.25 + (i % 2) * 0.5, Math.sin(a) * rr); sp.userData.spark = i; sp.renderOrder = 1; g.add(sp); fx.push(sp); }
+    add(new THREE.CylinderGeometry(1.2, 1.2, 0.5, 12), new THREE.MeshStandardMaterial({ color: 0xa3202a, roughness: 0.6 }), 0, R * 1.18 + 1.9, 0); // lacre vermelho
+    add(new THREE.CylinderGeometry(0.14, 0.14, 1.5, 5), new THREE.MeshStandardMaterial({ color: 0x3a2e24 }), 0.25, R * 1.18 + 2.8, 0).rotation.z = -0.35; // pavio
+    const tip = new THREE.Sprite(sm); tip.position.set(0.55, R * 1.18 + 3.5, 0); tip.userData.spark = 9; g.add(tip); fx.push(tip);
   }
+  const glass = add(new THREE.SphereGeometry(R, 20, 16), POT_GLASS, 0, 0, 0); glass.renderOrder = 2;
+  add(new THREE.CylinderGeometry(0.95, 1.2, 2.4, 14), POT_GLASS, 0, R + 0.7, 0).renderOrder = 2;
+  const cork = add(new THREE.CylinderGeometry(1.05, 0.9, 1.6, 12), POT_CORK, 0, R + 2.3, 0); cork.userData.cork = true;
   return g;
 }
-// faísca piscando / fumaça girando devagar dentro do frasco
+// faísca piscando / fumaça rodando devagar dentro do frasco
 function animPotion(g, now) {
   for (const o of g.userData.potFx || []) {
-    if (o.userData.spark != null) { const k = Math.sin(now / 55 + o.userData.spark * 7.3); o.visible = k > -0.2; o.scale.setScalar(0.6 + 0.6 * Math.max(0, k)); }
-    else if (o.userData.puff) { const [x, y, z, r, ph] = o.userData.puff, t = now / 900 + ph; o.position.set(x + Math.sin(t) * 0.35, y + Math.cos(t * 0.8) * 0.3, z + Math.cos(t) * 0.35); o.scale.setScalar(r * (0.9 + 0.12 * Math.sin(t * 1.7))); }
+    if (o.userData.spark != null) { const k = Math.sin(now / 55 + o.userData.spark * 7.3); o.visible = k > -0.3; o.scale.setScalar(o.userData.spark === 9 ? 1.2 + 0.6 * Math.max(0, k) : 0.5 + 0.8 * Math.max(0, k)); }
+    else if (o.userData.puff) { const [x, y, z, r, ph] = o.userData.puff, t = now / 1100 + ph; o.position.set(x * Math.cos(t) - z * Math.sin(t), y + Math.sin(t * 1.3) * 0.35, x * Math.sin(t) + z * Math.cos(t)); o.scale.setScalar(r * (0.9 + 0.12 * Math.sin(t * 1.7))); o.material.rotation = t * 0.6; }
   }
 }
+
 {
   const add = (name, parts) => { const g = new THREE.Group(); parts.forEach((p) => g.add(p)); g.visible = false; fpCam.add(g); VIEW[name] = g; return g; };
   const m = (geo, color, x, y, z, extra) => { const o = new THREE.Mesh(geo, mat(color, extra)); o.position.set(x, y, z); return o; };
@@ -3425,40 +3451,36 @@ function animPotion(g, now) {
     const bands = [-1, 1].map((sx) => { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 1, 6), rubber); b.userData.from = V3(sx * 3.6, 9, -1.5); sg.add(b); return b; });
     const pouch = new THREE.Mesh(_fpSph, sm(0x6b4a2f, { roughness: 0.9 })); pouch.scale.set(1.9, 0.95, 0.9); sg.add(pouch);
     const sBall = new THREE.Mesh(bulletGeo('estilingue', 2.2), mat(0x93c5fd)); sBall.position.set(0, 8.6, 1.5); sBall.userData.pull = true; sBall.userData.tint = 1; sBall.scale.setScalar(0.5); sg.add(sBall);
-    const rh = fpArm([0.1, -2.6, 0.3], [0, 1, 0], [9, -14, 17], { R: 0.78 });
+    const rh = fpArm([0.1, -2.6, 0.3], [0, 1, 0], [9, -6, 5], { s: 0.85, bend: 0.6 });
     const g = add('estilingue', [sg, rh]); g.userData.sling = { sg, bands, pouch, ball: sBall };
   }
-  // bolinha de neve na mão aberta
+  // bolinha de neve em cima da mão (palma pra cima)
   {
     const snowB = new THREE.Mesh(new THREE.SphereGeometry(4.5, 16, 12), new THREE.MeshStandardMaterial({ color: 0x93c5fd, roughness: 0.95 })); snowB.position.set(0, 2.5, -3); snowB.userData.tint = 2; snowB.userData.snow = true;
     const bg = new THREE.Group(); bg.scale.setScalar(0.6); bg.add(snowB);
-    add('mao', [bg, fpArm([0, 1.5, -1.8], [0, 1, 0], [8, -13, 15], { claw: true, R: 2.75 })]);
+    add('mao', [bg, fpArm([0, -3.1, -1.6], [-1, 0, -0.3], [5, -17, 4], { s: 0.9 })]);
   }
   // arco antigo (antes do modelo da besta carregar) + as 2 mãos da besta: a direita no cabo (gatilho) e a esquerda embaixo da frente
   const bowArc = new THREE.Mesh(new THREE.TorusGeometry(14, 0.9, 6, 20, Math.PI), mat(0x8b5a2b)); bowArc.rotation.z = Math.PI / 2;
   const str = m(new THREE.BoxGeometry(0.4, 28, 0.4), 0xf1f5f9, 0, 0, 0); str.userData.string = true;
   const arrow = m(new THREE.CylinderGeometry(0.6, 0.6, 30, 6), 0xe5d3a1, 0, 0, -8); arrow.rotation.x = Math.PI / 2; arrow.userData.arrow = true; arrow.userData.tint = 1;
-  const bowG = add('arco', [bowArc, str, arrow, fpArm([0.4, -2.3, 3.4], [0, 1, 0.4], [8, -13, 17], { R: 0.85, s: 0.82 }), fpArm([-0.3, -2.0, -4.2], [0, 0.12, 1], [-9, -13, 10], { R: 0.95, s: 0.85, left: true })]);
+  const bowG = add('arco', [bowArc, str, arrow, fpArm([0.4, -2.3, 3.4], [0, 1, 0.4], [5, -16, 9], { s: 0.7 }), fpArm([-0.3, -2.0, -4.2], [0, 0.12, 1], [-8, -14, 2], { s: 0.7, left: true })]);
   bowG.rotation.z = 0.25; bowG.userData.bow = [bowArc, str];
-  { const wv = makeWandMesh('A', 0.9); wv.rotation.set(-1.1, 0, -0.15); wv.position.set(-1, 1, -3); wv.userData.wandView = true; wv.userData.tip.userData.wandTip = true;
-    add('varinha', [wv, fpArm([-1.3, -1.0, 1.0], [0.068, 0.448, -0.891], [7, -13, 16], { R: 0.9 })]); }
-  add('disco', [m(new THREE.CylinderGeometry(7, 7, 1.6, 20), 0x93c5fd, 0, 0, -2), fpArm([0, 0, 4.9], [1, 0, 0], [7, -13, 18], { R: 0.95 })]);
-  // faca: "kp" gira no saque (a faca fica dentro dele); a mão fica parada segurando o cabo
-  { const kp = new THREE.Group(); kp.position.set(0.5, -2, 3); kp.userData.knifePivot = true;
-    const kb = new THREE.Group(); kb.position.set(-0.5, 2, -3); kp.add(kb); kp.userData.body = kb;
-    kb.add(m(new THREE.BoxGeometry(1, 2.6, 16), 0xd1d5db, 0, 0, -8, { metalness: 0.8, roughness: 0.25 }), m(new THREE.BoxGeometry(2.2, 3, 6), 0x1f2937, 0, 0, 2));
-    add('knife', [kp, fpArm([0.95, -0.43, 2.86], [-0.247, 0.332, -0.91], [8, -13, 16], { R: 0.95 })]).userData.kp = kp; }
-  { const pn = potionMesh('nade'); pn.position.set(0, 2, -2); pn.scale.setScalar(1.35); add('nade', [pn, fpArm([0, -2.6, -2], [0, 1, 0], [8, -13, 14], { R: 2.05 })]).userData.pot = pn; }
-  { const ps = potionMesh('smoke'); ps.position.set(0, -1.8, -2); ps.scale.setScalar(1.2); add('smoke', [ps, fpArm([0, 2.3, -2], [0, 1, 0], [8, -13, 14], { R: 1.15 })]).userData.pot = ps; }
-  // poção: garrafinha de vidro com líquido (animação de beber em updatePotionView)
-  const bottle = new THREE.Group();
-  const glass = new THREE.Mesh(new THREE.SphereGeometry(4.6, 14, 10), new THREE.MeshStandardMaterial({ color: 0xdbeafe, transparent: true, opacity: 0.35, roughness: 0.05, metalness: 0.1 }));
-  const liquid = new THREE.Mesh(new THREE.SphereGeometry(4.1, 14, 10, 0, Math.PI * 2, Math.PI * 0.35, Math.PI * 0.65), new THREE.MeshStandardMaterial({ color: 0x34d399, emissive: 0x10b981, emissiveIntensity: 0.9, roughness: 0.2 }));
-  liquid.userData.liquid = true;
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.8, 5, 10), new THREE.MeshStandardMaterial({ color: 0xdbeafe, transparent: true, opacity: 0.45 })); neck.position.y = 6;
-  const cork = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.3, 2.4, 8), mat(0x9a6b3f)); cork.position.y = 9.3; cork.userData.cork = true;
-  bottle.add(glass, liquid, neck, cork); bottle.userData.bottle = true;
-  add('potion', [bottle, fpArm([0, 6.2, 0], [0, 1, 0], [8, -14, 13], { R: 1.55 })]);
+  // varinha em pé, apontando pra cima e pra frente, segura como um pincel (a gente vê as costas da mão)
+  { const wv = makeWandMesh('A', 0.9); wv.rotation.set(-0.45, 0, 0.25); wv.position.set(-1, 1, -3); wv.userData.wandView = true; wv.userData.tip.userData.wandTip = true;
+    add('varinha', [wv, fpArm([0.11, -2.93, -1.1], [-0.247, 0.873, -0.421], [8, -8, 3], { s: 0.85, bend: 0.75 })]); }
+  add('disco', [m(new THREE.CylinderGeometry(7, 7, 1.6, 20), 0x93c5fd, 0, 0, -2), fpArm([0, 0, 4.9], [1, 0, 0], [7, -13, 18], {})]);
+  // faca de lado (tipo M9 / Xerofang): lâmina pra cima e pra esquerda, a gente vê o lado dela; "kp" gira no saque
+  { const kp = new THREE.Group(); kp.position.set(KNIFE_HAND[0], KNIFE_HAND[1], KNIFE_HAND[2]); kp.userData.knifePivot = true;
+    const kb = new THREE.Group(); kb.position.set(-KNIFE_HAND[0], -KNIFE_HAND[1], -KNIFE_HAND[2]); kp.add(kb); kp.userData.body = kb;
+    const kf = new THREE.Group(); kf.position.copy(KNIFE_POS); kf.quaternion.copy(KNIFE_Q); kf.add(m(new THREE.BoxGeometry(1, 2.6, 16), 0xd1d5db, 0, 0, 3, { metalness: 0.8, roughness: 0.25 }), m(new THREE.BoxGeometry(2.2, 3, 6), 0x1f2937, 0, 0, -6.5)); kb.add(kf);
+    add('knife', [kp, fpArm(KNIFE_HAND, KNIFE_DIR.toArray(), [7, -15, 6], { s: 0.9 })]).userData.kp = kp; }
+  // granada e fumaça: frascos em cima da mão (palma pra cima)
+  { const pn = potionMesh('nade'); pn.position.set(0, 1, -2); pn.scale.setScalar(1.03); add('nade', [pn, fpArm([0, -4.9, -2], [-1, 0, -0.3], [5, -18, 3], { s: 0.9 })]).userData.pot = pn; }
+  { const ps = potionMesh('smoke'); ps.position.set(0, 1, -2); ps.scale.setScalar(1.03); add('smoke', [ps, fpArm([0, -4.9, -2], [-1, 0, -0.3], [5, -18, 3], { s: 0.9 })]).userData.pot = ps; }
+  // poção de cura: o mesmo frasco redondo, em cima da mão (animação de beber em updatePotionView)
+  const bottle = potionMesh('heal'); bottle.scale.setScalar(1.28);
+  add('potion', [bottle, fpArm([0, -7, 0], [-1, 0, -0.3], [5, -20, 4], { s: 1.1 })]);
 }
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 let nadeThrowAnim = null, camSmY = null, kick = 0, swing = 0, sprintFov = 0, adsK = 0, healFx = 0, caveK = 0, pendingKc = null;
@@ -3818,6 +3840,7 @@ bindSetting('o-shadow', 'shadow', null, () => { renderer.shadowMap.enabled = S.s
 bindSetting('o-fov', 'fov');
 bindSetting('o-camdist', 'camDist');
 bindSetting('o-gundist', 'gunDist');
+for (const [id, k] of [['o-armsize', 'armSize'], ['o-armlen', 'armLen'], ['o-armw', 'armW']]) bindSetting(id, k, null, () => { FPA.key = ''; }); // braços da 1ª pessoa (refaz na hora)
 bindSetting('o-pause', 'pause');
 bindSetting('o-camside', 'camSide');
 bindSetting('o-weapon', 'weapon', null, () => {
@@ -4932,7 +4955,7 @@ function frame(now) {
   for (const k2 in VIEW) VIEW[k2].visible = firstPerson && me.alive && k2 === wkey;
   const vg = VIEW[wkey];
   if (wkey !== fpLastKey) { if (wkey === 'knife' && fpLastKey != null) knifeDrawT = now; fpLastKey = wkey; } // puxou a faca: gira na mão
-  if (FPM.sk !== S.look.sk) { FPM.sk = S.look.sk; FPM.skin.color.set(SKIN[S.look.sk || 0]); } // cor da pele das mãos
+  if (firstPerson) fpRefreshArms(); // braços do seu boneco (refaz se mudou a roupa/o time)
   { const spd = Math.hypot(me.vx, me.vz), k = Math.min(1, dtR * 8);
     fpRunK += ((me.sprinting && spd > 30 ? 1 : 0) - fpRunK) * k; fpWalkK += ((me.grounded && spd > 30 && !me.sprinting ? 1 : 0) - fpWalkK) * k; }
   if (vg && wkey === 'potion') updatePotionView(vg, drinking ? 1 - (me.drinkUntil - sim.time) / DRINK : -1, now);
@@ -4941,8 +4964,9 @@ function frame(now) {
     // clicou: puxa rápido o braço pra trás e arremessa pra frente (sempre força máxima)
     const k = 0, u = throwing ? (now - nadeThrowAnim.t) / 420 : 0, sm = (x) => x * x * (3 - 2 * x);
     const e = throwing ? sm(clamp01((u - 0.25) / 0.75)) : 0, pull = throwing ? (u < 0.25 ? sm(u / 0.25) : 1 - e) : 0;
-    vg.position.set(8 + 3 * pull - 4 * e, -8.5 + 2.2 * pull - 6 * e + Math.sin(now / 90) * 0.15 * k, -23 - 1.5 * pull - 9 * e);
-    vg.rotation.set(-0.7 * pull + 1.0 * e, 0.2 * pull, 0.3 * pull - 0.2 * e);
+    // (v0.29) arremesso por baixo (tipo a Sage): a mão desce e vai pra trás, depois sobe pra frente soltando o frasco
+    vg.position.set(8 + 1.5 * pull - 3 * e, -7.5 - 4 * pull + 3.5 * e + Math.sin(now / 90) * 0.15 * k, -23 + 2.5 * pull - 10 * e);
+    vg.rotation.set(0.55 * pull - 0.75 * e, 0.15 * pull, 0.2 * pull - 0.15 * e);
     vg.children.forEach((o, i) => { if (i < 1) o.visible = !throwing || u < 0.3; });
     if (vg.userData.pot) animPotion(vg.userData.pot, now);
   }

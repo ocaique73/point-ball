@@ -55,8 +55,8 @@ function applyMapEdits(mapId, out, walls, W, H) {
 
 
 export const MAP_SCALE = 1.4;
-export const MAP_SCALE_OF = { deserto: 1.6, castelo: 2.2, navio: 2.0, obra: 1.65, fabrica: 1.7 };
-export const MAP_SCALE_H = { fabrica: 1.16 }; // (v0.28: fábrica em Z um pouco mais larga — as faixas do Z mais grossas) // (obra/fábrica: o formato corta os cantos, então o mapa ficou maior)
+export const MAP_SCALE_OF = { deserto: 1.6, castelo: 2.2, navio: 2.0, obra: 1.65, fabrica: 1.8 };
+export const MAP_SCALE_H = { fabrica: 1.144 }; // (fábrica em Z: proporção própria) // (obra/fábrica: o formato corta os cantos, então o mapa ficou maior)
 
 const segRect = (s, W, H, t) => {
   const x1 = s[0] * W, y1 = s[1] * H, x2 = s[2] * W, y2 = s[3] * H;
@@ -97,7 +97,7 @@ const angDist = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)))
 // navio: medidas (convés alto das pontas, cabine do meio, prancha, gurupés, onde morre caindo no mar)
 export const SHIP = { castle: 110, house: 170, plankW: 84, plankL: 300, bowW: 60, sea: -150, kill: -185 };
 // castelo: ilha alta no meio (o castelo fica em cima), lago em volta e as pontes
-export const CASTLE = { base: 90, island: 800, moat: 960, bridgeW: 130, water: -40 };
+export const CASTLE = { base: 90, island: 800, moat: 960, bridgeW: 130, water: -32, bed: -54 }; // (v0.29: rio raso — dá pra andar dentro, não morre)
 export const TOWER = { R: 112, half: 8, n: 28, pillar: 24, r0: 31, r1: 104, top: 646, turns: 4, wallTop: 918, door: 48, lintel: 130, bal: 144, balDoor: 150 }; // (v0.28: torres 15% mais baixas)
 function towerParts(cx, cz, a0, dir) {
   const T = TOWER, segs = [], discs = [], spirals = [], boxes = [];
@@ -277,20 +277,25 @@ export const MAPS3D = {
   fabrica: {
     id: 'fabrica', name: 'Fábrica', hazard: null, rotSym: true,
     theme: { ground: '#6b6f76', ground2: '#62666d', wall: '#7a5a48', wallEdge: '#4b3a30', border: '#5a5f66', deco: 'none' },
-    shape: [[0, 0], [1, 0], [1, 0.3], [0.36, 0.7], [1, 0.7], [1, 1], [0, 1], [0, 0.7], [0.64, 0.3], [0, 0.3]],
+    // (v0.29) as "perninhas" do Z (barra de cima e de baixo) ficaram com metade do comprimento e mais finas — são o
+    // nascimento; a diagonal ficou mais comprida e mais larga, com cobertura e elevações: é onde a briga acontece
+    shape: [[0.355, 0], [1, 0], [1, 0.228], [0.343, 0.772], [0.645, 0.772], [0.645, 1], [0, 1], [0, 0.772], [0.657, 0.228], [0.355, 0.228]],
     rects: rotR([
-      [0.1, 0.05, 0.03, 0.05, 90, '#9a6b3f', 'wood'], [0.1, 0.2, 0.03, 0.05, 90, '#9a6b3f', 'wood'], // caixotes na frente do nascimento
-      [0.22, 0.015, 0.05, 0.07, 150, '#4b5563'], [0.3, 0.23, 0.05, 0.06, 150, '#4b5563'], // máquinas encostadas nas paredes
-      [0.4, 0.06, 0.012, 0.12, 170, '#6b7280'], // parede de cano no meio da barra
-      [0.56, 0.19, 0.06, 0.08, 190, '#8a6a48', 'wood'], // pilha de estoque
-      [0.74, 0.04, 0.05, 0.06, 90, '#9a6b3f', 'wood'], [0.88, 0.2, 0.04, 0.08, 130, '#4b5563'], // na curva de cima
-      [0.64, 0.38, 0.05, 0.05, 130, '#4b5563'] // na diagonal
+      [0.43, 0.035, 0.025, 0.05, 90, '#9a6b3f', 'wood'], [0.43, 0.14, 0.025, 0.05, 90, '#9a6b3f', 'wood'], // caixotes na frente do nascimento
+      [0.52, 0.012, 0.05, 0.055, 150, '#4b5563'], // máquina encostada na parede
+      [0.8, 0.16, 0.05, 0.055, 190, '#8a6a48', 'wood'], [0.9, 0.03, 0.04, 0.06, 130, '#4b5563'], // na curva de cima
+      [0.74, 0.27, 0.035, 0.05, 110, '#9a6b3f', 'wood'], // caixotes no começo da diagonal
+      [0.655, 0.4, 0.012, 0.08, 170, '#6b7280'], // parede de cano
+      [0.38, 0.52, 0.04, 0.05, 150, '#4b5563'], // máquina
+      [0.44, 0.62, 0.06, 0.012, 130, '#6b7280'] // mureta cortando o tiro reto pela diagonal
     ]),
+    // elevações na diagonal [x, z, w, h]: patamar alto com escadinha dos 2 lados (no começo/fim e no meio)
+    humps: rotR([[0.671, 0.3, 0.052, 0.075], [0.5075, 0.541, 0.045, 0.06]]),
     // pistões = elevadores [x, z, w, h, altura máx, fase 0..1] — sobem até a ponte (FACT.bridge)
-    pistons: rotR([[0.01, 0.12, 0.035, 0.06, 302, 0], [0.2, 0.18, 0.04, 0.055, 302, 0.5]]).concat([[0.48, 0.47, 0.04, 0.06, 302, 0.25]]),
+    pistons: rotR([[0.367, 0.0865, 0.03, 0.055, 302, 0], [0.545, 0.134, 0.04, 0.05, 302, 0.5]]).concat([[0.48, 0.47, 0.04, 0.06, 302, 0.25]]),
     // esteiras de baixo [x, z, w, h, velocidade em z] atravessando as barras — fortes: só pulando não leva
-    belts: [[0.47, 0.01, 0.04, 0.28, 240], [0.49, 0.71, 0.04, 0.28, -240]],
-    spawnZ: [0.03, 0.27] // (o azul nasce só na barra de cima; o vermelho, girado, só na de baixo)
+    belts: [[0.6, 0.01, 0.04, 0.21, 240], [0.36, 0.78, 0.04, 0.21, -240]],
+    spawnZ: [0.03, 0.2], legX: 0.355 // (o azul nasce na ponta esquerda da barra de cima; o vermelho, girado, na de baixo)
   },
   // castelo de magia (estilo escola de bruxos): castelo grande no meio com um salão, terraço em cima e 4 torres redondas —
   // de 20 em 20 s um dragão passa voando e cospe fogo numa faixa (a faixa vermelha avisa; debaixo de telhado não pega) —
@@ -491,7 +496,14 @@ export function world3D(mapId, G, MAPS, CFG) {
       for (const zr of [cz0 - bw - 10, cz0 + bw]) out.slopes.push({ x0, x1, z0: zr, z1: zr + 10, axis: 'x', h0: h0 + 36, h1: h1 + 36, rail: true, bridge: true }); // parapeito
       out.bridges.push({ x0, x1, z0: cz0 - bw, z1: cz0 + bw, h0, h1 });
     }
-    out.moat = { cx: cx0, cz: cz0, r0: RI, r1: RM, water: CASTLE.water };
+    // (v0.29) o rio é raso: anda-se no fundo (mais devagar); o barranco de fora tem 2 rampas de pedra pra sair (norte e sul),
+    // e o de dentro (a ilha) é um paredão: pra ilha só pelas pontes
+    const bed = CASTLE.bed, rw = 55, rr = 125;
+    out.segs.push(...ringSegs(cx0, cz0, RI, 10, 64, () => [[bed - 10, 0]]));
+    out.segs.push(...ringSegs(cx0, cz0, RM, 10, 72, (a) => (Math.abs(Math.cos(a)) < (rw + 12) / RM ? [] : [[bed - 10, 0]])));
+    out.slopes.push({ x0: cx0 - rw, x1: cx0 + rw, z0: cz0 - RM - 4, z1: cz0 - RM + rr, axis: 'z', h0: 0, h1: bed, moatRamp: true });
+    out.slopes.push({ x0: cx0 - rw, x1: cx0 + rw, z0: cz0 + RM - rr, z1: cz0 + RM + 4, axis: 'z', h0: bed, h1: 0, moatRamp: true });
+    out.moat = { cx: cx0, cz: cz0, r0: RI, r1: RM, water: CASTLE.water, bed, exits: [[cx0, cz0 - RM + rr - 20, cx0, cz0 - RM - 40], [cx0, cz0 + RM - rr + 20, cx0, cz0 + RM + 40]] };
   } else if (mapId === 'navio') {
     // navio: sem muro de borda (em volta é mar); a amurada é baixinha (dá pra pular e cair no mar)
     walls = walls.filter((R) => !R.border);
@@ -611,15 +623,25 @@ export function world3D(mapId, G, MAPS, CFG) {
     // da base azul), a diagonal com um buraco no meio onde sobe o elevador do meio (cada metade leva pra longe do meio)
     // e a barra de baixo (leva pra longe da base vermelha) — igual pros 2 times girando 180°
     const BT = FACT.bridge, hw = FACT.hw, v = FACT.beltTop, cx = W / 2, cz = H / 2;
-    const S0 = [0.046 * W, 0.15 * H], S1 = [0.86 * W, 0.15 * H], S2 = [0.14 * W, 0.85 * H], S3 = [0.954 * W, 0.85 * H];
+    const LX = MAPS3D.fabrica.legX, LZ = 0.114; // (ponta da barra de cima e o meio da barra, em frações do mapa)
+    const S0 = [LX * W + 130, LZ * H], S1 = [0.955 * W, LZ * H], S2 = [0.045 * W, (1 - LZ) * H], S3 = [(1 - LX) * W - 130, (1 - LZ) * H];
     out.discs = []; out.bridges = [];
     const beam = (a, b) => { const B = { beam: true, ax: a[0], az: a[1], bx: b[0], bz: b[1], hw, y0: BT - 14, top: BT, belt: v, bridge: true }; out.discs.push(B); out.bridges.push(B); };
     beam(S0, S1); beam(S3, S2);
     const L = Math.hypot(S2[0] - S1[0], S2[1] - S1[1]), ux = (S2[0] - S1[0]) / L, uz = (S2[1] - S1[1]) / L, gap = 0.02 * W + 4; // (metade do elevador do meio)
     beam([cx - ux * gap, cz - uz * gap], S1); beam([cx + ux * gap, cz + uz * gap], S2);
-    const SZ = MAPS3D.fabrica.spawnZ; out.spawnX = [50, 300]; out.spawnZ = [SZ[0] * H, SZ[1] * H]; out.spawnRot = true;
+    const SZ = MAPS3D.fabrica.spawnZ; out.spawnX = [LX * W + 50, LX * W + 300]; out.spawnZ = [SZ[0] * H, SZ[1] * H]; out.spawnRot = true;
     // caminho do meio do Z (os bots seguem ele pra achar quem está do outro lado)
-    out.navPath = [[0.06 * W, 0.15 * H], [0.84 * W, 0.15 * H], [0.16 * W, 0.85 * H], [0.94 * W, 0.85 * H]];
+    out.navPath = [[LX * W + 100, LZ * H], [0.9 * W, LZ * H], [0.1 * W, (1 - LZ) * H], [(1 - LX) * W - 100, (1 - LZ) * H]];
+    // elevações da diagonal: patamar a 64 de altura com 4 degraus baixinhos dos 2 lados (esquerda/direita)
+    for (const [hx, hz, hwn, hhn] of MAPS3D.fabrica.humps) {
+      const x0 = hx * W, z0 = hz * H, w0 = hwn * W, h0 = hhn * H, PH = 64, n = 4, sd = 24;
+      walls.push({ x: x0, y: z0, w: w0, h: h0, top: PH, hump: true, tint: '#7b808a', style: 'grate' });
+      for (let k = 1; k <= n; k++) {
+        walls.push({ x: x0 - (n - k + 1) * sd, y: z0, w: sd + 0.01, h: h0, top: PH * k / (n + 1), sstep: true, tint: '#8a8f99', style: 'grate' });
+        walls.push({ x: x0 + w0 + (n - k) * sd, y: z0, w: sd + 0.01, h: h0, top: PH * k / (n + 1), sstep: true, tint: '#8a8f99', style: 'grate' });
+      }
+    }
   } else if (mapId === 'escuro') {
     // umas paredes mais altas (até o teto no meio) e o resto aberto
     del([0.34, 0.5, 0.4, 0.5]);

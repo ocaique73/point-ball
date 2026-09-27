@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 27/09/2026 — v0.28.0 (Three.js): mãos com luva preta e manga longa do time, granadas viraram poções, bola de neve jogada por cima, FOV separado da distância da arma, pausa no Esc (sozinho), castelo/mar/navio/fábrica/metrô ajustados; ideias de habilidades guardadas em demo3d/IDEIAS-HABILIDADES.md.
+Última atualização: 27/09/2026 — v0.29.0 (Three.js): braços da 1ª pessoa = os braços do próprio boneco (com ajuste de tamanho/comprimento/grossura), frascos redondos iguais, faca de lado e varinha em pé, ponte do castelo de volta e rio raso, fábrica em Z com o meio maior, navio mais claro e o app instalável (Electron) pra jogar em LAN.
 
 ---
 
@@ -324,6 +324,16 @@
 - [ ] Godot: falta a mecânica de **Portais** (teletransporte — é a mais complexa, precisa abrir buracos na parede e sincronizar posição/velocidade) e da **Cidade à noite** (postes que acendem/apagam ao levar tiro; hoje o mapa não é permanentemente escuro ainda).
 - [ ] Godot: **multiplayer do zero** (o Godot não usa o servidor Node/Socket.IO da versão web — precisa de servidor dedicado ENet, salas, times, dono da sala). Fase grande, ainda não iniciada.
 
+- [x] v0.29.0 (Three.js): décima segunda rodada de ajustes do Caique (só no 3D)
+  - [x] **1ª pessoa – braços do próprio boneco**: os braços e as mãos são os mesmos da 3ª pessoa (mesmo personagem, roupa, luvas e manga do time), mais grossinhos; configurações novas **tamanho / comprimento / grossura dos braços** (salvas no navegador)
+  - [x] Pegadas: **faca de lado** (tipo M9 / Xerofang), **varinha em pé** segura como pincel, estilingue e varinha com o punho dobrado (o braço vem de baixo), besta com as 2 mãos
+  - [x] **Frascos**: todos redondos e do mesmo tamanho (cura, fumaça e explosiva) — fumaça com fumaça de verdade rodando dentro e anel dourado no bico; explosiva com pólvora, faíscas e pavio aceso; **segurados por baixo** (frasco em cima da mão) e **arremesso por baixo** (tipo a Sage); bola de neve também em cima da mão
+  - [x] **Castelo**: a ponte de entrada voltou (tinha sumido na v0.28); o chão da ilha não pisca mais (era uma laje de madeira em cima da grama); **rio raso**: cair não mata nem tira vida — anda-se no fundo mais devagar e sai pelas 2 rampas de pedra (norte e sul) ou pulando o barranco; bots saem sozinhos
+  - [x] **Fábrica**: as pontas do Z (nascimento) com metade do comprimento e mais finas; a diagonal (o combate) mais comprida e mais larga, com caixas, paredes e 4 elevações com escadinha (no começo, no meio e no fim)
+  - [x] **Navio**: estruturas mais claras (castelos, cabine, escadas, casco) pra ver os bonecos; o chão do convés continua escuro
+  - [x] **Modo LAN / app instalável** (`desktop/`, Electron): tela de início com **Hospedar partida** (liga o servidor no PC) e **Entrar** (acha as partidas da rede sozinho ou pelo IP); instruções em `desktop/LEIA-ME.md`
+  - [ ] Gerar o instalador no PC (`cd desktop` → `npm install` → `npm run dist`) e testar com os amigos
+
 - [x] v0.28.0 (Three.js): décima primeira rodada de ajustes do Caique (só no 3D)
   - [x] **1ª pessoa – mãos**: luva preta no estilo dos bonecos (blocos com canto arredondado, dedos curtos) e manga comprida na cor do time em todas as armas; pegada nova da faca, besta (as 2 mãos), varinha e estilingue
   - [x] **Granadas viraram poções**: fumaça = frasco redondo com fumaça cinza girando dentro; explosiva = frasco comprido com pólvora, faísquinhas piscando e pavio (na mão e voando)
@@ -352,7 +362,7 @@
   - [x] **Configurações**: distância da câmera e lado do personagem (ombro direito/esquerdo/meio) na 3ª pessoa
   - [x] **Online**: armas da sala (só uma, todas ou tirar algumas; faca/granada/fumaça também); **modo streamer** (esconde nome e senha da sala na tela; a sala criada não aparece na lista); sala sem nome ganha número (Sala 1… 9999, depois número+letra); nome da sala = código (a senha é separada e opcional)
   - [ ] Validar no PC e jogar o multiplayer com 2+ pessoas
-  - [ ] Depois: modo LAN instalável (Electron) — combinado pra outra versão
+  - [x] Modo LAN instalável (Electron) — feito na v0.29.0
   - [ ] Quando o "Salvar" do editor funcionar: pegar a branch `editor` e colocar no jogo
 
 - [x] v0.26.0 (Three.js): nona rodada de ajustes do Caique (só no 3D)
