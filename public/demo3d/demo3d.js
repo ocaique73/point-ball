@@ -3363,8 +3363,8 @@ function fpBake(model, re, slotName, sc) {
   return { geo, mat: src.material, axis: far.normalize() };
 }
 // refaz os braços quando muda a roupa, o personagem ou o time (ou quando o modelo termina de carregar)
-function fpRefreshArms() {
-  const look = normLook(S.look), team = viewTeam || 'A', mk = BASE[look.m] ? look.m : BASE.hood ? 'hood' : null;
+function fpRefreshArms(lookOv) { // (lookOv: espectador em 1ª pessoa — os braços do boneco de quem você assiste)
+  const look = normLook(lookOv || S.look), team = viewTeam || 'A', mk = BASE[look.m] ? look.m : BASE.hood ? 'hood' : null;
   if (!mk) return;
   const kL = Math.max(0.5, Math.min(1.8, (Number(S.armLen) || 100) / 100)), kW = Math.max(0.5, Math.min(1.8, (Number(S.armW) || 100) / 100));
   const key = JSON.stringify(look) + team + mk + '|' + kL + '|' + kW + '|' + S.armSize;
@@ -3944,6 +3944,7 @@ document.addEventListener('mousemove', (e) => {
 });
 let aimHeld = false;
 canvas.addEventListener('mousedown', (e) => {
+  if (locked && (e.button === 0 || e.button === 2) && specNext(e.button === 2 ? -1 : 1)) return; // (espectador: clique = próximo, botão direito = anterior)
   if (locked && e.button === 2) { aimHeld = true; return; }
   if (!locked || e.button !== 0) return;
   if (netMode) { netFireHeld = true; return; }
@@ -3972,6 +3973,7 @@ window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
   const me = sim.players.get('me'); if (!me) return;
   if (e.code === 'KeyV') { S.cam = S.cam === '1' ? '3' : '1'; $('o-cam').value = S.cam; save(); return; }
+  if (e.code === 'AltLeft') { e.preventDefault(); S.camSide = S.camSide === '1' ? '-1' : '1'; $('o-camside').value = S.camSide; save(); feed(S.camSide === '1' ? '📷 Câmera no ombro direito' : '📷 Câmera no ombro esquerdo'); return; } // (3ª pessoa: troca o lado da câmera)
   if (netMode) {
     if (!socket) return;
     if (e.code === 'Space') socket.emit('3d_action', { t: 'jump' });
@@ -3993,7 +3995,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'Digit4') sim.setWeapon(me, 'nade');
   else if (e.code === 'Digit5') sim.setWeapon(me, 'smoke');
 });
-window.addEventListener('keyup', (e) => { keys[e.code] = false; if (e.code === 'Tab') $('board').style.display = 'none'; });
+window.addEventListener('keyup', (e) => { keys[e.code] = false; if (e.code === 'Tab') $('board').style.display = 'none'; if (e.code === 'AltLeft' && locked) e.preventDefault(); }); // (Alt solto: o navegador não abre o menu dele)
 window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; $('board').style.display = 'none'; });
 
 // ---------- placar (Tab) ----------
@@ -4213,8 +4215,8 @@ function hud(me) {
   $('slots').innerHTML = slot('primary', w.name.split(' ')[0]) + slot('potion', `Poção ×${me.potions}`, !me.potions || me.lives >= P.lives) + (sim.noKnife ? '' : slot('knife', 'Faca')) + (sim.noNade ? '' : slot('nade', `Granada ×${me.nades}`, !me.nades)) + (sim.noSmoke ? '' : slot('smoke', `Fumaça ×${me.smokes}`, !me.smokes)); // (armas bloqueadas na sala somem)
   if (!me.alive) {
     const killer = [...sim.players.values()].find((p) => me.lastHitBy[p.id] && Math.abs(me.lastHitBy[p.id] - me.deadAt) < 0.05);
-    $('dead').style.display = 'block';
-    $('dead').innerHTML = `Você foi eliminado${killer ? ' por <span class="t' + killer.team + '">' + esc(killer.name) + '</span>' : ''}<small>renascendo em ${Math.max(0, Math.ceil(me.respawnAt - sim.time))}s</small>`;
+    $('dead').style.display = spec.id != null ? 'none' : 'block'; // (assistindo alguém: só o aviso de quem você assiste)
+    $('dead').innerHTML = `Você foi eliminado${killer ? ' por <span class="t' + killer.team + '">' + esc(killer.name) + '</span>' : ''}<small>${sim.mode === 'rounds' ? 'volta no próximo round' : `renascendo em ${Math.max(0, Math.ceil(me.respawnAt - sim.time))}s`}</small>`;
   } else $('dead').style.display = 'none';
   // indicador de granada inimiga: distância em metros e seta de direção pra correr
   let nearest = null, best = 1e9;
@@ -4318,6 +4320,7 @@ function applySnapshot(snap, evs) {
       protectUntil: sp.protectUntil, respawnAt: sp.respawnAt, deadAt: sp.deadAt, lastHitBy: sp.lastHitBy || {},
       shieldUntil: sp.shield ? snap.time + 1 : 0, shieldHits: sp.shield || 0, gliding: !!sp.gliding, magicReady: sp.magicReady || 0, dashUntil: sp.dash ? snap.time + 0.1 : 0,
       look: sp.look || null, slowUntil: sp.slowUntil || 0, spin: sp.spin, climb: !!sp.climb, sprinting: sp.sprinting, aiming: sp.aiming, aimT0: sp.aimT0 || 0, drinkUntil: sp.drinkUntil || 0, slip: !!sp.slip,
+      fp: !!sp.fp, camSide: sp.cs != null ? sp.cs : 1,
       input: { fwd: 0, side: 0, fire: false }
     };
     if (id === 'me') { p.yaw = netYaw; p.pitch = netPitch; }
@@ -4731,13 +4734,16 @@ function dispScale(p, dt) {
   return cur;
 }
 // câmera de 3ª pessoa (atrás do ombro, sem atravessar muro nem passar do teto) — usada no jogo e na killcam
-let thirdCamD = 999; // (câmera muito colada no boneco: esconde o seu boneco pra não tampar a tela)
-function thirdCam(x, y, z, yaw, pitch, ignoreId) {
+let thirdCamD = 999, camSideSm = null, camSideT = 0; // (câmera muito colada no boneco: esconde o seu boneco pra não tampar a tela)
+function thirdCam(x, y, z, yaw, pitch, ignoreId, sideOv) {
   const dx = Math.cos(pitch) * Math.cos(yaw), dy = Math.sin(pitch), dz = Math.cos(pitch) * Math.sin(yaw);
-  // distância e lado (ombro direito/esquerdo/meio) vêm das configurações
+  // distância e lado (ombro direito/esquerdo/meio) vêm das configurações (espectador: o ombro de quem você assiste)
   // (v0.28) com FOV maior a câmera chega mais perto: o boneco fica do mesmo tamanho na tela
   const fovK = Math.tan(40 * Math.PI / 180) / Math.tan(Math.max(50, Math.min(120, Number(S.fov) || 80)) * Math.PI / 360);
-  const side = Number(S.camSide), sh0 = 30 * (Number.isFinite(side) ? side : 1), want = Math.max(50, Math.min(300, Number(S.camDist) || 150)) * fovK;
+  const side = Number(sideOv != null ? sideOv : S.camSide), shT = 30 * (Number.isFinite(side) ? side : 1);
+  // (v0.31) a sua câmera desliza pro outro ombro (Alt esquerdo) em vez de pular
+  let sh0 = shT; if (ignoreId === 'me') { const t = performance.now(), k = Math.min(1, (t - (camSideT || t)) / 1000 * 9); camSideT = t; camSideSm = camSideSm == null ? shT : camSideSm + (shT - camSideSm) * k; sh0 = Math.abs(camSideSm - shT) < 0.3 ? shT : camSideSm; }
+  const want = Math.max(50, Math.min(300, Number(S.camDist) || 150)) * fovK;
   const hx = x, hy = y + 60 + (sh0 === 0 ? 14 : 0), hz = z, rx = -Math.sin(yaw), rz = Math.cos(yaw);
   // (v0.30) encostado numa parede do lado do ombro: o ombro da câmera encolhe (senão a câmera ia pra dentro/atrás da parede e ela sumia)
   let sh = sh0; if (sh0) { const hs = sim.raycast(hx, hy, hz, rx * Math.sign(sh0), 0, rz * Math.sign(sh0), Math.abs(sh0) + 14, ignoreId); sh = Math.sign(sh0) * Math.max(0, Math.min(Math.abs(sh0), hs - 14)); }
@@ -4747,6 +4753,44 @@ function thirdCam(x, y, z, yaw, pitch, ignoreId) {
   if (ignoreId === 'me') thirdCamD = d;
   const cy2 = sim.ceilingY != null ? sim.ceilingY - 12 : 1e9;
   return [hx + rx * sh + bx / bl * d, Math.min(cy2, Math.max(10, hy + by / bl * d)), hz + rz * sh + bz / bl * d];
+}
+// ---------- (v0.31) espectador: morreu no modo rounds -> assiste quem ainda está vivo ----------
+// bot = 3ª pessoa; jogador de verdade = a câmera que ele está usando (1ª ou 3ª pessoa, no mesmo ombro)
+// Clique = próximo · Botão direito = anterior (primeiro os do seu time; se não sobrou ninguém do time, qualquer um)
+const SPEC_DELAY = 1.4; // segundos vendo a própria lápide antes de ir pro espectador
+const spec = { id: null, want: null, fp: false, yaw: 0, pitch: 0, lx: null, lz: null, tag: '' };
+const isViewer = (id) => id === 'me' || (spec.id != null && spec.fp && id === spec.id); // de quem é a arma na tela
+function specOn(me) { return !!(sim && me) && sim.mode === 'rounds' && !me.alive && sim.time - (me.deadAt || 0) > SPEC_DELAY && !killcam.active && !EDIT3D; }
+function specList(me) {
+  const all = [...sim.players.values()].filter((p) => p.id !== 'me' && p.alive), mine = all.filter((p) => p.team === me.team);
+  return mine.length ? mine : all;
+}
+function specNext(dir) {
+  const me = sim && sim.players.get('me'); if (!specOn(me)) return false;
+  const L = specList(me); if (!L.length) return true;
+  const i = L.findIndex((p) => p.id === spec.id);
+  spec.want = L[((i < 0 ? 0 : i + dir) % L.length + L.length) % L.length].id;
+  return true;
+}
+function updateSpec(me, dtR) {
+  const off = () => { if (spec.id != null || spec.tag) { spec.id = null; spec.want = null; spec.fp = false; spec.tag = ''; $('spec').style.display = 'none'; } return null; };
+  if (!specOn(me)) { spec.lx = spec.lz = null; return off(); }
+  const L = specList(me); if (!L.length) return off();
+  let t = L.find((p) => p.id === spec.want) || L.find((p) => p.id === spec.id);
+  if (!t) { // começou agora (ou quem você assistia morreu): o mais perto de onde estava a câmera
+    const ox = spec.lx != null ? spec.lx : me.x, oz = spec.lz != null ? spec.lz : me.z, d2 = (p) => (p.x - ox) ** 2 + (p.z - oz) ** 2;
+    t = L.reduce((a, b) => (d2(b) < d2(a) ? b : a));
+  }
+  if (t.id !== spec.id) { spec.id = t.id; spec.yaw = t.yaw; spec.pitch = t.pitch; }
+  spec.want = t.id; spec.lx = t.x; spec.lz = t.z;
+  spec.fp = !t.bot && !!t.fp;
+  // mira macia (no online a mira dos outros chega umas 8 vezes por segundo)
+  const k = Math.min(1, dtR * (netMode ? 14 : 30)); let dy = t.yaw - spec.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+  spec.yaw += dy * k; spec.pitch += (t.pitch - spec.pitch) * k;
+  const n = L.length, tag = `👁 Assistindo <span class="t${t.team}">${esc(t.name)}</span>${t.bot ? ' (bot)' : ''} · ${spec.fp ? '1ª' : '3ª'} pessoa<small>${n > 1 ? `Clique = próximo · Botão direito = anterior (${n} vivos)` : 'último vivo'}</small>`;
+  if (tag !== spec.tag) { spec.tag = tag; $('spec').innerHTML = tag; }
+  $('spec').style.display = menuOpen ? 'none' : 'block';
+  return t;
 }
 function frame(now) {
   drawLookPreview(now);
@@ -4766,7 +4810,7 @@ function frame(now) {
     me.yaw = netYaw; me.pitch = netPitch;
     if (locked && socket && now - netInputT > 50) {
       netInputT = now;
-      socket.emit('3d_input', { fwd: me.input.fwd, side: me.input.side, fire: netFireHeld, sprint: me.input.sprint, aim: me.input.aim, glide: me.input.glide, yaw: netYaw, pitch: netPitch, fp: S.cam === '1' });
+      socket.emit('3d_input', { fwd: me.input.fwd, side: me.input.side, fire: netFireHeld, sprint: me.input.sprint, aim: me.input.aim, glide: me.input.glide, yaw: netYaw, pitch: netPitch, fp: S.cam === '1', cs: Number(S.camSide) || 0 });
     }
   } else {
     // sozinho: com o menu (Esc) aberto o jogo fica pausado (no online nunca pausa)
@@ -4856,6 +4900,8 @@ function frame(now) {
   const darkMap = mapInfo.mapId === 'cidade' || mapInfo.mapId === 'escuro';
   const aimed = darkMap ? aimedPlayer() : null;
   const myLookKey = JSON.stringify(normLook(S.look));
+  // espectador (modo rounds, morto): de quem é a câmera; vp = de quem é a visão/arma na tela (você, ou quem você assiste em 1ª pessoa)
+  const specT = updateSpec(me, dtR), vp = specT && spec.fp ? specT : me;
   // bonecos (o corpo some quando morre; fica a lápide)
   for (const p of sim.players.values()) {
     let a = avatars.get(p.id);
@@ -4867,7 +4913,7 @@ function frame(now) {
     { const lean = p.slip && sim.swayState ? -Math.sign(sim.swayState.roll || 0) * 0.22 : 0; a.root.rotation.x += (lean - a.root.rotation.x) * Math.min(1, dtR * 6); } // escorregando: corpo inclinado pra cima do convés
     const sc = dispScale(p, dtR); // cresce/diminui com animação (poção / levou tiro)
     a.model.scale.setScalar(a.baseScale * sc); a.ring.scale.setScalar(sc);
-    a.root.visible = p.alive && !(p.id === 'me' && (firstPerson || thirdCamD < 22)) && !(sim.time < p.protectUntil && Math.floor(now / 100) % 2 === 0);
+    a.root.visible = p.alive && !(p.id === 'me' && (firstPerson || thirdCamD < 22)) && !(vp !== me && p.id === vp.id) && !(sim.time < p.protectUntil && Math.floor(now / 100) % 2 === 0);
     a.ring.visible = false;
     if (a.label) a.label.visible = (!darkMap || (aimed === p.id && litAt(p))) && bodyVisible(p, now) >= 0.7; // nome só com 70% do corpo à vista
     a.setFrozen(sim.time < (p.slowUntil || 0));
@@ -4950,10 +4996,16 @@ function frame(now) {
   if (me.grounded && camSmY != null && Math.abs(my0 - camSmY) < 44) camSmY += (my0 - camSmY) * Math.min(1, dtR * 6.5); else camSmY = my0;
   const my = camSmY;
   const dx = Math.cos(me.pitch) * Math.cos(me.yaw), dy = Math.sin(me.pitch), dz = Math.cos(me.pitch) * Math.sin(me.yaw);
-  sprintFov += ((me.sprinting ? 7 : 0) - sprintFov) * Math.min(1, dtR * 8);
-  adsK += ((me.aiming && me.alive ? 1 : 0) - adsK) * Math.min(1, dtR * 12);
+  sprintFov += ((vp.sprinting && vp.alive ? 7 : 0) - sprintFov) * Math.min(1, dtR * 8);
+  adsK += ((vp.aiming && vp.alive ? 1 : 0) - adsK) * Math.min(1, dtR * 12);
   camera.fov = (S.fov + sprintFov) * (S.adszoom === '1' ? 1 - 0.4 * adsK : 1); // mirando: zoom (dá pra desligar nas configurações)
-  if (!me.alive) { // morto: olha a própria lápide de cima
+  if (specT) { // espectador: a câmera de quem você está assistindo
+    const [tx, ty, tz] = ip(specT.id, specT), cp = Math.cos(spec.pitch), ex = cp * Math.cos(spec.yaw), ey = Math.sin(spec.pitch), ez = cp * Math.sin(spec.yaw);
+    if (spec.fp) camera.position.set(tx, ty + P.eye * dispScale(specT, 0), tz);
+    else { const c = thirdCam(tx, ty, tz, spec.yaw, spec.pitch, specT.id, specT.bot ? null : specT.camSide); camera.position.set(c[0], c[1], c[2]); }
+    camera.lookAt(camera.position.x + ex, camera.position.y + ey, camera.position.z + ez);
+    me.camPos = null;
+  } else if (!me.alive) { // morto: olha a própria lápide de cima
     camera.position.set(mx - dx * 160, my + 170, mz - dz * 160);
     camera.lookAt(mx, my + 20, mz);
     me.camPos = null;
@@ -4971,17 +5023,19 @@ function frame(now) {
   }
   camera.updateProjectionMatrix();
   // arma na tela (bebendo: a garrafinha)
-  if (netMode) tintViewModels(me.team);
-  const drinking = (me.drinkUntil || 0) > sim.time;
+  // (espectador em 1ª pessoa: vp = quem você assiste — a arma, a cor do time e os braços são os dele)
+  if (netMode || vp !== me) tintViewModels(vp.team); else if (!killcam.active && viewTeam !== me.team) tintViewModels(me.team);
+  const fpShow = vp === me ? firstPerson && me.alive : true;
+  const drinking = (vp.drinkUntil || 0) > sim.time;
   const throwing = nadeThrowAnim && now - nadeThrowAnim.t < 420; // mão ainda terminando de jogar a granada
-  const wkey = drinking ? 'potion' : throwing ? nadeThrowAnim.kind : me.weapon === 'primary' ? me.primary : me.weapon;
-  for (const k2 in VIEW) VIEW[k2].visible = firstPerson && me.alive && k2 === wkey;
+  const wkey = drinking ? 'potion' : throwing ? nadeThrowAnim.kind : vp.weapon === 'primary' ? vp.primary : vp.weapon;
+  for (const k2 in VIEW) VIEW[k2].visible = fpShow && k2 === wkey;
   const vg = VIEW[wkey];
   if (wkey !== fpLastKey) { if (fpLastKey != null) { if (wkey === 'knife') knifeDrawT = now; else fpDrawT = now; } fpLastKey = wkey; } // puxou a faca: gira na mão; as outras: sobem rapidinho
-  if (firstPerson) fpRefreshArms(); // braços do seu boneco (refaz se mudou a roupa/o time)
-  { const spd = Math.hypot(me.vx, me.vz), k = Math.min(1, dtR * 8);
-    fpRunK += ((me.sprinting && spd > 30 ? 1 : 0) - fpRunK) * k; fpWalkK += ((me.grounded && spd > 30 && !me.sprinting ? 1 : 0) - fpWalkK) * k; }
-  if (vg && wkey === 'potion') updatePotionView(vg, drinking ? 1 - (me.drinkUntil - sim.time) / DRINK : -1, now);
+  if (fpShow) fpRefreshArms(vp === me ? null : vp.look); // braços do seu boneco (refaz se mudou a roupa/o time)
+  { const spd = Math.hypot(vp.vx, vp.vz), k = Math.min(1, dtR * 8);
+    fpRunK += ((vp.sprinting && spd > 30 ? 1 : 0) - fpRunK) * k; fpWalkK += ((vp.grounded && spd > 30 && !vp.sprinting ? 1 : 0) - fpWalkK) * k; }
+  if (vg && wkey === 'potion') updatePotionView(vg, drinking ? 1 - (vp.drinkUntil - sim.time) / DRINK : -1, now);
   else if (vg && (wkey === 'nade' || wkey === 'smoke')) {
     // granada: segurando, o braço vai pra trás (mais longe = mais pra trás); soltou: arremesso pra frente e a granada sai da mão
     // clicou: puxa rápido o braço pra trás e arremessa pra frente (sempre força máxima)
@@ -4994,10 +5048,10 @@ function frame(now) {
     if (vg.userData.pot) animPotion(vg.userData.pot, now);
   }
   else if (vg) {
-    const w = sim.WEAPONS[me.primary], reloading = me.weapon === 'primary' && me.reloadUntil;
+    const w = sim.WEAPONS[vp.primary], reloading = vp.weapon === 'primary' && vp.reloadUntil;
     // ru = andamento da recarga do pente (0..1); cu = andamento da espera pro próximo tiro (1 = pronto)
-    const ru = reloading ? Math.max(0, Math.min(1, 1 - (me.reloadUntil - sim.time) / w.reload)) : 0;
-    const cu = !reloading && me.weapon === 'primary' && me.fireReady > sim.time ? Math.max(0, Math.min(1, 1 - (me.fireReady - sim.time) / w.cd)) : 1;
+    const ru = reloading ? Math.max(0, Math.min(1, 1 - (vp.reloadUntil - sim.time) / w.reload)) : 0;
+    const cu = !reloading && vp.weapon === 'primary' && vp.fireReady > sim.time ? Math.max(0, Math.min(1, 1 - (vp.fireReady - sim.time) / w.cd)) : 1;
     const dip = reloading ? Math.sin(Math.PI * ru) : 0, sm = (a, b, u) => { const t = Math.max(0, Math.min(1, (u - a) / (b - a))); return t * t * (3 - 2 * t); };
     const base = wkey === 'arco' ? [6.5, -7.5, -22] : wkey === 'estilingue' ? [9, -9.5, -22] : wkey === 'mao' ? [8.5, -7.2, -21] : [8, -8, -22];
     let ox = 0, oy = 0, rz = 0, rx = 0;
@@ -5030,7 +5084,7 @@ function frame(now) {
     }
     // besta correndo: solta a mão de apoio da frente (ela desce, sai da tela) e levanta a besta só com a direita
     if (vg.userData.leftArm) { const L = vg.userData.leftArm, r0 = L.userData.rest; L.position.set(r0.x + 2 * run, r0.y - 16 * run, r0.z + 8 * run); L.rotation.x = 0.6 * run; }
-    const hasAmmo = me.ammo[me.primary] > 0;
+    const hasAmmo = (vp.ammo ? vp.ammo[vp.primary] : 1) > 0;
     vg.traverse((o) => {
       // besta: a corda puxa pra trás (engatilha) e a flecha nova desliza pro lugar
       if (o.userData.string) o.position.z = reloading ? 5 * sm(0.25, 0.7, ru) : 5 * sm(0, 0.6, cu);
@@ -5065,14 +5119,14 @@ function frame(now) {
   kick = Math.max(0, kick - dtR * 7); swing = Math.max(0, swing - dtR * 4);
 
   // mira
-  const w = sim.WEAPONS[me.primary];
+  const w = sim.WEAPONS[vp.primary];
   let prog = 1;
-  const reloadingMag = me.weapon === 'primary' && !!me.reloadUntil;
-  if (reloadingMag) prog = 1 - (me.reloadUntil - sim.time) / w.reload;
-  else if (me.fireReady > sim.time) prog = 1 - (me.fireReady - sim.time) / (me.weapon === 'primary' ? w.cd : me.weapon === 'knife' ? P.knifeCd : 0.6);
+  const reloadingMag = vp.weapon === 'primary' && !!vp.reloadUntil;
+  if (reloadingMag) prog = 1 - (vp.reloadUntil - sim.time) / w.reload;
+  else if (vp.fireReady > sim.time) prog = 1 - (vp.fireReady - sim.time) / (vp.weapon === 'primary' ? w.cd : vp.weapon === 'knife' ? P.knifeCd : 0.6);
   let hm = null;
   if (hitMark) { const a = 1 - (now - hitMark.t) / 280; if (a > 0) hm = { kind: hitMark.kind, a }; else hitMark = null; }
-  $('cross').style.display = me.alive && !menuOpen ? 'block' : 'none';
+  $('cross').style.display = vp.alive && !menuOpen ? 'block' : 'none'; // (espectador em 1ª pessoa: a mira de quem você assiste)
   drawCross(crossCtx, 240, 240, S.x, Math.max(0, Math.min(1, prog)), hm, reloadingMag);
   updateNadePreview(me);
   // brilho verde de cura quando bebe a poção
@@ -5180,9 +5234,9 @@ function handleEvent(e, now) {
   const a = avatars.get(e.id), p = e.id && sim.players.get(e.id);
   const pos = p ? [p.x, p.z] : (a ? [a.root.position.x, a.root.position.z] : null);
   if (e.type === 'shot' && p && e.id !== 'me') shotSeen.set(e.id, { t: now, x: p.x, z: p.z }); // aparece no minimapa quando atira
-  if (e.type === 'shot' && a) { const s = SHOOT_ANIM[e.weapon]; a.trigger(s[0], s[1], now); if (e.id === 'me') { kick = 1; if (e.weapon === 'mao' || e.weapon === 'disco') swing = 1; } if (pos) sfxAt(e.weapon === 'varinha' ? 'magic' : 'shot', pos[0], pos[1], e.id === 'me' ? undefined : { far: true, pitch: 0.62, gain: 0.5 }); } // tiro dos outros: mais baixo e mais grave
-  if (e.type === 'knife' && a) { a.trigger(CLIPS.KnifeSlice ? 'KnifeSlice' : '1H_Melee_Attack_Stab', 1.9, now); if (e.id === 'me') swing = 1; if (pos) sfxAt('knife', pos[0], pos[1]); }
-  if ((e.type === 'nade_throw' || e.type === 'smoke_throw') && a) { a.trigger('Throw', 2.2, now); if (e.id === 'me') { nadeThrowAnim = { t: now, kind: e.type === 'nade_throw' ? 'nade' : 'smoke', k: e.k != null ? e.k : 0.6 }; SFX.play('throw', 1); } } // (arremesso dos outros não faz som)
+  if (e.type === 'shot' && a) { const s = SHOOT_ANIM[e.weapon]; a.trigger(s[0], s[1], now); if (isViewer(e.id)) { kick = 1; if (e.weapon === 'mao' || e.weapon === 'disco') swing = 1; } if (pos) sfxAt(e.weapon === 'varinha' ? 'magic' : 'shot', pos[0], pos[1], isViewer(e.id) ? undefined : { far: true, pitch: 0.62, gain: 0.5 }); } // tiro dos outros: mais baixo e mais grave (espectador em 1ª pessoa: o de quem você assiste soa como o seu)
+  if (e.type === 'knife' && a) { a.trigger(CLIPS.KnifeSlice ? 'KnifeSlice' : '1H_Melee_Attack_Stab', 1.9, now); if (isViewer(e.id)) swing = 1; if (pos) sfxAt('knife', pos[0], pos[1]); }
+  if ((e.type === 'nade_throw' || e.type === 'smoke_throw') && a) { a.trigger('Throw', 2.2, now); if (isViewer(e.id)) { nadeThrowAnim = { t: now, kind: e.type === 'nade_throw' ? 'nade' : 'smoke', k: e.k != null ? e.k : 0.6 }; SFX.play('throw', 1); } } // (arremesso dos outros não faz som)
   if (e.type === 'drink' && a) { a.trigger('Use_Item', 1.1, now); if (e.id === 'me') { healFx = 1.2; feed('🧪 +1 vida'); } if (pos) sfxAt('drink', pos[0], pos[1]); }
   if (e.type === 'pickup' && e.id === 'me') { feed(e.kind === 'potion' ? '🧪 Poção reabastecida' : '💣 Granada/fumaça reabastecida'); SFX.play('pickup', 1); }
   if (e.type === 'explode' && Number.isFinite(e.x)) sfxAt('explode', e.x, e.z);
@@ -5264,7 +5318,7 @@ loadModels().then(() => {
     }).catch((e) => console.error('editor 3D', e));
   }
 }).catch((e) => { $('loading').textContent = 'Erro ao carregar os bonecos: ' + e.message; console.error(e); });
-window.__pb3d = { get sim() { return sim; }, get camD() { return thirdCamD; }, get mapInfo() { return mapInfo; }, killcam, lock: (v) => { locked = v; showMenu(!v); }, keys,
+window.__pb3d = { get sim() { return sim; }, get camD() { return thirdCamD; }, spec, get mapInfo() { return mapInfo; }, killcam, lock: (v) => { locked = v; showMenu(!v); }, keys,
   get BASE() { return BASE; }, get scene() { return scene; }, get camera() { return camera; }, get edit3d() { return EDIT3D; },
   fx: { eruptFx: (x, z, d) => eruptFx(x, z, 84, performance.now(), d) },
   step: (sec) => { const now = performance.now(); for (let i = 0; i < Math.round(sec * 60); i++) { const evs = sim.step(STEP); killcam.record(sim); for (const e of evs) handleEvent(e, now); } } }; // testes

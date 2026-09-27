@@ -3,7 +3,7 @@
 //  - "Hospedar": liga o servidor do jogo AQUI neste PC (o mesmo do site) e avisa a rede local que tem partida aqui;
 //    os amigos na mesma rede (Wi-Fi/cabo) entram por este PC. Também serve pra jogar sozinho sem internet.
 //  - "Entrar": mostra as partidas achadas na rede (ou digita o IP do PC de quem hospeda) e abre o jogo de lá.
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Menu } = require('electron');
 const path = require('path');
 const os = require('os');
 const dgram = require('dgram');
@@ -62,6 +62,7 @@ function criarJanela() {
   janela.webContents.on('before-input-event', (e, input) => {
     if (input.type === 'keyDown' && input.key === 'F11') { janela.setFullScreen(!janela.isFullScreen()); e.preventDefault(); }
     if (input.type === 'keyDown' && input.key === 'F5') { janela.webContents.reload(); e.preventDefault(); }
+    if (input.type === 'keyDown' && input.control && input.shift && input.key.toLowerCase() === 'i') { janela.webContents.toggleDevTools(); e.preventDefault(); }
   });
   // links externos abrem no navegador
   janela.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\/(localhost|\d+\.\d+\.\d+\.\d+)/.test(url)) return { action: 'allow' }; shell.openExternal(url); return { action: 'deny' }; });
@@ -73,6 +74,7 @@ ipcMain.handle('entrar', (e, ip, modo) => { const alvo = String(ip || '').trim()
 ipcMain.handle('inicio', () => { janela.loadFile(path.join(__dirname, 'launcher.html')); return true; });
 
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null); // sem barra de menu: o Alt esquerdo fica só pro jogo (troca o ombro da câmera)
   criarJanela(); ouvirRede();
   // teste automático (PB_TESTE=1): hospeda, espera o jogo abrir, tira um print e fecha
   if (process.env.PB_TESTE === '1') {
