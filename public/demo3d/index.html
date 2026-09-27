@@ -158,6 +158,8 @@
     <label class="field"><span>Zoom ao mirar (botão direito)</span><select id="o-adszoom"><option value="1">Com zoom</option><option value="0">Sem zoom</option></select><span></span></label>
     <label class="field"><span>Sombras</span><select id="o-shadow"><option value="1">Ligadas</option><option value="0">Desligadas</option></select><span></span></label>
     <label class="field"><span>Campo de visão (FOV)</span><input type="range" id="o-fov" min="60" max="110" step="1"><span class="v" id="v-fov"></span></label>
+    <label class="field"><span>Distância da câmera (3ª pessoa)</span><input type="range" id="o-camdist" min="80" max="280" step="5"><span class="v" id="v-o-camdist"></span></label>
+    <label class="field"><span>Lado do personagem (3ª pessoa)</span><select id="o-camside"><option value="1">Câmera no ombro direito</option><option value="-1">Câmera no ombro esquerdo</option><option value="0">Câmera no meio</option></select><span></span></label>
   </div>
   <div class="pane" id="p-look">
     <div class="row2" style="align-items:flex-start;gap:14px">
@@ -228,27 +230,29 @@
         <div style="flex:1;min-width:230px">
           <div class="wdesc" style="margin-bottom:4px"><b>Criar sala</b></div>
           <div class="row2">
-            <input type="text" id="mp-create-code" placeholder="Nome (1-5)" maxlength="5" style="width:110px">
+            <input type="text" id="mp-create-code" placeholder="Nome (opcional)" maxlength="5" style="width:120px" title="1 a 5 letras ou números. Vazio: a sala ganha um número (Sala 1, Sala 2...)">
             <input type="password" id="mp-create-pass" placeholder="Senha (opcional)" maxlength="6" style="width:130px">
             <button class="btn primary" id="mp-create-btn">Criar</button>
           </div>
         </div>
         <div style="flex:1;min-width:230px">
-          <div class="wdesc" style="margin-bottom:4px"><b>Entrar com código</b></div>
+          <div class="wdesc" style="margin-bottom:4px"><b>Entrar numa sala</b></div>
           <div class="row2">
-            <input type="text" id="mp-join-code" placeholder="Código" maxlength="5" style="width:110px">
+            <input type="text" id="mp-join-code" placeholder="Nome da sala" maxlength="5" style="width:120px">
             <input type="password" id="mp-join-pass" placeholder="Senha" maxlength="6" style="width:130px">
             <button class="btn primary" id="mp-join-btn">Entrar</button>
           </div>
         </div>
       </div>
+      <label class="wdesc" style="display:block;margin-top:8px;cursor:pointer"><input type="checkbox" id="mp-streamer" style="vertical-align:middle;margin:0 4px 0 0"> 🎥 <b>Modo streamer</b> — esconde o nome e a senha da sala na tela, e a sala que você criar não aparece na lista (os amigos entram digitando o nome)</label>
+      <div class="wdesc">O <b>nome da sala</b> é o que a pessoa digita pra entrar (é o "código"). A <b>senha</b> é opcional e só serve pra trancar a sala.</div>
       <div class="row2" style="margin-top:10px;justify-content:space-between"><b>Salas abertas</b><button class="btn" id="mp-refresh-btn">🔄 Atualizar</button></div>
       <div id="mp-list" class="wdesc">Nenhuma sala listada ainda.</div>
       <div id="mp-status" class="wdesc" style="color:#facc15"></div>
     </div>
     <div id="mp-view-lobby" style="display:none">
       <div class="row2" style="justify-content:space-between">
-        <b>Sala <span id="mp-lobby-code"></span> <span id="mp-lobby-lock"></span></b>
+        <b>Sala <span id="mp-lobby-code"></span> <span id="mp-lobby-lock"></span> <button class="btn" id="mp-reveal" style="display:none;padding:2px 8px;font-size:12px">👁 mostrar</button></b>
         <button class="btn danger" id="mp-leave-btn">Sair da sala</button>
       </div>
       <div id="mp-host-settings" style="margin-top:8px;display:grid;gap:8px"></div>
@@ -259,7 +263,7 @@
       <div style="margin-top:10px" id="mp-start-row"></div>
       <div id="mp-status2" class="wdesc" style="color:#facc15"></div>
     </div>
-    <div class="wdesc">Multiplayer completo: salas com código e senha, escolha de time, bots e dono da sala — igual ao jogo 2D.</div>
+    <div class="wdesc">Multiplayer completo: salas com nome e senha, escolha de time, bots, armas da sala e dono da sala — igual ao jogo 2D.</div>
   </div>
   <div class="foot"><span class="wdesc">Bonecos: KayKit Adventurers por Kay Lousberg (CC0)</span><button class="btn primary" id="btn-play">Jogar</button></div>
 </div></div>
