@@ -190,6 +190,24 @@ export const DRAGON = { dur: 6, half: 150, reach: 300, y: 860 }; // (o fogo faz 
 export function dragonX(D, z, H) { return D.x + (D.amp || 0) * Math.sin(Math.PI * (D.freq || 1) * (z + 400) / (H + 800) + (D.ph || 0)); }
 // navio: raios caindo de vez em quando (metade no mar em volta, metade no navio); quem for atingido perde 1 vida
 export const BOLT = { every: [7, 14], warn: 0.9, r: 75 };
+// MODO MAGIA: cada personagem tem 1 magia (tecla Q) e todo mundo tem a vassoura (segurar Espaço no ar = plana caindo devagar)
+export const MAGIC = {
+  cd: { shield: 20, eye: 22, blink: 11, wall: 16, dash: 13 },
+  shield: { time: 3.5, hits: 2 }, // mago: bolha que segura 2 tiros
+  eye: { time: 4.5, r: 320, dist: 230, pull: 2600 }, // capuz: olho no ar que puxa os tiros inimigos pra ele
+  blink: { dist: 290 }, // ladino: teleporte curto pra frente
+  wall: { time: 6, w: 160, t: 20, h: 125, dist: 95 }, // cavaleiro: parede de pedra (o tiro ricocheteia)
+  dash: { time: 0.32, speed: 1150, push: 950, up: 420, r: 62 }, // bárbaro: investida que joga os inimigos longe (sem tirar vida)
+  broom: { fall: -75, fwd: 1.35 }
+};
+export const MAGIC_OF = { mage: 'shield', hood: 'eye', rogue: 'blink', knight: 'wall', barbarian: 'dash' };
+export const MAGIC_NAME = { shield: 'Escudo', eye: 'Olho', blink: 'Teleporte', wall: 'Parede de pedra', dash: 'Investida' };
+// personagem do bot (o mesmo sorteio do looks3d.botLook, pra magia bater com o boneco que aparece)
+export function charOfBot(id) {
+  let h = 2166136261; for (const ch of String(id)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
+  h = Math.imul(h ^ (h >>> 15), 2246822507) >>> 0; h = Math.imul(h ^ (h >>> 13), 3266489909) >>> 0;
+  return ['hood', 'rogue', 'knight', 'barbarian', 'mage'][Math.floor(((h >>> 0) / 4294967296) * 5)];
+}
 export const SWAY = { roll: 0.07, pitch: 0.025, heave: 10, big: 0.23, slide: 700, air: 380 };
 // sorteia 3 pares de buracos espelhados, longe das paredes e do meio (onde ficam as áreas de reabastecer)
 export function makeLavaHoles(W, H, walls, rnd) {
@@ -321,6 +339,7 @@ export class Sim3D {
     // nave: portas automáticas que abrem pro lado quando alguém chega perto
     this.doors = all.filter((b) => b.door != null).sort((a, b) => a.door - b.door).map((b) => ({ box: b, cx: (b.x0 + b.x1) / 2, cz: (b.z0 + b.z1) / 2, open: 0, until: 0, solid: true }));
     this.meteorBoxes = [];
+    this.magic = !!opts.magic; this.eyes = []; this.magicWalls = []; // (modo magia)
     // paredes em diagonal (mapas de formato irregular: octógono, hexágono...) e o contorno do mapa
     this.segs = (opts.segs || []).map((q) => { const dx = q.bx - q.ax, dz = q.bz - q.az, len = Math.hypot(dx, dz) || 1; return Object.assign({}, q, { ux: dx / len, uz: dz / len, len, nx: -dz / len, nz: dx / len }); });
     this.shape = opts.shape || null;
@@ -413,7 +432,7 @@ export class Sim3D {
   // junta as caixas de colisão que valem agora
   refreshBoxes() {
     const open = new Set(); for (const P of this.portals) if (P.i != null) open.add(P.i);
-    this.boxes = this.staticBoxes.concat(this.slotBoxes.filter((b) => !open.has(b.slot)), this.doors.filter((d) => d.solid).map((d) => d.box), this.meteorBoxes);
+    this.boxes = this.staticBoxes.concat(this.slotBoxes.filter((b) => !open.has(b.slot)), this.doors.filter((d) => d.solid).map((d) => d.box), this.meteorBoxes, (this.magicWalls || []).map((w) => w.box));
   }
   // portais 3D: aplica os pares abertos (null = tudo fechado); o cliente do multiplayer usa isso com o que vem do servidor
   applyPortalPairs(pairs) {
@@ -583,6 +602,7 @@ export class Sim3D {
     p.nades = this.noNade ? 0 : 1; p.smokes = this.noSmoke ? 0 : 1; p.potions = 1; p.reloadUntil = 0; p.charge0 = 0; p.nade0 = 0;
     p.protectUntil = this.time + this.P.protect; p.invulnUntil = 0;
     p.yaw = p.team === 'A' ? 0 : Math.PI;
+    p.shieldUntil = 0; p.shieldHits = 0; p.dashUntil = 0; p.gliding = false;
     p.lastHitBy = {}; p.spin = null; p.ladder = null; p.slowUntil = 0; p.aiming = false; p.aimT0 = 0; p.drinkUntil = 0;
   }
   weaponDef(p) { return this.WEAPONS[p.primary]; }
@@ -770,6 +790,7 @@ export class Sim3D {
     if (this.phase === 'matchEnd') { const ev = this.events; this.events = []; return ev; }
     this.updatePistons();
     for (const p of this.players.values()) this.updatePlayer(p, dt);
+    if (this.magic) this.updateMagic();
     this.updateBullets(dt);
     this.updateNades(dt);
     this.updatePickups();
@@ -793,7 +814,8 @@ export class Sim3D {
         nades: p.nades, smokes: p.smokes, potions: p.potions, djReadyAt: p.djReadyAt || 0,
         k: p.k, d: p.d, a: p.a, charge0: p.charge0 || 0, nade0: p.nade0 || 0, fireReady: p.fireReady || 0,
         protectUntil: p.protectUntil || 0, respawnAt: p.respawnAt || 0, deadAt: p.deadAt || 0, lastHitBy: p.lastHitBy || {},
-        look: p.look, slowUntil: p.slowUntil || 0, spin: !!p.spin, climb: !!p.ladder, sprinting: !!p.sprinting, aiming: !!p.aiming, aimT0: p.aimT0 || 0, drinkUntil: p.drinkUntil || 0, slip: !!p.slip });
+        look: p.look, slowUntil: p.slowUntil || 0, spin: !!p.spin, climb: !!p.ladder, sprinting: !!p.sprinting, aiming: !!p.aiming, aimT0: p.aimT0 || 0, drinkUntil: p.drinkUntil || 0, slip: !!p.slip,
+        shield: p.shieldUntil > this.time ? p.shieldHits : 0, gliding: !!p.gliding, magicReady: p.magicReady || 0, dash: p.dashUntil > this.time });
     }
     return {
       time: this.time, players,
@@ -816,7 +838,8 @@ export class Sim3D {
       meteors: this.meteors, meteorFall: this.meteorFall, ceilHoles: this.ceilHoles, lastKill: this.lastKill,
       mode: this.mode, phase: this.phase, phaseUntil: this.phaseUntil, hzStart: this.hzStart, score: this.score, round: this.round,
       totalRounds: this.totalRounds, killLimit: this.killLimit, hillTarget: this.hillTarget, matchTime: this.matchTime,
-      hill: this.hill ? { x: this.hill.x, z: this.hill.z, r: this.hill.r, n: this.hill.n, pv: this.hill.pv, o: this.hillOwner } : null, result: this.result
+      hill: this.hill ? { x: this.hill.x, z: this.hill.z, r: this.hill.r, n: this.hill.n, pv: this.hill.pv, o: this.hillOwner } : null, result: this.result,
+      magic: this.magic, eyes: this.eyes.map((E) => ({ id: E.id, team: E.team, owner: E.owner, x: E.x, y: E.y, z: E.z, until: E.until })), mwalls: this.magicWalls.map((W) => ({ id: W.id, box: W.box, until: W.until }))
     };
   }
 
@@ -857,9 +880,11 @@ export class Sim3D {
     }
     if (p.grounded) { p.vx = wx; p.vz = wz; }
     else { // no ar: mantém o impulso, com um pouco de controle
-      const k = Math.min(1, this.P.airControl * dt * 6);
-      if (wl > 0.01 && !(p.flungUntil > this.time)) { p.vx += (wx - p.vx) * k; p.vz += (wz - p.vz) * k; } // (arremessado pela bola: voa sem controle)
+      const k = Math.min(1, this.P.airControl * dt * 6), kb = MAGIC.broom.fwd;
+      if (p.gliding && wl > 0.01) { const k2 = Math.min(1, dt * 3); p.vx += (wx * kb - p.vx) * k2; p.vz += (wz * kb - p.vz) * k2; } // (na vassoura: vai pra frente/pra onde virar)
+      else if (wl > 0.01 && !(p.flungUntil > this.time)) { p.vx += (wx - p.vx) * k; p.vz += (wz - p.vz) * k; } // (arremessado pela bola: voa sem controle)
     }
+    if (this.magic && p.dashUntil > this.time) { p.vx = p.dashVx; p.vz = p.dashVz; this.dashHits(p); } // investida do bárbaro
     // navio inclinado: quem está em pé escorrega pro lado mais baixo; no ar, o pulo é levado pro lado (e fica mais alto/baixo com o sobe-desce)
     if (this.deck) {
       // a parte grande da inclinação (onda de lado) só leva forte quem está na água; o resto escorrega pouco
@@ -925,7 +950,10 @@ export class Sim3D {
     if (this.ladders.length && this.updateLadder(p, dt, r)) { this.fireInput(p); return; }
     // vertical: gravidade, chão (areia / buraco) e topo dos muros
     const y0 = p.y, ph = this.heightOf(p);
-    p.vy -= this.P.gravity * dt; p.y += p.vy * dt;
+    p.vy -= this.P.gravity * dt;
+    // vassoura (modo magia): segurando Espaço no ar, cai bem devagar
+    if (this.magic && !p.grounded && p.input.glide && p.vy < MAGIC.broom.fall && !(p.flungUntil > this.time)) { p.vy = MAGIC.broom.fall; p.gliding = true; } else if (p.grounded || !p.input.glide || p.vy > 0) p.gliding = false;
+    p.y += p.vy * dt;
     // bate a cabeça embaixo de plataforma/teto baixo (andar de cima do mapa dos portais)
     if (p.vy > 0) for (const b of this.boxes) {
       if (b.y0 > 0 && y0 + ph <= b.y0 + 1 && p.y + ph > b.y0 && this.circleBox(p.x, p.z, r * 0.8, b)) { p.y = b.y0 - ph; p.vy = 0; }
@@ -948,6 +976,68 @@ export class Sim3D {
     if (this.deck && p.y < this.deck.kill) { this.drown(p); return; }
     if (this.moat && this.moat.bed == null && p.y < this.moat.water - 25) { this.drown(p); return; } // (lago fundo; o do castelo agora é raso)
     this.fireInput(p);
+  }
+  // ---------- modo magia ----------
+  magicOf(p) { const m = (p.look && p.look.m) || (p.bot ? charOfBot(p.id + p.name) : 'hood'); return MAGIC_OF[m] || 'eye'; }
+  ability(p) {
+    if (!this.magic || !p.alive || !this.canAct() || this.time < (p.magicReady || 0) || p.spin) return false;
+    const kind = this.magicOf(p), M = MAGIC, t = this.time, fx = Math.cos(p.yaw), fz = Math.sin(p.yaw), r = this.radius(p), oy = p.y + this.P.chest;
+    const ev = { type: 'magic', id: p.id, kind, x: p.x, y: p.y, z: p.z };
+    if (kind === 'shield') { p.shieldUntil = t + M.shield.time; p.shieldHits = M.shield.hits; }
+    else if (kind === 'eye') {
+      const cp = Math.cos(p.pitch), dx = fx * cp, dy = Math.sin(p.pitch), dz = fz * cp;
+      const d = Math.max(40, Math.min(M.eye.dist, this.raycast(p.x, oy, p.z, dx, dy, dz, M.eye.dist + 30, p.id) - 30));
+      const E = { id: this.nextId++, owner: p.id, team: p.team, x: p.x + dx * d, y: Math.max(this.groundAt(p.x, p.z) + 40, oy + dy * d), z: p.z + dz * d, until: t + M.eye.time };
+      this.eyes.push(E); Object.assign(ev, { ex: E.x, ey: E.y, ez: E.z });
+    } else if (kind === 'blink') {
+      const hit = this.raycast(p.x, oy, p.z, fx, 0, fz, M.blink.dist + 40, p.id), d = Math.max(0, Math.min(M.blink.dist, hit - r - 12));
+      const nx = p.x + fx * d, nz = p.z + fz * d;
+      if (d < 30 || !this.inside(nx, nz, r) || this.boxes.some((b) => this.circleBox(nx, nz, r, b) && p.y < b.top - 2 && p.y + this.heightOf(p) > b.y0)) return false;
+      Object.assign(ev, { x0: p.x, z0: p.z, x1: nx, z1: nz }); p.x = nx; p.z = nz;
+    } else if (kind === 'wall') {
+      const cx = p.x + fx * M.wall.dist, cz = p.z + fz * M.wall.dist, hw = M.wall.w / 2, ht = M.wall.t / 2, alongZ = Math.abs(fx) > Math.abs(fz); // olhando em x: a parede fica comprida em z
+      const box = alongZ ? { x0: cx - ht, x1: cx + ht, z0: cz - hw, z1: cz + hw } : { x0: cx - hw, x1: cx + hw, z0: cz - ht, z1: cz + ht };
+      Object.assign(box, { y0: p.grounded ? p.y : Math.max(0, p.y - 40), magicWall: true }); box.top = box.y0 + M.wall.h;
+      const W = { id: this.nextId++, team: p.team, box, until: t + M.wall.time }; this.magicWalls.push(W); this.refreshBoxes();
+      Object.assign(ev, { wall: W.id });
+    } else if (kind === 'dash') { p.dashUntil = t + M.dash.time; p.dashVx = fx * M.dash.speed; p.dashVz = fz * M.dash.speed; p.dashHit = new Set(); }
+    p.magicReady = t + M.cd[kind];
+    this.events.push(ev);
+    return true;
+  }
+  // investida: quem estiver no caminho é jogado longe (não perde vida)
+  dashHits(p) {
+    const M = MAGIC.dash;
+    for (const q of this.players.values()) {
+      if (q === p || !q.alive || !this.hostile(p.id, p.team, q) || (p.dashHit && p.dashHit.has(q.id))) continue;
+      if (Math.hypot(q.x - p.x, q.z - p.z) > M.r + this.radius(q) || Math.abs(q.y - p.y) > 60) continue;
+      const l = Math.hypot(p.dashVx, p.dashVz) || 1; q.vx = p.dashVx / l * M.push; q.vz = p.dashVz / l * M.push; q.vy = M.up; q.grounded = false; q.flungUntil = this.time + 0.7;
+      p.dashHit.add(q.id); if (q.bot) q.ai.stuck = 0;
+      this.events.push({ type: 'dash_hit', id: p.id, victim: q.id, x: q.x, y: q.y, z: q.z });
+    }
+  }
+  // olho do capuz: tiro inimigo perto dele faz curva até o olho e some
+  eyePull(b, dt) {
+    for (const E of this.eyes) {
+      if (b.owner === E.owner || (this.mode !== 'ffa' && b.team === E.team)) continue;
+      const dx = E.x - b.x, dy = E.y - b.y, dz = E.z - b.z, d = Math.hypot(dx, dy, dz);
+      if (d < 24) { this.events.push({ type: 'eye_absorb', x: E.x, y: E.y, z: E.z }); return true; }
+      if (d < MAGIC.eye.r) { const sp = Math.max(300, Math.hypot(b.vx, b.vy, b.vz)), k = Math.min(1, MAGIC.eye.pull * dt / sp * (1.4 - d / MAGIC.eye.r)); b.vx += (dx / d * sp - b.vx) * k; b.vy += (dy / d * sp - b.vy) * k; b.vz += (dz / d * sp - b.vz) * k; b.grav = 0; }
+    }
+    return false;
+  }
+  updateMagic() {
+    const t = this.time, n0 = this.magicWalls.length;
+    this.eyes = this.eyes.filter((E) => t < E.until);
+    this.magicWalls = this.magicWalls.filter((W) => t < W.until);
+    if (this.magicWalls.length !== n0) this.refreshBoxes();
+  }
+  // bots no modo magia: usam a magia quando faz sentido
+  botMagic(p, target, sees, dist, dt) {
+    if (this.time < (p.magicReady || 0) || Math.random() > dt * 1.2) return;
+    const kind = this.magicOf(p), hitRecently = Object.values(p.lastHitBy || {}).some((tt) => this.time - tt < 1.2);
+    const use = kind === 'shield' ? hitRecently || (sees && dist < 700) : kind === 'eye' ? sees && dist < 1000 : kind === 'blink' ? target && !sees && dist > 450 : kind === 'wall' ? sees && dist > 260 && dist < 1000 : kind === 'dash' ? sees && dist < 280 : false;
+    if (use) this.ability(p);
   }
   // atirar / usar
   fireInput(p) {
@@ -1558,6 +1648,7 @@ export class Sim3D {
   updateBullets(dt) {
     const keep = [];
     for (const b of this.bullets) {
+      if (this.eyes.length && this.eyePull(b, dt)) continue; // (olho do capuz: puxou e engoliu o tiro)
       const sp = Math.hypot(b.vx, b.vy, b.vz), n = Math.max(1, Math.ceil(sp * dt / (b.r * 0.9)));
       const sub = dt / n; let dead = false;
       for (let i = 0; i < n && !dead; i++) {
@@ -1634,6 +1725,10 @@ export class Sim3D {
 
   damage(v, by, weapon, bullet) {
     if (!v.alive || this.time < v.invulnUntil || this.time < v.protectUntil) return;
+    if (this.magic && v.shieldUntil > this.time && v.shieldHits > 0) { // escudo do mago: segura o golpe
+      v.shieldHits--; if (v.shieldHits <= 0) v.shieldUntil = 0; v.invulnUntil = this.time + 0.15;
+      this.events.push({ type: 'shield_block', id: v.id, x: v.x, y: v.y + this.P.chest, z: v.z }); return;
+    }
     if (this.godIds.has(v.id)) { // sala de teste / modo teste: você não morre, só mostra o marcador de acerto
       v.invulnUntil = this.time + this.P.invuln;
       this.events.push({ type: 'hit', by, victim: v.id, weapon });
@@ -1675,6 +1770,7 @@ export class Sim3D {
     this.tornado = null; this.storm = null; this.dragon = null; this.train = null; this.wave = null; this.crane = null; this.craneRest = 0; this.sandK = 0; this.sandS = 0; this.sandActive = false; this.lightOn = true; this.lightS = 0;
     for (const L of this.lamps) L.offUntil = 0;
     this.meteors = []; this.meteorBoxes = []; this.ceilHoles = []; this.meteorsDone = 0; this.meteorFall = null;
+    this.eyes = []; this.magicWalls = []; this.refreshBoxes();
     for (const d of this.doors) { d.open = 0; d.until = 0; d.solid = true; }
     this.portalIdx = -99; this.applyPortalPairs(null);
     for (const p of this.players.values()) this.spawn(p);
@@ -1856,6 +1952,7 @@ export class Sim3D {
         if (bi >= 0 && bd < 900) { ai.elev = bi; ai.elevT = this.time; }
       }
     }
+    if (this.magic && this.canAct()) this.botMagic(p, target, sees, dist, dt);
     if (ai.elev != null) this.botElevator(p, ai, target && sees);
     if (ai.beam && !(target && sees)) this.botBeam(p, ai);
     // travado no muro: pula (e às vezes pula duplo)

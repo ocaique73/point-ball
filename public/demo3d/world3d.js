@@ -292,7 +292,8 @@ export const MAPS3D = {
     // elevações na diagonal [x, z, w, h]: patamar alto com escadinha dos 2 lados (no começo/fim e no meio)
     humps: rotR([[0.671, 0.3, 0.052, 0.075], [0.5075, 0.541, 0.045, 0.06]]),
     // pistões = elevadores [x, z, w, h, altura máx, fase 0..1] — sobem até a ponte (FACT.bridge)
-    pistons: rotR([[0.367, 0.0865, 0.03, 0.055, 302, 0], [0.545, 0.134, 0.04, 0.05, 302, 0.5]]).concat([[0.48, 0.47, 0.04, 0.06, 302, 0.25]]),
+    // (v0.30) o elevador da ponta fica na curva do Z (no fim da ponte de cima, onde ela vira pra diagonal), não perto da base
+    pistons: rotR([[0.957, 0.0865, 0.03, 0.055, 302, 0], [0.545, 0.134, 0.04, 0.05, 302, 0.5]]).concat([[0.48, 0.47, 0.04, 0.06, 302, 0.25]]),
     // esteiras de baixo [x, z, w, h, velocidade em z] atravessando as barras — fortes: só pulando não leva
     belts: [[0.6, 0.01, 0.04, 0.21, 240], [0.36, 0.78, 0.04, 0.21, -240]],
     spawnZ: [0.03, 0.2], legX: 0.355 // (o azul nasce na ponta esquerda da barra de cima; o vermelho, girado, na de baixo)
@@ -620,7 +621,7 @@ export function world3D(mapId, G, MAPS, CFG) {
     }
   } else if (mapId === 'fabrica') {
     // ponte lá em cima seguindo o Z inteiro (piso reto em qualquer direção + esteira lenta): barra de cima (leva pra longe
-    // da base azul), a diagonal com um buraco no meio onde sobe o elevador do meio (cada metade leva pra longe do meio)
+    // da base azul), a diagonal com um buraco no meio onde sobe o elevador do meio (cada metade leva pro meio)
     // e a barra de baixo (leva pra longe da base vermelha) — igual pros 2 times girando 180°
     const BT = FACT.bridge, hw = FACT.hw, v = FACT.beltTop, cx = W / 2, cz = H / 2;
     const LX = MAPS3D.fabrica.legX, LZ = 0.114; // (ponta da barra de cima e o meio da barra, em frações do mapa)
@@ -629,7 +630,7 @@ export function world3D(mapId, G, MAPS, CFG) {
     const beam = (a, b) => { const B = { beam: true, ax: a[0], az: a[1], bx: b[0], bz: b[1], hw, y0: BT - 14, top: BT, belt: v, bridge: true }; out.discs.push(B); out.bridges.push(B); };
     beam(S0, S1); beam(S3, S2);
     const L = Math.hypot(S2[0] - S1[0], S2[1] - S1[1]), ux = (S2[0] - S1[0]) / L, uz = (S2[1] - S1[1]) / L, gap = 0.02 * W + 4; // (metade do elevador do meio)
-    beam([cx - ux * gap, cz - uz * gap], S1); beam([cx + ux * gap, cz + uz * gap], S2);
+    beam(S1, [cx - ux * gap, cz - uz * gap]); beam(S2, [cx + ux * gap, cz + uz * gap]); // (v0.30: as esteiras da diagonal levam pro meio do mapa, nunca pra trás)
     const SZ = MAPS3D.fabrica.spawnZ; out.spawnX = [LX * W + 50, LX * W + 300]; out.spawnZ = [SZ[0] * H, SZ[1] * H]; out.spawnRot = true;
     // caminho do meio do Z (os bots seguem ele pra achar quem está do outro lado)
     out.navPath = [[LX * W + 100, LZ * H], [0.9 * W, LZ * H], [0.1 * W, (1 - LZ) * H], [(1 - LX) * W - 100, (1 - LZ) * H]];
