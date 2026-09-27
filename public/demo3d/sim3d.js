@@ -129,8 +129,10 @@ export function pickPortalPairs3D(slots, prev, rnd, start) {
 
 // ---------- alturas por mapa ----------
 // mapas fechados (sala escura, portais, base na Lua): parede de borda até o teto; o teto ricocheteia tiro
-export const CEILING_Y = { nave: 360, escuro: 360, portal: 660, metro: 480, fabrica: 400 };
-export const BORDER_H = { nave: 360, escuro: 360, portal: 660, metro: 480, mar: 100, fabrica: 400, obra: 240, castelo: 200 };
+export const CEILING_Y = { nave: 360, escuro: 360, portal: 660, metro: 480, fabrica: 480, mar: 440 };
+export const BORDER_H = { nave: 360, escuro: 360, portal: 660, metro: 480, mar: 100, fabrica: 480, obra: 240, castelo: 200 };
+// fábrica: pontes em Z lá em cima (com esteira lenta) e os elevadores (pistões) que sobem até elas
+export const FACT = { bridge: 300, hw: 40, beltTop: 70, beltFloor: 240 };
 // portais: andar de cima (passarelas e pontes); só dá pra subir por um portal
 export const PLAT = { y: 300, th: 14, walk: 115, corner: 190, cornerLen: 190, bridge: 70, gapZ: 390, gap: 115 }; // cantos = quadrados largos
 // poste da cidade: altura da lâmpada, distância dela pro poste e o raio que o tiro acerta
@@ -151,7 +153,7 @@ export function pistonTop(pz, t) {
   return pz.lo + (pz.hi - pz.lo) * Math.max(0, Math.min(1, k));
 }
 // canteiro de obras: bola de demolição presa no guindaste do meio, dá uma volta inteira no mapa varrendo quem estiver no caminho
-export const CRANE = { R: 440, ball: 62, y: 96, dur: 5.2, turns: 2, push: 620, up: 330, parkY: 340 }; // 2 voltas inteiras
+export const CRANE = { R: 440, ball: 62, y: 96, dur: 7.6, turns: 3, push: 1150, up: 560, parkY: 340, fly: 1.1 }; // 3 voltas inteiras; joga longe (não tira vida)
 export function craneAngle(c, t) { const u = Math.max(0, Math.min(1, (t - c.t2) / CRANE.dur)), e = u * u * (3 - 2 * u); return c.a0 + c.dir * Math.PI * 2 * CRANE.turns * e; }
 // granada: segura pra jogar mais longe (min..max em 1 s); quica menos e rola pouco
 export const NADE = { min: 380, max: 980, charge: 1.0, air: 1.15, rest: 0.3, roll: 0.82 };
@@ -184,7 +186,10 @@ export const HOLE = { depth: 90, kill: 300, far: 1500 };
 // navio: balanço (graus em radianos) e quanto isso empurra quem está em cima
 // castelo: o dragão voa de uma ponta à outra do mapa (em z) cuspindo fogo numa faixa de largura 2*half; quem está
 // debaixo de telhado (salão, torre, sacada) não pega fogo
-export const DRAGON = { dur: 4, half: 105, reach: 230, y: 520 };
+export const DRAGON = { dur: 6, half: 150, reach: 300, y: 860 }; // (o fogo faz curva: dragonX(D, z))
+export function dragonX(D, z, H) { return D.x + (D.amp || 0) * Math.sin(Math.PI * (D.freq || 1) * (z + 400) / (H + 800) + (D.ph || 0)); }
+// navio: raios caindo de vez em quando (metade no mar em volta, metade no navio); quem for atingido perde 1 vida
+export const BOLT = { every: [7, 14], warn: 0.9, r: 75 };
 export const SWAY = { roll: 0.07, pitch: 0.025, heave: 10, big: 0.23, slide: 700, air: 380 };
 // sorteia 3 pares de buracos espelhados, longe das paredes e do meio (onde ficam as áreas de reabastecer)
 export function makeLavaHoles(W, H, walls, rnd) {
@@ -292,10 +297,14 @@ export class DuneField {
 export class Sim3D {
   // walls = retângulos do 2D ({x, y, w, h, border}) — y do 2D vira z aqui
   constructor(walls, mapW, mapH, opts) {
+    // regras de armas da sala (online): quais armas principais valem e se faca/granada/fumaça estão liberadas
+    { const o = opts || {}, al = Array.isArray(o.allowed) ? o.allowed.filter((w) => WEAPON_IDS.includes(w)) : [];
+      this.allowed = al.length && al.length < WEAPON_IDS.length ? al : null; this.noKnife = !!o.noKnife; this.noNade = !!o.noNade; this.noSmoke = !!o.noSmoke; }
     opts = opts || {};
     this.W = mapW; this.H = mapH;
     // sala de teste pode ajustar velocidade/pulo/etc sem mexer nos valores padrão
     this.P = Object.assign({}, P, opts.params || {});
+    if (opts.respawnK) this.P.respawn = Math.round(this.P.respawn * opts.respawnK * 10) / 10; // (mar: renasce mais rápido)
     if (opts.borderH) this.P.borderH = opts.borderH; // mapa fechado: borda até o teto
     this.cfg = opts.cfg || null;
     this.NADE = Object.assign({}, NADE, opts.nade || {}); // granada (força, quique, rolar) — o editor pode mudar
@@ -305,7 +314,7 @@ export class Sim3D {
     // deserto: as paredes do meio viram montanhas de areia (terreno), só a borda continua sendo muro
     this.dunes = opts.terrain === 'dunes' ? new DuneField(walls, mapW, mapH, { pyramids: opts.pyramids }) : null;
     // (as vidraças dos cantos da nave também são sólidas)
-    const all = walls.filter((R) => !(this.dunes && DuneField.isDune(R))).map((R) => ({ x0: R.x, z0: R.y, x1: R.x + R.w, z1: R.y + R.h, y0: R.y0 || 0, top: R.top != null ? R.top : R.border || R.space ? this.P.borderH : this.P.wallH, slot: R.slotDoor, door: R.door3d, hatch: !!R.hatch, piston: R.piston || null }));
+    const all = walls.filter((R) => !(this.dunes && DuneField.isDune(R))).map((R) => ({ x0: R.x, z0: R.y, x1: R.x + R.w, z1: R.y + R.h, y0: R.y0 || 0, top: R.top != null ? R.top : R.border || R.space ? this.P.borderH : this.P.wallH, slot: R.slotDoor, door: R.door3d, hatch: !!R.hatch, piston: R.piston || null, noShot: !!R.noShot }));
     // caixas fixas + as que mudam (porta do portal fechada, porta automática da nave, meteoro caído)
     this.staticBoxes = all.filter((b) => b.slot == null && b.door == null);
     this.slotBoxes = all.filter((b) => b.slot != null);
@@ -316,12 +325,20 @@ export class Sim3D {
     this.segs = (opts.segs || []).map((q) => { const dx = q.bx - q.ax, dz = q.bz - q.az, len = Math.hypot(dx, dz) || 1; return Object.assign({}, q, { ux: dx / len, uz: dz / len, len, nx: -dz / len, nz: dx / len }); });
     this.shape = opts.shape || null;
     // pisos redondos (anel: sacada em volta da torre, patamar) e rampas em espiral (dentro das torres do castelo)
-    this.discs = (opts.discs || []).map((d) => Object.assign({ r0: 0, y0: d.top - 12 }, d));
+    // (piso com beam: faixa reta em qualquer direção, de (ax,az) até (bx,bz) com meia largura hw — as pontes da fábrica)
+    this.discs = (opts.discs || []).map((d) => { const o = Object.assign({ r0: 0, y0: d.top - 12 }, d); if (o.beam) { const dx = o.bx - o.ax, dz = o.bz - o.az; o.len = Math.hypot(dx, dz) || 1; o.ux = dx / o.len; o.uz = dz / o.len; } return o; });
+    this.beamBelts = this.discs.filter((d) => d.beam && d.belt); // ponte com esteira: leva quem está em pé nela
+    this.bridgeMode = this.discs.some((d) => d.bridge); // (fábrica: bots também usam os elevadores)
     this.spirals = opts.spirals || [];
     // rampas retas (metrô): chão inclinado e maciço embaixo [x0, z0, x1, z1, eixo, altura no começo, altura no fim]
     this.slopes = opts.slopes || [];
     // navio: fora do casco é mar (cai e morre); o navio balança (inclina e sobe/desce) e isso mexe no pulo
     this.spawnX = opts.spawnX || null; // faixa (x) onde o time A nasce (o B é espelhado)
+    this.spawnZ = opts.spawnZ || null; this.spawnRot = !!opts.spawnRot; // faixa (z) do time A; spawnRot: o B nasce girado 180° (fábrica em Z)
+    this.moat = opts.moat || null; // castelo: lago em volta da ilha
+    this.outM = opts.outM || 80; // até onde o tiro vai fora do mapa (mar: até o navio da torcida)
+    // pontas das pontes do lago (O = em terra, I = na ilha): os bots atravessam por elas
+    this.bridgeEnds = this.moat ? (opts.slopes || []).filter((S) => S.bridge && !S.rail).map((S) => { const lowAt0 = S.h0 < S.h1, zc = (S.z0 + S.z1) / 2; return { x0: S.x0, x1: S.x1, z0: S.z0, z1: S.z1, O: [lowAt0 ? S.x0 + 30 : S.x1 - 30, zc], I: [lowAt0 ? S.x1 : S.x0, zc] }; }) : [];
     this.deck = opts.deck || null; this.swayState = { roll: 0, pitch: 0, heave: 0, vh: 0, ah: 0 };
     // fábrica: pistões que sobem e descem sozinhos (carregam quem está em cima) e esteiras que levam quem pisa nelas
     this.pistons = this.staticBoxes.filter((b) => b.piston);
@@ -373,6 +390,7 @@ export class Sim3D {
     this.lanes = opts.lanes || []; this.train = null; // metrô
     this.ladders = opts.ladders || []; // escadas de mão (casa na árvore)
     this.rooms = opts.rooms || []; // salas fechadas com porta (bot sai/entra pela porta pra achar quem está do outro lado)
+    this.navPath = opts.navPath || null; // mapa em corredor (fábrica em Z): o caminho do meio, pros bots não ficarem presos na parede
     this.shipSide = opts.ship || null; this.wave = null; // mar
     // teto que ricocheteia tiro (folhas da floresta / vidro da nave), null = sem teto
     this.ceilingY = opts.ceilingY != null ? opts.ceilingY : null;
@@ -467,8 +485,10 @@ export class Sim3D {
     return null;
   }
   // pisa no chão? (fora dos buracos) — a altura do chão ali
+  inMoat(x, z, m) { const M = this.moat; if (!M) return false; const d = Math.hypot(x - M.cx, z - M.cz); return d > M.r0 + (m || 0) && d < M.r1 - (m || 0); }
   floorAt(x, z, r) {
     if (this.holeAt(x, z, r * 0.35)) return -Infinity;
+    if (this.moat && this.inMoat(x, z, r * 0.3)) return -Infinity; // castelo: o lago em volta da ilha (só as pontes passam)
     if (this.deck && !this.onDeck(x, z, r * 0.3)) return -Infinity; // navio: fora do casco é mar
     return this.groundAt(x, z);
   }
@@ -515,6 +535,7 @@ export class Sim3D {
   }
   // ponto dentro do piso redondo (anel, ou só um pedaço dele se tiver a0/a1)
   inDisc(D, x, z) {
+    if (D.beam) { const ex = x - D.ax, ez = z - D.az, u = ex * D.ux + ez * D.uz; return u >= 0 && u <= D.len && Math.abs(-ex * D.uz + ez * D.ux) <= D.hw; }
     const dx = x - D.cx, dz = z - D.cz, rr = dx * dx + dz * dz;
     if (rr < D.r0 * D.r0 || rr > D.r1 * D.r1) return false;
     if (D.a1 == null) return true;
@@ -526,10 +547,10 @@ export class Sim3D {
   addPlayer(o) {
     const p = {
       id: o.id, name: o.name, team: o.team, bot: !!o.bot, level: o.level || 'amador', look: o.look || null,
-      primary: WEAPON_IDS.includes(o.primary) ? o.primary : o.bot ? WEAPON_IDS[Math.floor(Math.random() * WEAPON_IDS.length)] : 'arco', x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, grounded: true,
+      primary: this.pickPrimary(o.primary, o.bot), x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, grounded: true,
       yaw: o.team === 'A' ? 0 : Math.PI, pitch: 0, lives: this.P.lives, alive: true,
       weapon: 'primary', lastWeapon: 'primary', ammo: {}, mags: {}, reloadUntil: 0, fireReady: 0, charge0: 0,
-      nades: 1, smokes: 1, potions: 1, drinkReady: 0, invulnUntil: 0, protectUntil: 0, respawnAt: 0, djReadyAt: 0, djUsed: false, jumps: 0,
+      nades: this.noNade ? 0 : 1, smokes: this.noSmoke ? 0 : 1, potions: 1, drinkReady: 0, invulnUntil: 0, protectUntil: 0, respawnAt: 0, djReadyAt: 0, djUsed: false, jumps: 0,
       k: 0, d: 0, a: 0, input: { fwd: 0, side: 0, fire: false, sprint: false, aim: false }, ai: {}, lastHitBy: {}, deadAt: 0, sprinting: false, sprintOut: 0
     };
     for (const w of WEAPON_IDS) { p.ammo[w] = this.WEAPONS[w].mag; p.mags[w] = this.WEAPONS[w].mags; }
@@ -547,7 +568,8 @@ export class Sim3D {
       const ffa = this.mode === 'ffa';
       const sx = this.spawnX || [60, 250], sxv = sx[0] + Math.random() * (sx[1] - sx[0]);
       const x = ffa ? 70 + Math.random() * (this.W - 140) : p.team === 'A' ? sxv : this.W - sxv;
-      const z = 80 + Math.random() * (this.H - 160);
+      let z = 80 + Math.random() * (this.H - 160);
+      if (this.spawnZ && !ffa) { const zz = this.spawnZ[0] + Math.random() * (this.spawnZ[1] - this.spawnZ[0]); z = p.team === 'A' || !this.spawnRot ? zz : this.H - zz; } // (fábrica em Z: o vermelho nasce girado)
       if (this.boxes.some((b) => b.y0 < this.P.height && this.circleBox(x, z, r, b)) || this.holeAt(x, z, -r - 20) || !this.inside(x, z, r + 4) || this.slopes.some((S) => x > S.x0 - r && x < S.x1 + r && z > S.z0 - r && z < S.z1 + r) || (this.dunes && i < 50 && this.dunes.at(x, z) > 25)) continue; // (deserto: nasce no chão, não em cima da pirâmide)
       if (!ffa) { p.x = x; p.z = z; break; }
       let d = 1e9; for (const q of this.players.values()) if (q !== p && q.alive) d = Math.min(d, Math.hypot(q.x - x, q.z - z));
@@ -557,18 +579,25 @@ export class Sim3D {
     p.y = this.groundAt(p.x, p.z); p.vx = p.vy = p.vz = 0; p.grounded = true;
     p.lives = this.P.lives; p.alive = true; p.weapon = 'primary';
     for (const w of WEAPON_IDS) { p.ammo[w] = this.WEAPONS[w].mag; p.mags[w] = this.WEAPONS[w].mags; }
-    p.nades = 1; p.smokes = 1; p.potions = 1; p.reloadUntil = 0; p.charge0 = 0; p.nade0 = 0;
+    p.nades = this.noNade ? 0 : 1; p.smokes = this.noSmoke ? 0 : 1; p.potions = 1; p.reloadUntil = 0; p.charge0 = 0; p.nade0 = 0;
     p.protectUntil = this.time + this.P.protect; p.invulnUntil = 0;
     p.yaw = p.team === 'A' ? 0 : Math.PI;
     p.lastHitBy = {}; p.spin = null; p.ladder = null; p.slowUntil = 0; p.aiming = false; p.aimT0 = 0; p.drinkUntil = 0;
   }
   weaponDef(p) { return this.WEAPONS[p.primary]; }
   // troca a arma principal (menu Esc)
-  setPrimary(p, w) { if (!WEAPON_IDS.includes(w)) return; p.primary = w; p.reloadUntil = 0; p.charge0 = 0; }
+  // arma principal: a que a pessoa escolheu, se a sala deixar; senão a primeira liberada (bot: sorteia entre as liberadas)
+  pickPrimary(w, bot) {
+    const list = this.allowed || WEAPON_IDS;
+    if (list.includes(w)) return w;
+    return bot ? list[Math.floor(Math.random() * list.length)] : list.includes('arco') ? 'arco' : list[0];
+  }
+  setPrimary(p, w) { if (!WEAPON_IDS.includes(w) || (this.allowed && !this.allowed.includes(w))) return; p.primary = w; p.reloadUntil = 0; p.charge0 = 0; }
   aimDir(p) { const c = Math.cos(p.pitch); return [Math.cos(p.yaw) * c, Math.sin(p.pitch), Math.sin(p.yaw) * c]; }
 
   setWeapon(p, w) {
     if (!p.alive) return;
+    if (w === 'knife' && this.noKnife) return;
     if (w === 'nade' && p.nades < 1) return;
     if (w === 'smoke' && p.smokes < 1) return;
     if (w === 'potion' && (p.potions < 1 || p.lives >= this.P.lives)) return;
@@ -576,7 +605,7 @@ export class Sim3D {
   }
   // rodinha do mouse: próxima/anterior arma da lista
   cycleWeapon(p, dir) {
-    const list = ['primary', 'knife'].concat(p.nades ? ['nade'] : [], p.smokes ? ['smoke'] : [], (p.potions && p.lives < this.P.lives) ? ['potion'] : []);
+    const list = ['primary'].concat(this.noKnife ? [] : ['knife'], p.nades ? ['nade'] : [], p.smokes ? ['smoke'] : [], (p.potions && p.lives < this.P.lives) ? ['potion'] : []);
     const i = list.indexOf(p.weapon);
     this.setWeapon(p, list[(i + dir + list.length) % list.length]);
   }
@@ -641,6 +670,7 @@ export class Sim3D {
     for (const S of this.segs) if (this.segRay(S, ax, ay, az, bx - ax, by - ay, bz - az, 1) <= 1) return true;
     for (const D of this.discs) if (this.discRay(D, ax, ay, az, bx - ax, by - ay, bz - az, 1) <= 1) return true;
     for (const b of this.boxes) {
+      if (b.noShot) continue; // (parede invisível do mar: o tiro passa)
       let t0 = 0, t1 = 1;
       const d = [bx - ax, by - ay, bz - az], o = [ax, ay, az], mn = [b.x0, b.y0, b.z0], mx = [b.x1, b.top, b.z1];
       let hit = true;
@@ -705,6 +735,7 @@ export class Sim3D {
     for (const S of this.segs) best = Math.min(best, this.segRay(S, ox, oy, oz, dx, dy, dz, best));
     for (const D of this.discs) best = Math.min(best, this.discRay(D, ox, oy, oz, dx, dy, dz, best));
     for (const b of this.boxes) {
+      if (b.noShot) continue;
       let t0 = 0, t1 = best;
       const d = [dx, dy, dz], o = [ox, oy, oz], mn = [b.x0, b.y0, b.z0], mx = [b.x1, b.top, b.z1];
       let ok = true;
@@ -732,7 +763,7 @@ export class Sim3D {
 
   // ---------- passo da simulação ----------
   step(dt) {
-    if (this.deck) this.updateSway();
+    if (this.deck) { this.updateSway(); this.updateBolts(); }
     this.time += dt;
     this.updatePhase();
     if (this.phase === 'matchEnd') { const ev = this.events; this.events = []; return ev; }
@@ -761,7 +792,7 @@ export class Sim3D {
         nades: p.nades, smokes: p.smokes, potions: p.potions, djReadyAt: p.djReadyAt || 0,
         k: p.k, d: p.d, a: p.a, charge0: p.charge0 || 0, nade0: p.nade0 || 0, fireReady: p.fireReady || 0,
         protectUntil: p.protectUntil || 0, respawnAt: p.respawnAt || 0, deadAt: p.deadAt || 0, lastHitBy: p.lastHitBy || {},
-        look: p.look, slowUntil: p.slowUntil || 0, spin: !!p.spin, climb: !!p.ladder, sprinting: !!p.sprinting, aiming: !!p.aiming, aimT0: p.aimT0 || 0, drinkUntil: p.drinkUntil || 0 });
+        look: p.look, slowUntil: p.slowUntil || 0, spin: !!p.spin, climb: !!p.ladder, sprinting: !!p.sprinting, aiming: !!p.aiming, aimT0: p.aimT0 || 0, drinkUntil: p.drinkUntil || 0, slip: !!p.slip });
     }
     return {
       time: this.time, players,
@@ -777,7 +808,7 @@ export class Sim3D {
       crane: this.crane ? { a0: this.crane.a0, dir: this.crane.dir, t2: this.crane.t2, s: this.crane.s, k: this.crane.k, rest: this.crane.rest } : null,
       wave: this.wave ? { side: this.wave.side, t2: this.wave.t2, s: this.wave.s, k: this.wave.k } : null,
       sway: this.deck ? this.swayState : null,
-      dragon: this.dragon ? { x: this.dragon.x, dir: this.dragon.dir, z: this.dragon.z, s: this.dragon.s, k: this.dragon.k } : null,
+      dragon: this.dragon ? { x: this.dragon.x, dir: this.dragon.dir, z: this.dragon.z, s: this.dragon.s, k: this.dragon.k, amp: this.dragon.amp, freq: this.dragon.freq, ph: this.dragon.ph } : null,
       holes: this.holes, erupt: this.erupt && !this.erupt.done ? { pts: this.erupt.pts, r: this.erupt.r } : null,
       lamps: this.lamps.map((l) => ({ i: l.i, x: l.x, z: l.z, dx: l.dx, dz: l.dz, offUntil: l.offUntil })),
       portalPairs: this.portalPairs, portalN: this.portalN, doors: this.doors.map((d) => Math.round(d.open * 100) / 100), doorsT: this.doors.map((d) => Math.max(0, Math.round((d.until - this.time) * 20) / 20)),
@@ -813,7 +844,8 @@ export class Sim3D {
     const sprint = !!p.input.sprint && p.input.fwd > 0 && this.canAct() && !aiming;
     if (p.sprinting && !sprint) p.sprintOut = this.time + SPRINT.out;
     p.sprinting = sprint; if (sprint) p.charge0 = 0;
-    const spdK = (this.time < (p.slowUntil || 0) ? p.slowF : 1) * (sprint ? SPRINT.k : 1) * (p.aiming ? AIM.slow : 1);
+    p.inWater = this.deck ? this.deckWater(p) : false; // navio: água no convés (só quem pisa nela fica lento)
+    const spdK = (this.time < (p.slowUntil || 0) ? p.slowF : 1) * (sprint ? SPRINT.k : 1) * (p.aiming ? AIM.slow : 1) * (p.inWater ? 0.75 : 1);
     wx *= this.P.speed * spdK; wz *= this.P.speed * spdK;
     // subindo a montanha de areia: fica mais devagar conforme a subida
     if (this.dunes && p.grounded && wl > 0.01) {
@@ -823,13 +855,18 @@ export class Sim3D {
     if (p.grounded) { p.vx = wx; p.vz = wz; }
     else { // no ar: mantém o impulso, com um pouco de controle
       const k = Math.min(1, this.P.airControl * dt * 6);
-      if (wl > 0.01) { p.vx += (wx - p.vx) * k; p.vz += (wz - p.vz) * k; }
+      if (wl > 0.01 && !(p.flungUntil > this.time)) { p.vx += (wx - p.vx) * k; p.vz += (wz - p.vz) * k; } // (arremessado pela bola: voa sem controle)
     }
     // navio inclinado: quem está em pé escorrega pro lado mais baixo; no ar, o pulo é levado pro lado (e fica mais alto/baixo com o sobe-desce)
     if (this.deck) {
-      const S = this.swayState, sx = Math.sin(S.pitch), sz = Math.sin(S.roll);
-      if (p.grounded) { p.vx += sx * SWAY.slide; p.vz += sz * SWAY.slide; } // escorrega (velocidade)
-      else { p.vx += sx * SWAY.air * dt; p.vz += sz * SWAY.air * dt; p.vy -= S.ah * 6 * dt; } // no ar: é levado pro lado
+      // a parte grande da inclinação (onda de lado) só leva forte quem está na água; o resto escorrega pouco
+      const S = this.swayState, big = S.bigRoll || 0, sx = Math.sin(S.pitch), sz = Math.sin(S.roll - big + big * (p.inWater ? 1 : 0.3));
+      if (p.grounded) {
+        const own = Math.hypot(p.vx, p.vz); p.vx += sx * SWAY.slide; p.vz += sz * SWAY.slide; // escorrega (velocidade)
+        p.slip = Math.hypot(sx, sz) * SWAY.slide > 70 && own < this.P.speed * 0.45; // (desenho: animação de escorregando)
+      } else p.slip = false;
+      if (!p.grounded)
+      { p.vx += sx * SWAY.air * dt; p.vz += sz * SWAY.air * dt; p.vy -= S.ah * 6 * dt; } // no ar: é levado pro lado
     }
     const r = this.radius(p);
     // horizontal: bate nos muros que estão na altura do corpo
@@ -837,6 +874,7 @@ export class Sim3D {
     p.x += p.vx * dt; p.z += p.vz * dt;
     // esteira da fábrica: quem está pisando nela é levado junto
     if (this.belts.length && p.grounded && p.y < 2) for (const B of this.belts) if (p.x > B.x0 && p.x < B.x1 && p.z > B.z0 && p.z < B.z1) { p.x += B.vx * dt; p.z += B.vz * dt; break; }
+    if (this.beamBelts.length && p.grounded && p.y > 2) for (const D of this.beamBelts) if (Math.abs(p.y - D.top) < 3 && this.inDisc(D, p.x, p.z)) { p.x += D.ux * D.belt * dt; p.z += D.uz * D.belt * dt; break; }
     for (let it = 0; it < 3; it++) {
       for (const b of this.boxes) {
         if (p.y >= b.top - 2 || p.y + this.heightOf(p) <= b.y0 + 0.5) continue; // em cima do muro / por baixo (parede acima do portal, plataforma)
@@ -890,6 +928,7 @@ export class Sim3D {
       if (b.y0 > 0 && y0 + ph <= b.y0 + 1 && p.y + ph > b.y0 && this.circleBox(p.x, p.z, r * 0.8, b)) { p.y = b.y0 - ph; p.vy = 0; }
     }
     if (p.vy > 0 && (this.spirals.length || this.discs.length)) { const c = this.extraCeil(p.x, p.z, y0 + ph - 2); if (p.y + ph > c) { p.y = c - ph; p.vy = 0; } }
+    if (p.vy > 0 && this.ceilingY != null && p.y + ph > this.ceilingY - 4) { p.y = this.ceilingY - 4 - ph; p.vy = 0; } // bate a cabeça no teto do mapa (fábrica, nave...)
     let floor = pit ? -Infinity : this.floorAt(p.x, p.z, r);
     for (const b of this.boxes) if (this.circleBox(p.x, p.z, r * 0.7, b) && y0 >= b.top - 2) floor = Math.max(floor, b.top);
     if (this.spirals.length || this.discs.length || this.slopes.length) floor = Math.max(floor, this.extraFloor(p.x, p.z, y0, p.grounded ? 14 : 2));
@@ -904,6 +943,7 @@ export class Sim3D {
     if (this.holes && p.y < -HOLE.kill) { this.lavaFall(p); return; }
     // navio: caiu no mar
     if (this.deck && p.y < this.deck.kill) { this.drown(p); return; }
+    if (this.moat && p.y < this.moat.water - 25) { this.drown(p); return; } // caiu no lago do castelo
     this.fireInput(p);
   }
   // atirar / usar
@@ -1031,8 +1071,9 @@ export class Sim3D {
         const d = Math.hypot(p.x - u.x, p.z - u.z);
         if (d > u.r) continue;
         if (u.type === 'nade') {
-          if (p.nades >= 1 && p.smokes >= 1) continue;
-          p.nades = 1; p.smokes = 1;
+          const wn = this.noNade ? 0 : 1, ws = this.noSmoke ? 0 : 1;
+          if (p.nades >= wn && p.smokes >= ws) continue;
+          p.nades = wn; p.smokes = ws;
         } else { // potion
           if (p.potions >= 1) continue;
           p.potions = 1;
@@ -1346,33 +1387,60 @@ export class Sim3D {
       if (dx * dx + dz * dz > (CRANE.ball + r) ** 2 || p.y > CRANE.y + CRANE.ball || p.y + this.heightOf(p) < CRANE.y - CRANE.ball) continue;
       C.hit.push(p.id); p.ladder = null;
       const tx = -Math.sin(a) * C.dir, tz = Math.cos(a) * C.dir, rx = Math.cos(a), rz = Math.sin(a);
-      p.vx = tx * CRANE.push + rx * 200; p.vz = tz * CRANE.push + rz * 200; p.vy = CRANE.up; p.grounded = false;
-      this.events.push({ type: 'crane_hit', id: p.id, x: p.x, z: p.z });
-      this.damage(p, null, 'crane');
+      p.vx = tx * CRANE.push + rx * 380; p.vz = tz * CRANE.push + rz * 380; p.vy = CRANE.up; p.grounded = false; p.flungUntil = this.time + CRANE.fly;
+      this.events.push({ type: 'crane_hit', id: p.id, x: p.x, z: p.z }); // (só arremessa, não tira vida)
     }
   }
   // mar: a onda vem de um lado sorteado (menos o do navio), passa por cima da borda e arrasta quem pegar
   // navio balançando: inclina pros lados (roll), pra frente/trás (pitch) e sobe/desce (heave)
+  updateBolts() {
+    if (!this.canAct()) { this.boltPend = null; return; }
+    if (this.boltNext == null) this.boltNext = this.time + 5 + Math.random() * 5;
+    const B = this.boltPend;
+    if (B && this.time >= B.t) {
+      this.boltPend = null; this.events.push({ type: 'bolt', x: B.x, z: B.z, sea: B.sea });
+      if (!B.sea) for (const p of this.players.values()) {
+        if (!p.alive || Math.hypot(p.x - B.x, p.z - B.z) > BOLT.r) continue;
+        if (this.segBlocked(p.x, p.y + 70, p.z, p.x, p.y + 1200, p.z)) continue; // debaixo de telhado não pega
+        this.events.push({ type: 'bolt_hit', id: p.id, x: p.x, z: p.z }); this.damage(p, null, 'bolt');
+      }
+    }
+    if (!this.boltPend && this.time >= this.boltNext) {
+      this.boltNext = this.time + BOLT.every[0] + Math.random() * (BOLT.every[1] - BOLT.every[0]);
+      const sea = Math.random() < 0.5; let x = this.W / 2, z = this.H / 2;
+      if (sea) { const a = Math.random() * Math.PI * 2, d = 1000 + Math.random() * 1500; x += Math.cos(a) * d * 1.4; z += Math.sin(a) * d; }
+      else for (let i = 0; i < 40; i++) { x = this.W * (0.1 + Math.random() * 0.8); z = this.H * (0.27 + Math.random() * 0.46); if (this.inside(x, z, 20)) break; }
+      this.boltPend = { x, z, sea, t: this.time + BOLT.warn };
+      this.events.push({ type: 'bolt_warn', x, z, sea });
+    }
+  }
+  // está em pé na água que entrou no convés (lado de baixo, com a onda grande inclinando)?
+  deckWater(p) {
+    const S = this.swayState, w = Math.max(0, Math.min(1, (Math.abs(S.roll) - 0.19) / 0.08)) * 0.42;
+    if (w <= 0 || p.y > 12 || !p.grounded) return false;
+    const D = this.deck; if (D.zMin == null) { D.zMin = Math.min(...D.poly.map((q) => q[1])); D.zMax = Math.max(...D.poly.map((q) => q[1])); }
+    return Math.abs(p.z - (S.roll > 0 ? D.zMax : D.zMin)) < w * (D.zMax - D.zMin);
+  }
   updateSway() {
     const t = this.time, S = this.swayState, SW = this.swell;
     let big = 0;
     if (SW && SW.s === 2) big = Math.sin(Math.PI * Math.min(1, SW.k)) * SW.side; // onda grande: inclina forte e volta
-    S.roll = SWAY.roll * Math.sin(t * 2 * Math.PI / 7.3) + SWAY.big * big;
+    S.bigRoll = SWAY.big * big; S.roll = SWAY.roll * Math.sin(t * 2 * Math.PI / 7.3) + S.bigRoll;
     S.pitch = SWAY.pitch * Math.sin(t * 2 * Math.PI / 9.1 + 1.3);
     const w = 2 * Math.PI / 5.2; S.heave = SWAY.heave * Math.sin(t * w); S.ah = -SWAY.heave * w * w * Math.sin(t * w); S.vh = SWAY.heave * w * Math.cos(t * w);
   }
   updateDragon() {
     const cy = this.cycle('dragon');
     if (!this.dragon || this.dragon.idx !== cy.idx) {
-      const x = this.W * (0.3 + Math.random() * 0.4), dir = Math.random() < 0.5 ? 1 : -1;
-      this.dragon = { idx: cy.idx, x, dir, s: 0, k: 0, warned: false, z: dir > 0 ? -400 : this.H + 400 };
+      const x = this.W * (0.32 + Math.random() * 0.36), dir = Math.random() < 0.5 ? 1 : -1;
+      this.dragon = { idx: cy.idx, x, dir, s: 0, k: 0, warned: false, z: dir > 0 ? -400 : this.H + 400, amp: this.W * (0.06 + Math.random() * 0.1) * (Math.random() < 0.5 ? -1 : 1), freq: 1 + Math.random(), ph: Math.random() * Math.PI };
     }
     const D = this.dragon; D.s = cy.s; D.k = cy.k;
     if (cy.s >= 1 && !D.warned) { D.warned = true; this.events.push({ type: 'dragon_warn', x: D.x, dir: D.dir }); }
     if (cy.s !== 2) return;
     const L = this.H + 800; D.z = D.dir > 0 ? -400 + L * cy.k : this.H + 400 - L * cy.k;
     for (const p of this.players.values()) {
-      if (!p.alive || p.dragonIdx === D.idx || Math.abs(p.x - D.x) > DRAGON.half) continue;
+      if (!p.alive || p.dragonIdx === D.idx || Math.abs(p.x - dragonX(D, p.z, this.H)) > DRAGON.half) continue;
       const behind = (D.z - p.z) * D.dir; // o fogo cai logo atrás da cabeça
       if (behind < 20 || behind > DRAGON.reach) continue;
       if (this.segBlocked(p.x, p.y + 50, p.z, p.x, p.y + 900, p.z)) continue; // tem telhado em cima
@@ -1466,6 +1534,7 @@ export class Sim3D {
       return 'wall';
     }
     for (const b of this.boxes) {
+      if (b.noShot) continue;
       const cx = clamp(o.x, b.x0, b.x1), cy = clamp(o.y, b.y0, b.top), cz = clamp(o.z, b.z0, b.z1);
       let nx = o.x - cx, ny = o.y - cy, nz = o.z - cz; const d2 = nx * nx + ny * ny + nz * nz;
       if (d2 >= r * r) continue;
@@ -1493,7 +1562,7 @@ export class Sim3D {
         let hit = this.bounceStep(b, b.r, b.rest, sub);
         if (this.portals.length && this.portalCross(b, b.r, false)) this.events.push({ type: 'portal_shot', x: b.x, y: b.y, z: b.z });
         // caiu na lava ou saiu do mapa: some
-        if (b.y < -HOLE.depth - 120 || b.y > 1600 || b.x < -80 || b.z < -80 || b.x > this.W + 80 || b.z > this.H + 80) { dead = true; break; }
+        if (b.y < -HOLE.depth - 120 || b.y > 1600 || (this.ceilingY != null && b.y > this.ceilingY + 30) || b.x < -this.outM || b.z < -this.outM || b.x > this.W + this.outM || b.z > this.H + this.outM) { dead = true; break; }
         // teto que ricocheteia (folhas da floresta / vidro da nave)
         if (!hit && this.ceilingY != null && b.y + b.r >= this.ceilingY && b.vy > 0 && !this.ceilHoles.some((h) => (b.x - h.x) ** 2 + (b.z - h.z) ** 2 < h.r * h.r)) {
           b.y = this.ceilingY - b.r; b.vy = -Math.abs(b.vy) * (b.rest || 0.7); hit = 'ceiling';
@@ -1533,7 +1602,7 @@ export class Sim3D {
         if (this.portals.length) this.portalCross(g, this.P.nadeR, false);
       }
       // caiu na lava: some (sem explodir)
-      if (g.y < -HOLE.depth - 120 || (this.deck && g.y < this.deck.kill)) { this.events.push({ type: this.deck ? 'sea_splash' : 'lava_splash', x: g.x, z: g.z }); continue; }
+      if (g.y < -HOLE.depth - 120 || (this.deck && g.y < this.deck.kill) || (this.moat && g.y < this.moat.water - 10 && this.inMoat(g.x, g.z, 0))) { this.events.push({ type: this.deck || this.moat ? 'sea_splash' : 'lava_splash', x: g.x, z: g.z }); continue; }
       if (g.y <= this.groundAt(g.x, g.z) + this.P.nadeR + 0.5) { g.vx *= this.NADE.roll; g.vz *= this.NADE.roll; } // rolando no chão (pouco)
       g.spin += Math.hypot(g.vx, g.vz) * dt * 0.05;
       const age = this.time - g.t0;
@@ -1658,7 +1727,7 @@ export class Sim3D {
       let best = null;
       for (let i = 0; i < 60; i++) {
         const x = this.W * (0.32 + Math.random() * 0.36), z = R + this.wallT + 20 + Math.random() * (this.H - 2 * (R + this.wallT + 20));
-        if (this.boxes.some((b) => this.circleBox(x, z, 30, b)) || this.holeAt(x, z, -40) || !this.inside(x, z, R * 0.6)) continue;
+        if (this.boxes.some((b) => this.circleBox(x, z, 30, b)) || this.holeAt(x, z, -40) || !this.inside(x, z, R * 0.6) || (this.moat && this.inMoat(x, z, -R * 0.6))) continue;
         if (this.hill && Math.hypot(x - this.hill.x, z - this.hill.z) < R * 1.6) continue;
         best = { x, z }; break;
       }
@@ -1676,8 +1745,60 @@ export class Sim3D {
   }
 
   // ---------- bots ----------
+  // bot indo pro elevador: anda até ele, espera subir e sai andando pela ponte que começa ali
+  botElevator(p, ai, fighting) {
+    const b = this.pistons[ai.elev];
+    if (!b || fighting || this.time - ai.elevT > 14) { ai.elev = null; return; }
+    const cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2, on = this.circleBox(p.x, p.z, this.radius(p) * 0.5, b) && Math.abs(p.y - b.top) < 4;
+    if (!on) { ai.wander = Math.atan2(cz - p.z, cx - p.x); ai.fwd = 1; ai.side = 0; ai.t = Math.max(ai.t, 0.3); if (p.y > 20 && !on) ai.elev = null; return; }
+    if (b.top < b.piston.hi - 3) { ai.fwd = 0; ai.side = 0; ai.t = Math.max(ai.t, 0.3); return; } // esperando subir
+    let best = null, bd = 1e9;
+    for (const D of this.discs) { if (!D.beam) continue; for (const [ex, ez, s] of [[D.ax, D.az, 1], [D.bx, D.bz, -1]]) { const d = Math.hypot(ex - cx, ez - cz); if (d < bd) { bd = d; best = { D, s, t0: this.time }; } } }
+    if (best) { ai.beam = best; ai.t = 1.5; }
+    ai.elev = null;
+  }
+  // bot andando na ponte: segue a ponte (volta pro meio dela se estiver na beirada) até o fim
+  botBeam(p, ai) {
+    const { D, s } = ai.beam, ex = p.x - D.ax, ez = p.z - D.az, u = ex * D.ux + ez * D.uz, v = -ex * D.uz + ez * D.ux;
+    const end = s > 0 ? u > D.len - 50 : u < 50;
+    if (p.y < D.top - 30 || end || this.time - ai.beam.t0 > 16) { ai.beam = null; return; }
+    const head = Math.atan2(D.uz * s, D.ux * s), corr = Math.max(-0.9, Math.min(0.9, -v * 0.03 * s));
+    ai.wander = head + corr; ai.fwd = 1; ai.side = 0; ai.t = Math.max(ai.t, 0.3);
+    p.yaw += Math.atan2(Math.sin(ai.wander - p.yaw), Math.cos(ai.wander - p.yaw)) * 0.25;
+  }
+  nearMoat(p) { const M = this.moat; if (!M) return false; const d = Math.hypot(p.x - M.cx, p.z - M.cz); return d > M.r0 - 160 && d < M.r1 + 160; }
+  // castelo: atravessar o lago só pelas pontes (vai até a ponta da ponte e segue por ela)
+  moatNav(p, q) {
+    const M = this.moat, BE = this.bridgeEnds; if (!BE.length) return null;
+    const dc = (x, z) => Math.hypot(x - M.cx, z - M.cz), pIn = dc(p.x, p.z) < M.r0 + 20, qIn = dc(q.x, q.z) < M.r0 + 20;
+    const ex = q.x - p.x, ez = q.z - p.z, L2 = ex * ex + ez * ez || 1, t = Math.max(0, Math.min(1, ((M.cx - p.x) * ex + (M.cz - p.z) * ez) / L2));
+    const segD = Math.hypot(p.x + ex * t - M.cx, p.z + ez * t - M.cz);
+    if (pIn === qIn && (pIn || segD > M.r1 + 30)) return null; // mesmo lado do lago
+    const onB = BE.find((b) => p.x > b.x0 - 5 && p.x < b.x1 + 5 && p.z > b.z0 - 5 && p.z < b.z1 + 5);
+    const pick = (x, z, k) => BE.reduce((a, b) => (Math.hypot(b[k][0] - x, b[k][1] - z) < Math.hypot(a[k][0] - x, a[k][1] - z) ? b : a));
+    if (!pIn) { const b = onB || pick(p.x, p.z, 'O'); return onB || Math.hypot(b.O[0] - p.x, b.O[1] - p.z) < 70 ? b.I : b.O; }
+    const b = onB || pick(q.x, q.z, 'O'); return onB || Math.hypot(b.I[0] - p.x, b.I[1] - p.z) < 70 ? b.O : b.I;
+  }
+  // ponto mais perto no caminho do meio: { i: trecho, s: distância desde o começo }
+  pathProj(x, z) {
+    const P = this.navPath; let best = null, s0 = 0;
+    for (let i = 0; i + 1 < P.length; i++) {
+      const [ax, az] = P[i], [bx, bz] = P[i + 1], dx = bx - ax, dz = bz - az, L = Math.hypot(dx, dz) || 1;
+      const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (L * L))), d = Math.hypot(ax + dx * t - x, az + dz * t - z);
+      if (!best || d < best.d) best = { d, i, s: s0 + t * L }; s0 += L;
+    }
+    return best;
+  }
+  // bot seguindo o corredor: vai pra próxima curva do caminho (na direção de quem ele quer achar)
+  pathNav(p, q) {
+    const a = this.pathProj(p.x, p.z), b = this.pathProj(q.x, q.z), P = this.navPath;
+    if (a.i === b.i) return null; // mesmo trecho: vai direto
+    const fw = b.s > a.s; let k = fw ? a.i + 1 : a.i;
+    if (Math.hypot(P[k][0] - p.x, P[k][1] - p.z) < 120) k = Math.max(0, Math.min(P.length - 1, k + (fw ? 1 : -1)));
+    return P[k];
+  }
   roomOf(x, z, y) {
-    for (let i = 0; i < this.rooms.length; i++) { const R = this.rooms[i]; if (y > R.top) continue; if (R.r ? Math.hypot(x - R.cx, z - R.cz) < R.r : x > R.x0 && x < R.x1 && z > R.z0 && z < R.z1) return i; }
+    for (let i = 0; i < this.rooms.length; i++) { const R = this.rooms[i]; if (y > R.top || y < (R.y0 ?? -1e9)) continue; if (R.r ? Math.hypot(x - R.cx, z - R.cz) < R.r : x > R.x0 && x < R.x1 && z > R.z0 && z < R.z1) return i; }
     return -1;
   }
   // caminho pela porta: devolve o ponto pra onde o bot anda (na frente da porta; já na frente, atravessa)
@@ -1705,10 +1826,10 @@ export class Sim3D {
       ai.t = 0.5 + Math.random() * 0.9;
       let fwd = 1, side = 0;
       if (Math.random() < L.idle) fwd = 0;
-      else if (target && sees) { fwd = dist > 350 ? 0.6 : dist < 150 ? -0.4 : 0; side = Math.random() < 0.5 ? 1 : -1; }
+      else if (target && sees) { fwd = dist > 900 ? 1 : dist > 350 ? 0.6 : dist < 150 ? -0.4 : 0; side = this.nearMoat(p) ? 0 : Math.random() < 0.5 ? 1 : -1; } // longe: vai chegando; na ponte: sem andar de lado
       else if (target) {
         fwd = 1; side = (Math.random() - 0.5) * 0.8; ai.wander = Math.atan2(target.z - p.z, target.x - p.x) + (Math.random() - 0.5) * 1.2;
-        const nav = this.rooms.length ? this.roomNav(p, target) : null; // um dentro da sala e o outro fora: vai pela porta
+        const nav = (this.moat ? this.moatNav(p, target) : null) || (this.rooms.length ? this.roomNav(p, target) : null) || (this.navPath ? this.pathNav(p, target) : null); // um dentro da sala e o outro fora: vai pela porta
         if (nav) { ai.wander = Math.atan2(nav[1] - p.z, nav[0] - p.x); side = 0; ai.t = 0.3; }
       }
       else { ai.wander = Math.random() * Math.PI * 2; }
@@ -1719,17 +1840,24 @@ export class Sim3D {
         fwd = dh < this.hill.r * 0.5 ? (Math.random() < 0.5 ? 0.4 : 0) : 1; side = 0;
       }
       ai.fwd = fwd; ai.side = side;
-      if (Math.random() < L.jump) this.jump(p);
+      if (Math.random() < L.jump && !this.nearMoat(p)) this.jump(p);
+      // fábrica: sem inimigo à vista, às vezes vai pro elevador mais perto pra subir na ponte
+      if (this.bridgeMode && ai.elev == null && p.y < 5 && !(target && sees) && Math.random() < 0.15) {
+        let bi = -1, bd = 1e9; this.pistons.forEach((b, i) => { const d = Math.hypot((b.x0 + b.x1) / 2 - p.x, (b.z0 + b.z1) / 2 - p.z); if (d < bd) { bd = d; bi = i; } });
+        if (bi >= 0 && bd < 900) { ai.elev = bi; ai.elevT = this.time; }
+      }
     }
+    if (ai.elev != null) this.botElevator(p, ai, target && sees);
+    if (ai.beam && !(target && sees)) this.botBeam(p, ai);
     // travado no muro: pula (e às vezes pula duplo)
     const moved = Math.hypot(p.x - (ai.lx ?? p.x), p.z - (ai.lz ?? p.z));
     ai.stuck = moved < 1 && (ai.fwd || ai.side) ? (ai.stuck || 0) + dt : 0;
     ai.lx = p.x; ai.lz = p.z;
-    if (ai.stuck > 0.3) { if (p.grounded) this.jump(p); else if (p.vy < 50) this.jump(p); ai.wander = Math.random() * Math.PI * 2; ai.t = 0.5; ai.stuck = 0; }
+    if (ai.stuck > 0.3) { if (this.nearMoat(p)) { /* perto do lago: não pula (cairia) */ } else if (p.grounded) this.jump(p); else if (p.vy < 50) this.jump(p); ai.wander = Math.random() * Math.PI * 2; ai.t = 0.5; ai.stuck = 0; }
     // preso num canto (fica raspando na parede sem sair do lugar): a cada 1,2 s vê se andou; se não, sai pra outro lado por mais tempo
     ai.pt = (ai.pt || 0) + dt;
     if (ai.pt > 1.2) {
-      if (ai.fwd && !(target && sees) && Math.hypot(p.x - (ai.px ?? p.x + 99), p.z - (ai.pz ?? p.z)) < 30) { ai.wander = p.yaw + Math.PI * (0.6 + Math.random() * 0.8); ai.t = 1.1 + Math.random() * 0.6; ai.fwd = 1; ai.side = 0; if (p.grounded) this.jump(p); }
+      if (ai.fwd && !(target && sees) && Math.hypot(p.x - (ai.px ?? p.x + 99), p.z - (ai.pz ?? p.z)) < 30) { ai.wander = p.yaw + Math.PI * (0.6 + Math.random() * 0.8); ai.t = 1.1 + Math.random() * 0.6; ai.fwd = 1; ai.side = 0; if (p.grounded && !this.nearMoat(p)) this.jump(p); }
       ai.pt = 0; ai.px = p.x; ai.pz = p.z;
     }
     if (target && sees) {
@@ -1750,6 +1878,8 @@ export class Sim3D {
       p.pitch *= 0.9;
     }
     p.input.fwd = ai.fwd || 0; p.input.side = ai.side || 0;
+    // fábrica (mapa em Z, comprido): sem ninguém à vista, o bot corre pelo caminho
+    p.input.sprint = !!(this.navPath && !(target && sees) && ai.fwd > 0 && ai.elev == null && !ai.beam);
     // vulcão: não anda pra dentro do buraco de lava
     if (this.holes && p.grounded && (p.input.fwd || p.input.side)) {
       const fx = Math.cos(p.yaw), fz = Math.sin(p.yaw);
@@ -1757,6 +1887,14 @@ export class Sim3D {
       const wl = Math.hypot(wx, wz) || 1; wx /= wl; wz /= wl;
       const h = this.holeAt(p.x + wx * 60, p.z + wz * 60, -22);
       if (h) { p.input.fwd = 0; p.input.side = 0; ai.wander = Math.atan2(p.z - h.z, p.x - h.x); ai.t = Math.min(ai.t, 0.35); ai.stuck = 0; if (!sees) ai.fwd = 0; }
+    }
+    // castelo: não anda pra dentro do lago (só pelas pontes)
+    if (this.moat && p.grounded && (p.input.fwd || p.input.side)) {
+      const fx = Math.cos(p.yaw), fz = Math.sin(p.yaw);
+      const blk = (fw, sd) => { const wx = fx * fw - fz * sd, wz = fz * fw + fx * sd, wl = Math.hypot(wx, wz) || 1, ax = p.x + wx / wl * 70, az = p.z + wz / wl * 70; return this.inMoat(ax, az, 0) && !this.bridgeEnds.some((b) => ax > b.x0 && ax < b.x1 && az > b.z0 && az < b.z1); };
+      if (!blk(p.input.fwd, p.input.side)) { /* ok */ }
+      else if (p.input.side && p.input.fwd > 0 && !blk(p.input.fwd, 0)) { p.input.side = 0; ai.side = 0; } // andando de lado na ponte: só pra frente
+      else { p.input.fwd = 0; p.input.side = 0; ai.wander = Math.atan2(p.z - this.moat.cz, p.x - this.moat.cx) + (Math.hypot(p.x - this.moat.cx, p.z - this.moat.cz) < this.moat.r0 ? Math.PI : 0) + (Math.random() - 0.5); ai.t = Math.min(ai.t, 0.35); ai.stuck = 0; }
     }
     if (p.weapon !== 'primary' && p.weapon !== 'knife') p.weapon = 'primary';
   }

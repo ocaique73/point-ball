@@ -17,6 +17,16 @@ const VALID_MODES = ['tdm', 'rounds', 'ffa', 'koth'];
 const VALID_ROUNDS = [1, 2, 3, 5, 7];
 const VALID_KILLS = [20, 25, 30, 50];
 const VALID_HILL = [50, 75, 100, 150];
+const PRIMARY_IDS = ['arco', 'estilingue', 'mao', 'varinha']; // armas principais (as mesmas do sim3d)
+// regras de armas da sala: quais armas principais valem (pelo menos 1) e se faca / granada / fumaça estão liberadas
+function cleanWeapons(list) { const a = Array.isArray(list) ? PRIMARY_IDS.filter((w) => list.includes(w)) : []; return a.length ? a : PRIMARY_IDS.slice(); }
+function roomRules(room) { return { allowed: room.weapons.length < PRIMARY_IDS.length ? room.weapons.slice() : null, noKnife: !!room.noKnife, noNade: !!room.noNade, noSmoke: !!room.noSmoke }; }
+// sala sem nome: "1", "2"... até 9999; depois número + letra ("1A", "2A"...)
+function autoRoomName(rooms) {
+  for (let n = 1; n <= 9999; n++) if (!rooms.has(String(n))) return String(n);
+  for (const L of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') for (let n = 1; n <= 9999; n++) if (!rooms.has(n + L)) return n + L;
+  return null;
+}
 const FLY_REGIONS = { gru: 'São Paulo, Brasil', gig: 'Rio de Janeiro, Brasil', eze: 'Buenos Aires, Argentina', scl: 'Santiago, Chile', bog: 'Bogotá, Colômbia', mia: 'Miami, EUA', iad: 'Virginia, EUA', ord: 'Chicago, EUA', dfw: 'Dallas, EUA', lax: 'Los Angeles, EUA', sjc: 'San Jose, EUA', sea: 'Seattle, EUA', ams: 'Amsterdã, Holanda', fra: 'Frankfurt, Alemanha', lhr: 'Londres, Inglaterra', cdg: 'Paris, França', mad: 'Madri, Espanha', nrt: 'Tóquio, Japão', sin: 'Singapura', syd: 'Sydney, Austrália' };
 // onde o servidor está (pra mostrar no Tab): SERVER_LOCATION > região do Fly.io > descobre pelo IP público
 let serverLocation = process.env.SERVER_LOCATION || (process.env.FLY_REGION && (FLY_REGIONS[process.env.FLY_REGION] || process.env.FLY_REGION)) || null;
@@ -77,7 +87,8 @@ async function setup3D(io, CFG) {
 
   function publicState(room) {
     return {
-      code: room.code, hasPassword: !!room.password, map: room.map, hostId: room.hostId, phase: room.phase,
+      code: room.code, hasPassword: !!room.password, hidden: !!room.hidden, map: room.map, hostId: room.hostId, phase: room.phase,
+      weapons: room.weapons, noKnife: !!room.noKnife, noNade: !!room.noNade, noSmoke: !!room.noSmoke,
       botLevel: room.botLevel, roundTime: room.roundTime, mode: room.mode, rounds: room.rounds, killLimit: room.killLimit, hillTarget: room.hillTarget,
       bots: { A: room.bots.A.map((b) => ({ id: b.id, name: b.name, team: 'A', bot: true })), B: room.bots.B.map((b) => ({ id: b.id, name: b.name, team: 'B', bot: true })) },
       members: [...room.members.values()].map((m) => ({ id: m.pid, name: m.name, status: m.status, team: m.team, connected: m.connected, inMatch: m.inMatch }))
@@ -124,8 +135,8 @@ async function setup3D(io, CFG) {
       mode: room.mode, rounds: room.rounds, killLimit: room.killLimit, hillTarget: room.hillTarget,
       matchTime: room.mode === 'rounds' ? 0 : room.roundTime,
       endDelay: 7 // fim do round: espera a killcam final passar antes da contagem do próximo
-    }));
-    room.matchInfo = { map: room.map, roundTime: room.mode === 'rounds' ? 0 : room.roundTime, mode: room.mode };
+    }, roomRules(room)));
+    room.matchInfo = { map: room.map, roundTime: room.mode === 'rounds' ? 0 : room.roundTime, mode: room.mode, rules: roomRules(room) };
     for (const m of room.members.values()) {
       if (m.status === 'team' && m.connected) { sim.addPlayer({ id: m.pid, name: m.name, team: m.team, look: m.look }); m.inMatch = true; }
     }
@@ -169,20 +180,21 @@ async function setup3D(io, CFG) {
 
     socket.on('3d_list_rooms', (d, ack) => {
       if (typeof ack !== 'function') return;
-      ack([...rooms.values()].map((r) => ({ code: r.code, locked: !!r.password, map: r.map, phase: r.phase, players: [...r.members.values()].filter((m) => m.status === 'team').length })));
+      ack([...rooms.values()].filter((r) => !r.hidden).map((r) => ({ code: r.code, locked: !!r.password, map: r.map, phase: r.phase, players: [...r.members.values()].filter((m) => m.status === 'team').length })));
     });
 
     socket.on('3d_create_room', (d, ack) => {
       if (typeof ack !== 'function') return;
       d = d || {};
-      const name = String(d.name || '').trim();
+      let name = String(d.name || '').trim();
       const pass = String(d.password || '');
-      if (!ROOM_NAME_RE.test(name)) return ack({ ok: false, error: 'Nome da sala: 1 a 5 letras ou números.' });
+      if (!name) name = autoRoomName(rooms) || ''; // sem nome: o servidor dá um número
+      if (!ROOM_NAME_RE.test(name)) return ack({ ok: false, error: 'Nome da sala: 1 a 5 letras ou números (ou deixe vazio).' });
       if (pass && (pass.length < 3 || pass.length > 6)) return ack({ ok: false, error: 'Senha: mínimo 3 e máximo 6 caracteres.' });
       const code = name.toUpperCase();
       if (rooms.has(code)) return ack({ ok: false, error: 'Já existe uma sala 3D com esse nome.' });
       const room = {
-        code, password: pass, map: ALL_MAPS[d.map] && d.map !== 'teste' ? d.map : 'deserto',
+        code, password: pass, hidden: !!d.hidden, weapons: PRIMARY_IDS.slice(), noKnife: false, noNade: false, noSmoke: false, map: ALL_MAPS[d.map] && d.map !== 'teste' ? d.map : 'deserto',
         hostId: null, creatorPid: pidOf(d.clientId), phase: 'lobby', members: new Map(),
         sim: null, loop: null, closeTimer: null, bots: { A: [], B: [] }, botLevel: 'amador',
         roundTime: 300, mode: 'tdm', rounds: 3, killLimit: 30, hillTarget: 100
@@ -245,6 +257,8 @@ async function setup3D(io, CFG) {
       if (d && VALID_ROUNDS.includes(Number(d.rounds))) room.rounds = Number(d.rounds);
       if (d && VALID_KILLS.includes(Number(d.killLimit))) room.killLimit = Number(d.killLimit);
       if (d && VALID_HILL.includes(Number(d.hillTarget))) room.hillTarget = Number(d.hillTarget);
+      if (d && d.weapons != null) room.weapons = cleanWeapons(d.weapons);
+      for (const k of ['noKnife', 'noNade', 'noSmoke', 'hidden']) if (d && typeof d[k] === 'boolean') room[k] = d[k];
       broadcastState(room);
     });
 

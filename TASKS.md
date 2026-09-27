@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 26/09/2026 — v0.26.0 (Three.js): obra maior com prédios em construção, salão do trono no castelo + dragão, navio maior e mais leve com prancha dos tubarões, gurupés e mastros novos, rampa no editor, portais com a regra do 2D, sons mais graves, sem vidro no mar e na floresta.
+Última atualização: 27/09/2026 — v0.27.0 (Three.js): fábrica em Z com ponte-esteira e 5 elevadores, navio com sala do capitão, proteção no nascimento, raios e escorregão, castelo maior numa ilha com fosso e pontes (torres 2x mais altas), obra no meio de uma cidade, 1ª pessoa com mãos/braços, faca girando no saque, câmera da 3ª pessoa nas configurações, armas da sala e modo streamer no online.
 
 ---
 
@@ -324,6 +324,23 @@
 - [ ] Godot: falta a mecânica de **Portais** (teletransporte — é a mais complexa, precisa abrir buracos na parede e sincronizar posição/velocidade) e da **Cidade à noite** (postes que acendem/apagam ao levar tiro; hoje o mapa não é permanentemente escuro ainda).
 - [ ] Godot: **multiplayer do zero** (o Godot não usa o servidor Node/Socket.IO da versão web — precisa de servidor dedicado ENet, salas, times, dono da sala). Fase grande, ainda não iniciada.
 
+- [x] v0.27.0 (Three.js): décima rodada de ajustes do Caique (só no 3D)
+  - [x] **Fábrica**: o mapa agora é em **Z** (maior); a ponte de cima com esteira lenta segue o Z pelo mapa todo; 5 elevadores (2 em cada base + 1 no meio) sobem até a ponte; esteiras de baixo mais fortes; bots usam elevador/ponte e correm pelo caminho
+  - [x] **Navio**: cabine do meio mais comprida com parede no meio; **sala do capitão** em cima (janelões, leme e mesa, escadas de mão por fora) com o mastro em cima dela; **proteção do nascimento** (degraus, muro alto atrás e muretas pra se esconder); animação de **escorregar** quando o barco inclina; lentidão só pra quem está na água; **raios** caindo no mar e no navio (acertou, perde 1 vida)
+  - [x] **Castelo**: mapa maior, castelo numa **ilha alta** (como numa montanha) com **fosso de água** em volta e 2 pontes (caiu na água, morreu); pé-direito maior (o tablado dos tronos não subiu); mais claro e mais leve; **torres 2x mais altas**; as 2 torres de cada lado com a **porta de baixo virada uma pra outra** (no pátio depois da ponte); sem o lago lá longe (só campo até as montanhas)
+  - [x] **Dragão**: maior e mais comprido, sem marcação vermelha (olhe pro céu!), fogo por mais tempo e fazendo curva, não pega dentro do castelo; rugido e som do fogo novos
+  - [x] **Obra**: sem marcação vermelha; a bola dá +1 volta e **joga longe sem tirar vida**; mais muros no meio; espacinho no começo das escadas dos prédios; **cidade em volta** (casas, lojas, prédios modernos de vidro, praças, parques, lagos, ruas com faixa, árvores, postes e carros) espaçada e leve
+  - [x] **Metrô**: escada (estilo navio) no lugar da rampa, começando perto da parede lateral
+  - [x] **Mar**: tiro passa pela parede invisível e ricocheteia no navio da torcida; **teto de vidro** em cima; renasce em 2,3 s; som da onda batendo novo
+  - [x] **Base lunar**: o tiro passa pelo buraco do vidro quebrado pelo meteoro
+  - [x] **Vulcão**: erupção mais leve (não trava), som novo, parou de piscar em cima da base
+  - [x] **1ª pessoa**: arma/mãos desenhadas por cima (não entram mais no chão/escada); **mãos e braços arredondados** (cor da sua pele, manga do time) em todas as armas; estilingue, bola de neve e faca novos; correndo a arma **sobe** e balança; **faca virada pra dentro** e **girando na mão** ao puxar; som da facada novo
+  - [x] **Configurações**: distância da câmera e lado do personagem (ombro direito/esquerdo/meio) na 3ª pessoa
+  - [x] **Online**: armas da sala (só uma, todas ou tirar algumas; faca/granada/fumaça também); **modo streamer** (esconde nome e senha da sala na tela; a sala criada não aparece na lista); sala sem nome ganha número (Sala 1… 9999, depois número+letra); nome da sala = código (a senha é separada e opcional)
+  - [ ] Validar no PC e jogar o multiplayer com 2+ pessoas
+  - [ ] Depois: modo LAN instalável (Electron) — combinado pra outra versão
+  - [ ] Quando o "Salvar" do editor funcionar: pegar a branch `editor` e colocar no jogo
+
 - [x] v0.26.0 (Three.js): nona rodada de ajustes do Caique (só no 3D)
   - [x] **Obra**: mapa maior (o octógono cortava os cantos e o mapa parecia pequeno); um prédio em construção de cada lado (só laje, pilar e escada, sem parede, 3 andares + laje de cima), ~50% mais largo e com o **pé-direito 50% mais alto**, fora do caminho da bola de demolição (guindaste mais alto); embaixo das lajes não fica mais preto
   - [x] **Castelo**: torres mais altas (e a pilastra do meio), rampa mais larga, sem batente na porta do topo, parede no fim da subida, sacada com o dobro da largura, 1 porta embaixo por torre (sem o quadrado na frente), salão mais alto por dentro sem as 4 vigas, brilho em cima das muralhas corrigido
@@ -342,7 +359,7 @@
   - [x] Bots: saem/entram pela porta das salas fechadas (salão do castelo, torres, cabine do navio) e desgrudam de canto
   - [x] Editor: "Salvar" manda todos os mapas e as abas Tiro e boneco / Efeitos de uma vez; o servidor também lê um arquivo `.env` (só no PC; no Render as chaves ficam no painel)
   - [ ] Validar no PC (FPS do navio) e jogar o multiplayer com 2+ pessoas
-  - [ ] v0.27: fábrica maior com pontes em Z (esteira lenta em cima, 5 elevadores: 2 por base + 1 no meio) e esteiras de baixo mais fortes; cidade em volta da obra; online: escolher armas da sala, modo streamer, sala sem nome = "Sala 1, 2..." e senha/código num só
+  - [x] v0.27: fábrica em Z, cidade em volta da obra, armas da sala, modo streamer, sala sem nome = "Sala 1, 2..." (feito na v0.27.0)
 
 - [x] v0.25.0 (Three.js): oitava rodada de ajustes do Caique (só no 3D)
   - [x] **Editor de mapa em 3D** (`/demo3d/?edit3d=mapa`, ou "🧊 Editar em 3D" no editor): câmera voando (botão direito olha, WASD voa), clica na peça, setas coloridas pra mover (inclusive pra cima = plataforma) e cubinhos pra esticar; novo, duplicar, apagar, espelho, grade, desfazer, "de cima" e "testar andando". O editor de cima e o 3D ficam iguais na hora (mesmo rascunho) e selecionam a mesma peça
