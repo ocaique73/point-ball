@@ -815,7 +815,8 @@ export class Sim3D {
         k: p.k, d: p.d, a: p.a, charge0: p.charge0 || 0, nade0: p.nade0 || 0, fireReady: p.fireReady || 0,
         protectUntil: p.protectUntil || 0, respawnAt: p.respawnAt || 0, deadAt: p.deadAt || 0, lastHitBy: p.lastHitBy || {},
         look: p.look, slowUntil: p.slowUntil || 0, spin: !!p.spin, climb: !!p.ladder, sprinting: !!p.sprinting, aiming: !!p.aiming, aimT0: p.aimT0 || 0, drinkUntil: p.drinkUntil || 0, slip: !!p.slip,
-        shield: p.shieldUntil > this.time ? p.shieldHits : 0, gliding: !!p.gliding, magicReady: p.magicReady || 0, dash: p.dashUntil > this.time });
+        shield: p.shieldUntil > this.time ? p.shieldHits : 0, gliding: !!p.gliding, magicReady: p.magicReady || 0, dash: p.dashUntil > this.time,
+        fp: !!p.fp, cs: p.camSide != null ? p.camSide : 1 }); // (espectador: a câmera que ele usa — 1ª/3ª pessoa e o ombro)
     }
     return {
       time: this.time, players,

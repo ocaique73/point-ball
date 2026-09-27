@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 27/09/2026 — v0.30.0 (Three.js): MODO MAGIA (1 magia por personagem + vassoura pra todos), braços da 1ª pessoa que nunca mostram o fim, faca com corte na horizontal e braço do lado certo, animação de puxar todas as armas, fábrica com elevadores na curva do Z e esteiras pro meio, câmera da 3ª pessoa sem atravessar parede.
+Última atualização: 27/09/2026 — v0.31.0 (Three.js): **Alt esquerdo** troca o ombro da câmera da 3ª pessoa (esquerdo ⇄ direito) e **espectador** no modo rounds (morreu: assiste quem está vivo — bot em 3ª pessoa, jogador de verdade na câmera que ele usa).
 
 ---
 
@@ -323,6 +323,11 @@
 - [x] Godot: mecânica da **Sala escura** (luz apaga/acende sozinha, com lanterna fraca pra dar pra jogar) e do **Vulcão** (4 poças de lava espelhadas que alternam ativa/inativa e doem quando ativas).
 - [ ] Godot: falta a mecânica de **Portais** (teletransporte — é a mais complexa, precisa abrir buracos na parede e sincronizar posição/velocidade) e da **Cidade à noite** (postes que acendem/apagam ao levar tiro; hoje o mapa não é permanentemente escuro ainda).
 - [ ] Godot: **multiplayer do zero** (o Godot não usa o servidor Node/Socket.IO da versão web — precisa de servidor dedicado ENet, salas, times, dono da sala). Fase grande, ainda não iniciada.
+
+- [x] v0.31.0 (Three.js): câmera
+  - [x] **Alt esquerdo** = troca o ombro da câmera da 3ª pessoa (no esquerdo vai pro direito e vice-versa); a câmera desliza pro outro lado em vez de pular e fica salvo nas configurações; no app do PC a barra de menu saiu (o Alt não abre mais nada)
+  - [x] **Espectador no modo rounds**: morreu, depois de 1,4 s vendo a lápide você assiste quem ainda está vivo (primeiro os do seu time; sem ninguém do time, qualquer um). **Bot = 3ª pessoa**; **jogador de verdade = a câmera que ele está usando** (1ª pessoa com a arma e os braços dele na tela, ou 3ª pessoa no mesmo ombro). **Clique** = próximo, **botão direito** = anterior; quem você assiste morreu → pula pro mais perto; volta pra você no próximo round
+  - [ ] Testar o espectador com os amigos (LAN ou online)
 
 - [x] v0.30.0 (Three.js): décima terceira rodada (fechando a semana)
   - [x] **Modo magia** (menu Jogo → Modo magia, e na sala online o dono liga): cada personagem tem 1 magia na tecla **Q** — Maga: **escudo** (segura 2 tiros), Ladino de capuz: **olho** (puxa os tiros inimigos pra ele), Ladino: **teleporte** curto, Cavaleiro: **parede de pedra**, Bárbaro: **investida** (joga longe, não tira vida); todo mundo: **vassoura** (segurar Espaço no ar = plana caindo devagar e vai pra frente); a aba Personagem mostra a magia de cada um; bots também usam

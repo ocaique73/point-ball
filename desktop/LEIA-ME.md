@@ -12,7 +12,7 @@ um PC **hospeda** (o servidor do jogo roda nele) e os outros **entram** — todo
    npm install
    npm run dist
    ```
-3. Pronto: o instalador fica em `desktop\dist\Point Ball Setup 0.30.0.exe`.
+3. Pronto: o instalador fica em `desktop\dist\Point Ball Setup 0.31.0.exe`.
 
 > Pra só testar sem gerar instalador: `cd desktop` → `npm start`.
 

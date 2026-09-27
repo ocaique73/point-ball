@@ -34,6 +34,8 @@ cadência/recarga de cada arma — ligar/desligar "você pode morrer" (os bots s
 
 Tem física 3D própria (`public/demo3d/sim3d.js`): tiro e granada seguem a mira, ricochete no muro e no chão, pulo duplo. 8 mapas e bots com 3 níveis.
 
+**Novidades da v0.31** (só no 3D): **Alt esquerdo** troca o ombro da câmera da 3ª pessoa e, no **modo rounds**, quando você morre vira **espectador** de quem está vivo (bot em 3ª pessoa; jogador de verdade na 1ª ou 3ª pessoa, a que ele usa) — clique = próximo, botão direito = anterior.
+
 **Novidades da v0.30** (só no 3D): **modo magia** (tecla Q = magia do seu personagem: escudo, olho, teleporte, parede de pedra ou investida; segurar Espaço no ar = vassoura), faca com corte na horizontal, animação de puxar todas as armas, braços da 1ª pessoa que nunca mostram o fim, fábrica com o elevador na curva do Z e a câmera da 3ª pessoa sem atravessar parede.
 
 **Novidades da v0.29** (só no 3D): na 1ª pessoa os **braços são os do seu boneco** (dá pra ajustar tamanho, comprimento e grossura), faca de lado e varinha em pé, frascos redondos (fumaça de verdade dentro), ponte do castelo de volta e **rio raso** (não mata), fábrica com a diagonal maior e cheia de cobertura, navio mais claro, e o **app instalável pra jogar em LAN** (`desktop/LEIA-ME.md`).

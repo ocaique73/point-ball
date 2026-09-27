@@ -54,6 +54,9 @@
   #bombwarn { position: fixed; left: 50%; top: 78px; transform: translate(-50%, 0); display: none; text-align: center; padding: 6px 14px; border-radius: 10px; background: rgba(120,20,10,.55); border: 1px solid #ef4444; color: #fecaca; font-weight: 800; }
   #bombwarn .arrow { display: inline-block; margin-right: 6px; font-size: 18px; }
   #dead small { display: block; font-size: 15px; color: var(--muted); }
+  /* espectador (morreu no modo rounds): de quem é a câmera */
+  #spec { position: fixed; left: 50%; bottom: 118px; transform: translateX(-50%); display: none; padding: 7px 16px; border-radius: 10px; background: rgba(0,0,0,.5); border: 1px solid rgba(255,255,255,.18); color: #f1f5f9; font-size: 15px; font-weight: 700; text-align: center; pointer-events: none; text-shadow: 0 1px 3px #000; }
+  #spec small { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 2px; }
   #score { top: 58px; left: 50%; transform: translateX(-50%); display: none; font-weight: 800; font-variant-numeric: tabular-nums; text-align: center; }
   #score small { display: block; font-weight: 600; color: var(--muted); font-size: 12px; }
   #banner { position: fixed; left: 50%; top: 24%; transform: translate(-50%, -50%); font-size: 34px; font-weight: 900; text-shadow: 0 3px 8px #000; display: none; text-align: center; pointer-events: none; }
@@ -108,6 +111,7 @@
 <canvas id="view"></canvas>
 <canvas id="cross" width="240" height="240"></canvas>
 <div id="dead"></div>
+<div id="spec"></div>
 <div class="panel" id="bombwarn"></div>
 <div class="panel" id="top">POINT BALL 3D · THREE.JS · FPS <b id="fps">--</b> <span>(segue o Hz do monitor)</span> <b id="h-clock" style="display:none;margin-left:10px;color:var(--acc)"></b> <b id="h-hz" style="margin-left:10px;color:#fca5a5"></b></div>
 <div class="panel" id="hud">
@@ -215,7 +219,8 @@
       <kbd>1</kbd> arma principal · <kbd>2</kbd> poção (1 vida) · <kbd>3</kbd> faca · <kbd>4</kbd> granada · <kbd>5</kbd> fumaça · <kbd>Rodinha</kbd> troca de arma<br>
       Granada, fumaça e poção: aperte <kbd>2</kbd>/<kbd>4</kbd>/<kbd>5</kbd> para pegar e <kbd>Clique</kbd> para usar (poção bebe na hora, granada/fumaça vão para onde a mira aponta)<br>
       Besta: segure o <kbd>Clique</kbd> para puxar e solte para atirar<br>
-      <kbd>R</kbd> recarregar · <kbd>V</kbd> 1ª/3ª pessoa · <kbd>Tab</kbd> (segurar) placar, ping e onde está o servidor · <kbd>Esc</kbd> este menu
+      <kbd>R</kbd> recarregar · <kbd>V</kbd> 1ª/3ª pessoa · <kbd>Alt</kbd> esquerdo: câmera da 3ª pessoa no ombro esquerdo/direito · <kbd>Tab</kbd> (segurar) placar, ping e onde está o servidor · <kbd>Esc</kbd> este menu<br>
+      Modo rounds: morreu, você assiste quem está vivo (bot em 3ª pessoa; jogador de verdade na câmera que ele usa) · <kbd>Clique</kbd> próximo · <kbd>Botão direito</kbd> anterior
     </div>
   </div>
   <div class="pane" id="p-test">
