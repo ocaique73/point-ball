@@ -54,6 +54,10 @@
   #bombwarn { position: fixed; left: 50%; top: 78px; transform: translate(-50%, 0); display: none; text-align: center; padding: 6px 14px; border-radius: 10px; background: rgba(120,20,10,.55); border: 1px solid #ef4444; color: #fecaca; font-weight: 800; }
   #bombwarn .arrow { display: inline-block; margin-right: 6px; font-size: 18px; }
   #dead small { display: block; font-size: 15px; color: var(--muted); }
+  #dead .dead-title { display: block; font-size: 54px; font-weight: 900; color: #ef4444; letter-spacing: 5px; text-shadow: 0 0 18px rgba(239,68,68,.85), 0 3px 10px #000; margin-bottom: 6px; animation: deadPop .32s cubic-bezier(.2,1.4,.4,1); }
+  @keyframes deadPop { from { transform: scale(1.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  /* acerto levado: flash rápido nas bordas da tela, igual jogo de tiro */
+  #dmg { position: fixed; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, rgba(239,68,68,0) 42%, rgba(239,68,68,.6) 100%); }
   /* espectador (morreu no modo rounds): de quem é a câmera */
   #spec { position: fixed; left: 50%; bottom: 118px; transform: translateX(-50%); display: none; padding: 7px 16px; border-radius: 10px; background: rgba(0,0,0,.5); border: 1px solid rgba(255,255,255,.18); color: #f1f5f9; font-size: 15px; font-weight: 700; text-align: center; pointer-events: none; text-shadow: 0 1px 3px #000; }
   #spec small { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 2px; }
@@ -110,7 +114,7 @@
 <body>
 <canvas id="view"></canvas>
 <canvas id="cross" width="240" height="240"></canvas>
-<div id="dead"></div>
+<div id="dead"><div id="dead-title" class="dead-title">MORREU</div><div id="dead-msg"></div></div>
 <div id="spec"></div>
 <div class="panel" id="bombwarn"></div>
 <div class="panel" id="top">POINT BALL 3D · THREE.JS · FPS <b id="fps">--</b> <span>(segue o Hz do monitor)</span> <b id="h-clock" style="display:none;margin-left:10px;color:var(--acc)"></b> <b id="h-hz" style="margin-left:10px;color:#fca5a5"></b></div>
@@ -133,6 +137,7 @@
 <div id="banner"></div>
 <div id="kc"><b>KILLCAM FINAL</b><span id="kc-who"></span></div>
 <div id="heal"></div>
+<div id="dmg"></div>
 <div id="shieldfx" style="position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .2s;box-shadow:inset 0 0 140px 36px rgba(96,165,250,.55);z-index:4"></div>
 
 <div id="menu"><div class="card">

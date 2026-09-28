@@ -34,6 +34,8 @@ cadência/recarga de cada arma — ligar/desligar "você pode morrer" (os bots s
 
 Tem física 3D própria (`public/demo3d/sim3d.js`): tiro e granada seguem a mira, ricochete no muro e no chão, pulo duplo. 8 mapas e bots com 3 níveis.
 
+**Novidades da v0.34**: a cor do round volta suave 0,7s antes de começar (não é mais de repente), tela de morte estilo GTA ("MORREU" em vermelho, tela meio sem cor por 1,4s vendo a própria lápide) e indicador de dano piscando rápido na tela quando você leva um tiro.
+
 **Novidades da v0.33**: o botão **"⬇️ Baixar app (Windows)"** no site sempre baixa a versão mais nova, e quem já tem o app instalado recebe aviso e atualiza sozinho (barra verde no launcher) — os dois alimentados por um único GitHub Release (`desktop/LEIA-ME.md`, seção 2).
 
 **Novidades da v0.32**: no **app do PC**, **Hospedar pela internet** cria um link pros amigos de outro lugar (sem Radmin; eles abrem no navegador ou no app); opção de **vassoura sem o modo magia**; vassoura da 1ª pessoa do lado certo; ninguém pisca no começo da partida/round (só quando renasce); a cor só volta quando o round começa.

@@ -3489,7 +3489,7 @@ function animPotion(g, now) {
   add('potion', [bottle, fpArm([0, -7, 0], [-1, 0, -0.3], [5, -20, 4], { s: 1.1 })]);
 }
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
-let nadeThrowAnim = null, camSmY = null, kick = 0, swing = 0, sprintFov = 0, adsK = 0, healFx = 0, caveK = 0, pendingKc = null;
+let nadeThrowAnim = null, camSmY = null, kick = 0, swing = 0, sprintFov = 0, adsK = 0, healFx = 0, dmgFx = 0, caveK = 0, pendingKc = null, deadTitleAt = null;
 let fpRunK = 0, fpWalkK = 0, fpLastKey = null, knifeDrawT = -1e9, fpDrawT = -1e9; const _slRest = new THREE.Vector3(0, 9, -0.6), _slD = new THREE.Vector3();
 // munição na mão da arma (1ª pessoa) na cor do seu time
 let viewTeam = null;
@@ -4218,7 +4218,10 @@ function hud(me) {
   if (!me.alive) {
     const killer = [...sim.players.values()].find((p) => me.lastHitBy[p.id] && Math.abs(me.lastHitBy[p.id] - me.deadAt) < 0.05);
     $('dead').style.display = spec.id != null ? 'none' : 'block'; // (assistindo alguém: só o aviso de quem você assiste)
-    $('dead').innerHTML = `Você foi eliminado${killer ? ' por <span class="t' + killer.team + '">' + esc(killer.name) + '</span>' : ''}<small>${sim.mode === 'rounds' ? 'volta no próximo round' : `renascendo em ${Math.max(0, Math.ceil(me.respawnAt - sim.time))}s`}</small>`;
+    if (deadTitleAt !== me.deadAt) { // (v0.33) só reanima o "MORREU" quando morre de novo, não toda hora
+      deadTitleAt = me.deadAt; const dt = $('dead-title'); dt.style.animation = 'none'; void dt.offsetWidth; dt.style.animation = '';
+    }
+    $('dead-msg').innerHTML = `Você foi eliminado${killer ? ' por <span class="t' + killer.team + '">' + esc(killer.name) + '</span>' : ''}<small>${sim.mode === 'rounds' ? 'volta no próximo round' : `renascendo em ${Math.max(0, Math.ceil(me.respawnAt - sim.time))}s`}</small>`;
   } else $('dead').style.display = 'none';
   // indicador de granada inimiga: distância em metros e seta de direção pra correr
   let nearest = null, best = 1e9;
@@ -4760,7 +4763,7 @@ function thirdCam(x, y, z, yaw, pitch, ignoreId, sideOv) {
 // ---------- (v0.31) espectador: morreu no modo rounds -> assiste quem ainda está vivo ----------
 // bot = 3ª pessoa; jogador de verdade = a câmera que ele está usando (1ª ou 3ª pessoa, no mesmo ombro)
 // Clique = próximo · Botão direito = anterior (primeiro os do seu time; se não sobrou ninguém do time, qualquer um)
-const SPEC_DELAY = 1.0; // segundos vendo a própria lápide antes de ir pro espectador
+const SPEC_DELAY = 1.4; // segundos vendo a própria lápide antes de ir pro espectador
 const spec = { id: null, want: null, fp: false, yaw: 0, pitch: 0, lx: null, lz: null, tag: '' };
 const isViewer = (id) => id === 'me' || (spec.id != null && spec.fp && id === spec.id); // de quem é a arma na tela
 function specOn(me) { return !!(sim && me) && sim.mode === 'rounds' && !me.alive && sim.time - (me.deadAt || 0) > SPEC_DELAY && !killcam.active && !EDIT3D; }
@@ -5135,6 +5138,9 @@ function frame(now) {
   // brilho verde de cura quando bebe a poção
   healFx = Math.max(0, healFx - dtR * 0.9);
   $('heal').style.opacity = healFx > 0 ? String(Math.min(1, healFx * 1.4) * 0.8) : '0';
+  // indicador de acerto levado: flash vermelho rápido nas bordas (igual jogo de tiro)
+  dmgFx = Math.max(0, dmgFx - dtR * 3.2);
+  $('dmg').style.opacity = dmgFx > 0 ? String(Math.min(1, dmgFx * 1.3)) : '0';
   hud(me);
   drawMinimap(me, now);
   if ($('board').style.display === 'block' && Math.floor(now / 250) !== Math.floor((now - dtR * 1000) / 250)) renderBoard();
@@ -5142,9 +5148,23 @@ function frame(now) {
   if (pendingKc && now >= pendingKc.at) { const lk = pendingKc.lk; pendingKc = null; killcam.startFinal(lk, now); }
   // fim do round (sozinho): o próximo só começa a contar depois que a killcam final terminar
   if (!netMode && sim.phase === 'roundEnd' && (pendingKc || killcam.active)) sim.phaseUntil = Math.max(sim.phaseUntil, sim.time + 0.6);
-  // contagem do round: tela quase preto e branco a contagem toda; (v0.32) a cor só volta quando o round começa (rapidinho, pra ver que começou)
-  { let sat = 1; if (sim.phase === 'countdown' && !EDIT3D) { const rem = sim.phaseUntil - sim.time, tot = Math.max(0.6, sim.startDelay || 3); sat = 0.06 + 0.12 * clamp01(1 - rem / tot); satT = now; }
-    else if (now - satT < 280) sat = 0.18 + 0.82 * clamp01((now - satT) / 280);
+  // contagem do round: tela quase preto e branco a contagem toda; (v0.33) a cor começa a voltar suavemente 0,7s antes do round começar
+  { const FADE_LEAD = 0.7; let sat = 1;
+    if (sim.phase === 'countdown' && !EDIT3D) {
+      const rem = sim.phaseUntil - sim.time;
+      if (rem > FADE_LEAD) sat = 0.08;
+      else { const t = clamp01(1 - rem / FADE_LEAD), ease = t * t * (3 - 2 * t); sat = 0.08 + 0.92 * ease; } // smoothstep: volta a cor suave, não de repente
+      satT = now;
+    } else if (now - satT < 280) sat = 0.18 + 0.82 * clamp01((now - satT) / 280); // segurança: round começou sem contagem visível
+    // (v0.33) morreu: tela meio sem cor por um instante (estilo GTA), enquanto olha a própria lápide — não é preto e branco total
+    if (!me.alive && spec.id == null && !EDIT3D) {
+      const dt = sim.time - (me.deadAt != null ? me.deadAt : -1e9);
+      if (dt >= 0 && dt < SPEC_DELAY) {
+        const IN = 0.12, OUT = 0.35; let k = 1;
+        if (dt < IN) k = clamp01(dt / IN); else if (dt > SPEC_DELAY - OUT) k = clamp01((SPEC_DELAY - dt) / OUT);
+        sat = Math.min(sat, 1 - 0.6 * k); // fica uns 40% saturado no auge
+      }
+    }
     if (Math.abs(sat - (canvas._sat || 1)) > 0.01) { canvas._sat = sat; canvas.style.filter = sat >= 0.999 ? '' : `saturate(${sat.toFixed(2)}) brightness(${(0.85 + 0.15 * sat).toFixed(2)})`; } }
   const kcOn = killcam.apply(now);
   if (EDIT3D && EDIT3D.fly) { EDIT3D.frame(dtR, now); $('cross').style.display = 'none'; }
@@ -5286,7 +5306,7 @@ function handleEvent(e, now) {
   if (e.type === 'jump' && a) a.legsOnce('Jump_Start', 1.6, now);
   if (e.type === 'djump' && a) a.legsOnce('Jump_Full_Short', 1.6, now);
   if (e.type === 'land' && a) a.legsOnce('Jump_Land', 1.8, now);
-  if (e.type === 'hit') { const v = avatars.get(e.victim); if (v) v.trigger('Hit_A', 1.5, now); if (e.by === 'me') hitMark = { kind: 'hit', t: now }; if (e.by === 'me' || e.victim === 'me') SFX.play('hit', 1); } // só os meus acertos
+  if (e.type === 'hit') { const v = avatars.get(e.victim); if (v) v.trigger('Hit_A', 1.5, now); if (e.by === 'me') hitMark = { kind: 'hit', t: now }; if (e.victim === 'me') dmgFx = 1; if (e.by === 'me' || e.victim === 'me') SFX.play('hit', 1); } // só os meus acertos
   if (e.type === 'round_end') { lastRoundEnd = e; if (sim.lastKill) pendingKc = { lk: sim.lastKill, at: now + KC.wait }; }
   if (e.type === 'round_start') { feed(`⚔️ Round ${e.round} — valendo!`); killcam.stop(); pendingKc = null; }
   if (e.type === 'hill_move' && sim.mode === 'koth' && sim.time - (sim.hzStart || 0) > 1) feed('👑 A colina mudou de lugar');
@@ -5296,6 +5316,7 @@ function handleEvent(e, now) {
   }
   if (e.type === 'kill') {
     if (e.killer === 'me') hitMark = { kind: 'kill', t: now };
+    if (e.victim === 'me') dmgFx = 1; // o tiro que te matou também pisca o indicador
     if (seaFx && cheerNear(seaFx) > 0.05) SFX.play('cheer', 0.4 + 0.5 * cheerNear(seaFx)); // a torcida grita quando alguém cai
     const k = sim.players.get(e.killer), v = sim.players.get(e.victim);
     feed(`${k ? `<span class="t${k.team}">${esc(k.name)}</span>` : ''} ${WICON[e.weapon] || '💥'} <span class="t${v ? v.team : 'B'}">${esc(v ? v.name : '?')}</span>`);

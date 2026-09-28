@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 28/09/2026 — v0.33.0 (app do PC): **botão "Baixar app" sempre atualizado no site** e **o app se atualiza sozinho** (avisa, baixa e instala) via GitHub Releases — publicar uma versão nova alimenta as duas coisas de uma vez.
+Última atualização: 28/09/2026 — v0.34.0 (Three.js): cor do round volta suave 0,7s antes de começar, tela de morte estilo GTA ("MORREU" em vermelho + tela meio sem cor por 1,4s) e indicador de dano na tela quando leva um tiro.
 
 ---
 
@@ -339,6 +339,12 @@
   - [x] **Build**: `electron-builder` gera nome de arquivo fixo (`Point-Ball-Setup.exe`, sem versão no nome) + `latest.yml`/`.blockmap` pro auto-update funcionar
   - [x] **Publicar**: passo a passo em `desktop/LEIA-ME.md` (seção 2) — criar um GitHub Release com os 3 arquivos alimenta o botão do site E o auto-update de quem já tem o app instalado (a partir da v0.32.0+)
   - [ ] Testar o link da internet com um amigo de outro lugar (aqui no teste não dá pra abrir o túnel de verdade)
+
+- [x] v0.34.0 (Three.js): feedback visual de round, morte e dano
+  - [x] **Cor do round**: agora volta suave 0,7s antes do round começar (transição gradual, sem parecer repentina) em vez de esperar o round começar pra voltar rapidinho
+  - [x] **Tela de morte estilo GTA**: "MORREU" em vermelho grande no lugar de "Você foi eliminado", e a tela fica meio sem cor (uns 40% saturada, não é literalmente preto e branco) enquanto olha a própria lápide
+  - [x] **Lápide**: tempo vendo a própria lápide (antes de ir pro espectador, no modo rounds) aumentado de 1s pra 1,4s
+  - [x] **Indicador de dano**: ao levar um tiro/acerto, pisca um flash vermelho rápido nas bordas da tela, igual jogo de tiro
 
 - [x] v0.31.0 (Three.js): câmera
   - [x] **Alt esquerdo** = troca o ombro da câmera da 3ª pessoa (no esquerdo vai pro direito e vice-versa); a câmera desliza pro outro lado em vez de pular e fica salvo nas configurações; no app do PC a barra de menu saiu (o Alt não abre mais nada)
