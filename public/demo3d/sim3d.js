@@ -340,6 +340,7 @@ export class Sim3D {
     this.doors = all.filter((b) => b.door != null).sort((a, b) => a.door - b.door).map((b) => ({ box: b, cx: (b.x0 + b.x1) / 2, cz: (b.z0 + b.z1) / 2, open: 0, until: 0, solid: true }));
     this.meteorBoxes = [];
     this.magic = !!opts.magic; this.eyes = []; this.magicWalls = []; // (modo magia)
+    this.broom = this.magic || !!opts.broom; // vassoura (vem junto no modo magia, ou sozinha)
     // paredes em diagonal (mapas de formato irregular: octógono, hexágono...) e o contorno do mapa
     this.segs = (opts.segs || []).map((q) => { const dx = q.bx - q.ax, dz = q.bz - q.az, len = Math.hypot(dx, dz) || 1; return Object.assign({}, q, { ux: dx / len, uz: dz / len, len, nx: -dz / len, nz: dx / len }); });
     this.shape = opts.shape || null;
@@ -575,12 +576,12 @@ export class Sim3D {
     };
     for (const w of WEAPON_IDS) { p.ammo[w] = this.WEAPONS[w].mag; p.mags[w] = this.WEAPONS[w].mags; }
     this.players.set(p.id, p);
-    this.spawn(p);
+    this.spawn(p, this.time > 0.5 && this.mode !== 'rounds'); // (entrou com a partida rolando: nasce protegido)
     return p;
   }
   radius(p) { return this.P.radius * (p.lives >= this.P.lives ? 1 : this.P.shrink); }
   heightOf(p) { return this.P.height * (p.lives >= this.P.lives ? 1 : this.P.shrink); }
-  spawn(p) {
+  spawn(p, protect = true) {
     const r = this.P.radius + 6;
     let bestD = -1;
     for (let i = 0; i < 60; i++) {
@@ -600,7 +601,7 @@ export class Sim3D {
     p.lives = this.P.lives; p.alive = true; p.weapon = 'primary';
     for (const w of WEAPON_IDS) { p.ammo[w] = this.WEAPONS[w].mag; p.mags[w] = this.WEAPONS[w].mags; }
     p.nades = this.noNade ? 0 : 1; p.smokes = this.noSmoke ? 0 : 1; p.potions = 1; p.reloadUntil = 0; p.charge0 = 0; p.nade0 = 0;
-    p.protectUntil = this.time + this.P.protect; p.invulnUntil = 0;
+    p.protectUntil = protect ? this.time + this.P.protect : 0; p.invulnUntil = 0; // (começo da partida/round: sem proteção e sem piscar)
     p.yaw = p.team === 'A' ? 0 : Math.PI;
     p.shieldUntil = 0; p.shieldHits = 0; p.dashUntil = 0; p.gliding = false;
     p.lastHitBy = {}; p.spin = null; p.ladder = null; p.slowUntil = 0; p.aiming = false; p.aimT0 = 0; p.drinkUntil = 0;
@@ -840,7 +841,7 @@ export class Sim3D {
       mode: this.mode, phase: this.phase, phaseUntil: this.phaseUntil, hzStart: this.hzStart, score: this.score, round: this.round,
       totalRounds: this.totalRounds, killLimit: this.killLimit, hillTarget: this.hillTarget, matchTime: this.matchTime,
       hill: this.hill ? { x: this.hill.x, z: this.hill.z, r: this.hill.r, n: this.hill.n, pv: this.hill.pv, o: this.hillOwner } : null, result: this.result,
-      magic: this.magic, eyes: this.eyes.map((E) => ({ id: E.id, team: E.team, owner: E.owner, x: E.x, y: E.y, z: E.z, until: E.until })), mwalls: this.magicWalls.map((W) => ({ id: W.id, box: W.box, until: W.until }))
+      magic: this.magic, broom: this.broom, eyes: this.eyes.map((E) => ({ id: E.id, team: E.team, owner: E.owner, x: E.x, y: E.y, z: E.z, until: E.until })), mwalls: this.magicWalls.map((W) => ({ id: W.id, box: W.box, until: W.until }))
     };
   }
 
@@ -953,7 +954,7 @@ export class Sim3D {
     const y0 = p.y, ph = this.heightOf(p);
     p.vy -= this.P.gravity * dt;
     // vassoura (modo magia): segurando Espaço no ar, cai bem devagar
-    if (this.magic && !p.grounded && p.input.glide && p.vy < MAGIC.broom.fall && !(p.flungUntil > this.time)) { p.vy = MAGIC.broom.fall; p.gliding = true; } else if (p.grounded || !p.input.glide || p.vy > 0) p.gliding = false;
+    if (this.broom && !p.grounded && p.input.glide && p.vy < MAGIC.broom.fall && !(p.flungUntil > this.time)) { p.vy = MAGIC.broom.fall; p.gliding = true; } else if (p.grounded || !p.input.glide || p.vy > 0) p.gliding = false;
     p.y += p.vy * dt;
     // bate a cabeça embaixo de plataforma/teto baixo (andar de cima do mapa dos portais)
     if (p.vy > 0) for (const b of this.boxes) {
@@ -1774,7 +1775,7 @@ export class Sim3D {
     this.eyes = []; this.magicWalls = []; this.refreshBoxes();
     for (const d of this.doors) { d.open = 0; d.until = 0; d.solid = true; }
     this.portalIdx = -99; this.applyPortalPairs(null);
-    for (const p of this.players.values()) this.spawn(p);
+    for (const p of this.players.values()) this.spawn(p, false);
     this.phase = 'countdown'; this.phaseUntil = this.time + this.startDelay; this.hzStart = this.phaseUntil;
     this.events.push({ type: 'round_countdown', round: this.round });
   }

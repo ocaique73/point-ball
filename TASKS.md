@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 27/09/2026 — v0.31.0 (Three.js): **Alt esquerdo** troca o ombro da câmera da 3ª pessoa (esquerdo ⇄ direito) e **espectador** no modo rounds (morreu: assiste quem está vivo — bot em 3ª pessoa, jogador de verdade na câmera que ele usa).
+Última atualização: 27/09/2026 — v0.32.0 (Three.js + app do PC): **hospedar pela internet com um link** (túnel da Cloudflare, sem Radmin), opção de **vassoura sem o modo magia**, vassoura da 1ª pessoa do lado certo, sem piscar no começo da partida/round, cor volta só quando o round começa, espectador com 1 s de lápide.
 
 ---
 
@@ -323,6 +323,16 @@
 - [x] Godot: mecânica da **Sala escura** (luz apaga/acende sozinha, com lanterna fraca pra dar pra jogar) e do **Vulcão** (4 poças de lava espelhadas que alternam ativa/inativa e doem quando ativas).
 - [ ] Godot: falta a mecânica de **Portais** (teletransporte — é a mais complexa, precisa abrir buracos na parede e sincronizar posição/velocidade) e da **Cidade à noite** (postes que acendem/apagam ao levar tiro; hoje o mapa não é permanentemente escuro ainda).
 - [ ] Godot: **multiplayer do zero** (o Godot não usa o servidor Node/Socket.IO da versão web — precisa de servidor dedicado ENet, salas, times, dono da sala). Fase grande, ainda não iniciada.
+
+- [x] v0.32.0 (Three.js + app do PC): jogar com amigo de longe
+  - [x] **App do PC → Hospedar pela internet → Criar link**: o PC vira o servidor e o app cria um link público (túnel grátis da Cloudflare, sem conta e sem abrir porta no roteador; baixa o `cloudflared` oficial na 1ª vez). O link já é copiado; o amigo abre no navegador ou cola no **Entrar** do app; no 3D o link aparece no menu Multiplayer com botão Copiar (escondido no modo streamer). O **Entrar** do app aceita IP ou link; botão **Abrir o servidor do site** (joga com quem está no navegador)
+  - [x] Instruções pra gerar o instalador, mandar pelo Google Drive e quem joga com quem (site x PC que hospeda) em `desktop/LEIA-ME.md`
+  - [x] **Vassoura sem o modo magia**: opção no menu Jogo e na sala online (o dono liga); no modo magia ela já vem junto
+  - [x] **Vassoura na 1ª pessoa**: o cabo aponta pra frente e a palha fica pra trás (antes aparecia a palha na frente)
+  - [x] **Piscar (proteção)**: só quando renasce depois de morrer (mata-mata, cada um por si, rei da colina); no começo da partida e dos rounds ninguém pisca
+  - [x] **Começo do round**: a tela fica quase preto e branco a contagem toda e a cor só volta quando o round começa (rapidinho, pra ver que começou)
+  - [x] Espectador: 1 s de lápide (era 1,4 s); trocar o ombro com o Alt não aparece mais no feed
+  - [ ] Testar o link da internet com um amigo de outro lugar (aqui no teste não dá pra abrir o túnel de verdade)
 
 - [x] v0.31.0 (Three.js): câmera
   - [x] **Alt esquerdo** = troca o ombro da câmera da 3ª pessoa (no esquerdo vai pro direito e vice-versa); a câmera desliza pro outro lado em vez de pular e fica salvo nas configurações; no app do PC a barra de menu saiu (o Alt não abre mais nada)

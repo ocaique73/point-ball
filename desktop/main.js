@@ -1,12 +1,16 @@
 // Point Ball instalável (Electron).
-// Abre uma tela de início com 2 opções:
+// Abre uma tela de início com 3 opções:
 //  - "Hospedar": liga o servidor do jogo AQUI neste PC (o mesmo do site) e avisa a rede local que tem partida aqui;
 //    os amigos na mesma rede (Wi-Fi/cabo) entram por este PC. Também serve pra jogar sozinho sem internet.
-//  - "Entrar": mostra as partidas achadas na rede (ou digita o IP do PC de quem hospeda) e abre o jogo de lá.
-const { app, BrowserWindow, ipcMain, shell, Menu } = require('electron');
+//  - "Hospedar pela internet": liga o mesmo servidor e cria um link público (túnel grátis da Cloudflare, sem conta e
+//    sem abrir porta no roteador) que aponta pra este PC; o amigo de outro lugar abre o link no navegador ou no app.
+//  - "Entrar": mostra as partidas achadas na rede (ou digita o IP / cola o link de quem hospeda) e abre o jogo de lá.
+const { app, BrowserWindow, ipcMain, shell, Menu, clipboard, net } = require('electron');
 const path = require('path');
 const os = require('os');
+const fs = require('fs');
 const dgram = require('dgram');
+const { spawn } = require('child_process');
 
 const PORTA = 3000; // porta do jogo (a mesma do site em casa)
 const PORTA_AVISO = 41999; // porta UDP onde quem hospeda avisa "tem partida aqui"
@@ -47,10 +51,81 @@ function ouvirRede() {
     if (janela && !janela.isDestroyed()) janela.webContents.send('partidas', [...achados.values()]);
   }, 1000);
 }
+
+// ---------- hospedar pela internet: túnel rápido da Cloudflare (cloudflared) ----------
+// Na 1ª vez baixa o cloudflared oficial (GitHub da Cloudflare) pra pasta do app; depois é só abrir.
+// O link muda cada vez que abre (xxxx.trycloudflare.com) e fecha junto com o app.
+const CF_BAIXAR = {
+  win32: 'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe',
+  linux: 'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64'
+};
+let tunel = null, linkPublico = null, abrindoTunel = null;
+const caminhoCF = () => process.env.PB_CLOUDFLARED || path.join(app.getPath('userData'), process.platform === 'win32' ? 'cloudflared.exe' : 'cloudflared');
+function statusTunel(s) { if (janela && !janela.isDestroyed()) janela.webContents.send('tunel', s); }
+// baixa um arquivo (segue os redirecionamentos do GitHub) mostrando a porcentagem
+function baixar(url, destino, progresso) {
+  return new Promise((ok, falhou) => {
+    const tmp = destino + '.baixando';
+    const req = net.request({ url, redirect: 'follow' });
+    req.on('response', (res) => {
+      if (res.statusCode !== 200) { falhou(new Error('download respondeu ' + res.statusCode)); return; }
+      const total = Number(res.headers['content-length']) || 0; let feito = 0, ult = -1;
+      const arq = fs.createWriteStream(tmp);
+      res.on('data', (c) => { arq.write(c); feito += c.length; const pct = total ? Math.floor(feito / total * 100) : 0; if (pct !== ult) { ult = pct; progresso(pct); } });
+      res.on('end', () => arq.end(() => { try { fs.renameSync(tmp, destino); ok(); } catch (e) { falhou(e); } }));
+      res.on('error', (e) => { arq.destroy(); falhou(e); });
+    });
+    req.on('error', falhou);
+    req.end();
+  });
+}
+function fecharTunel() { if (tunel) { try { tunel.kill(); } catch (e) { /* já fechou */ } } tunel = null; linkPublico = null; }
+async function abrirTunel() {
+  if (linkPublico) return linkPublico;
+  if (abrindoTunel) return abrindoTunel;
+  abrindoTunel = (async () => {
+    if (!servidorLigado) process.env.SERVER_LOCATION = process.env.SERVER_LOCATION || 'PC de ' + os.hostname() + ' (pela internet)';
+    ligarServidor();
+    const cf = caminhoCF();
+    if (!fs.existsSync(cf)) {
+      const url = CF_BAIXAR[process.platform];
+      if (!url) throw new Error('hospedar pela internet só funciona no Windows (e no Linux)');
+      fs.mkdirSync(path.dirname(cf), { recursive: true });
+      statusTunel({ etapa: 'baixando', pct: 0 });
+      await baixar(url, cf, (pct) => statusTunel({ etapa: 'baixando', pct }));
+      if (process.platform !== 'win32') fs.chmodSync(cf, 0o755);
+    }
+    statusTunel({ etapa: 'conectando' });
+    return await new Promise((ok, falhou) => {
+      let log = '', achou = null, pronto = false, espera = null, limite = null;
+      const fim = (erro) => { if (pronto) return; pronto = true; clearTimeout(limite); clearTimeout(espera); if (erro) { fecharTunel(); falhou(erro); } else { linkPublico = achou; ok(achou); } };
+      const p = spawn(cf, ['tunnel', '--no-autoupdate', '--url', 'http://localhost:' + PORTA], { windowsHide: true });
+      tunel = p;
+      const ler = (d) => {
+        log = (log + d.toString()).slice(-20000);
+        if (!achou) { const m = log.match(/https:\/\/(?!api\.)[-a-z0-9]+\.trycloudflare\.com/); if (m) { achou = m[0]; espera = setTimeout(() => fim(), 6000); } } // (achou o link: espera conectar)
+        if (achou && /Registered tunnel connection|Connection [0-9a-f-]+ registered/i.test(log)) fim();
+      };
+      p.stdout.on('data', ler); p.stderr.on('data', ler);
+      p.on('error', (e) => fim(e));
+      p.on('exit', (code) => {
+        if (tunel === p) { tunel = null; linkPublico = null; }
+        if (!pronto) fim(new Error('o túnel fechou sozinho (código ' + code + '). ' + ((log.split('\n').filter((l) => /ERR|error|fail/i.test(l)).slice(-1)[0] || log.trim().split('\n').slice(-1)[0] || '').replace(/^\S+Z\s+/, '').slice(0, 200))));
+        else statusTunel({ etapa: 'caiu' });
+      });
+      limite = setTimeout(() => fim(new Error('demorou demais pra criar o link (a internet está bloqueando?)')), 60000);
+    });
+  })();
+  try { return await abrindoTunel; } finally { abrindoTunel = null; }
+}
+
 function abrirJogo(url) {
   janela.loadURL(url);
   janela.setTitle('Point Ball');
 }
+// só a tela de início (ou o jogo deste PC) pode ligar servidor/túnel — a página de outro PC (quando você entra
+// na partida de alguém) não
+function daqui(e) { const u = (e.senderFrame && e.senderFrame.url) || ''; return u.startsWith('file:') || /^http:\/\/(localhost|127\.0\.0\.1)[:/]/.test(u); }
 function criarJanela() {
   janela = new BrowserWindow({
     width: 1280, height: 760, minWidth: 900, minHeight: 560, title: 'Point Ball', backgroundColor: '#0b1220', autoHideMenuBar: true,
@@ -64,13 +139,32 @@ function criarJanela() {
     if (input.type === 'keyDown' && input.key === 'F5') { janela.webContents.reload(); e.preventDefault(); }
     if (input.type === 'keyDown' && input.control && input.shift && input.key.toLowerCase() === 'i') { janela.webContents.toggleDevTools(); e.preventDefault(); }
   });
+  // botão direito num campo de texto: Recortar/Copiar/Colar (pra colar o link do amigo no "Entrar")
+  janela.webContents.on('context-menu', (e, p) => {
+    if (p.isEditable) Menu.buildFromTemplate([{ role: 'cut', label: 'Recortar' }, { role: 'copy', label: 'Copiar' }, { role: 'paste', label: 'Colar' }, { type: 'separator' }, { role: 'selectAll', label: 'Selecionar tudo' }]).popup();
+    else if (p.selectionText) Menu.buildFromTemplate([{ role: 'copy', label: 'Copiar' }]).popup();
+  });
   // links externos abrem no navegador
   janela.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\/(localhost|\d+\.\d+\.\d+\.\d+)/.test(url)) return { action: 'allow' }; shell.openExternal(url); return { action: 'deny' }; });
 }
+// endereço digitado no "Entrar": IP da rede (192.168.0.15 / 192.168.0.15:3000) ou o link de quem hospeda pela internet
+function enderecoDoJogo(texto, modo) {
+  const alvo = String(texto || '').trim(), sub = modo === '2d' ? '' : 'demo3d/';
+  if (!alvo) return null;
+  const semPorta = alvo.replace(/^https?:\/\//i, '').replace(/\/.*$/, '').replace(/:\d+$/, '');
+  if (/^https?:\/\//i.test(alvo) || (/[a-z]/i.test(semPorta) && semPorta.includes('.'))) { // link (ex: https://abc-def.trycloudflare.com/demo3d/)
+    try { return new URL(/^https?:\/\//i.test(alvo) ? alvo : 'https://' + alvo).origin + '/' + sub; } catch (e) { return null; }
+  }
+  const host = alvo.replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+  return `http://${host.includes(':') ? host : host + ':' + PORTA}/${sub}`;
+}
 
 ipcMain.handle('ips', () => meusIPs());
-ipcMain.handle('hospedar', (e, modo) => { ligarServidor(); setTimeout(() => abrirJogo(`http://localhost:${PORTA}/${modo === '2d' ? '' : 'demo3d/'}`), 700); return { ips: meusIPs(), porta: PORTA }; });
-ipcMain.handle('entrar', (e, ip, modo) => { const alvo = String(ip || '').trim().replace(/^https?:\/\//, '').replace(/\/.*$/, ''); if (!alvo) return false; const host = alvo.includes(':') ? alvo : alvo + ':' + PORTA; abrirJogo(`http://${host}/${modo === '2d' ? '' : 'demo3d/'}`); return true; });
+ipcMain.handle('hospedar', (e, modo) => { if (!daqui(e)) return false; ligarServidor(); setTimeout(() => abrirJogo(`http://localhost:${PORTA}/${modo === '2d' ? '' : 'demo3d/'}`), 700); return { ips: meusIPs(), porta: PORTA }; });
+ipcMain.handle('hospedar-internet', async (e) => { if (!daqui(e)) return { erro: 'não permitido' }; try { return { link: await abrirTunel() }; } catch (err) { return { erro: String((err && err.message) || err) }; } });
+ipcMain.handle('link', (e) => (daqui(e) ? linkPublico : null));
+ipcMain.handle('copiar', (e, texto) => { if (!daqui(e)) return false; clipboard.writeText(String(texto || '').slice(0, 500)); return true; });
+ipcMain.handle('entrar', (e, ip, modo) => { if (!daqui(e)) return false; const url = enderecoDoJogo(ip, modo); if (!url) return false; abrirJogo(url); return true; });
 ipcMain.handle('inicio', () => { janela.loadFile(path.join(__dirname, 'launcher.html')); return true; });
 
 app.whenReady().then(() => {
@@ -82,5 +176,15 @@ app.whenReady().then(() => {
     setTimeout(async () => { const img = await janela.webContents.capturePage(); require('fs').writeFileSync(path.join(__dirname, 'teste-launcher.png'), img.toPNG()); ligarServidor(); abrirJogo(`http://localhost:${PORTA}/demo3d/`); }, 2500);
     setTimeout(async () => { const img = await janela.webContents.capturePage(); require('fs').writeFileSync(path.join(__dirname, 'teste-jogo.png'), img.toPNG()); console.log('partidas achadas:', JSON.stringify([...achados.values()])); app.quit(); }, 25000);
   }
+  // teste do túnel (PB_TESTE=net): cria o link, abre o jogo e mostra o link no console
+  if (process.env.PB_TESTE === 'net') {
+    janela.webContents.on('console-message', (e, level, msg) => { if (level >= 3) console.log('[erro na página]', msg); });
+    setTimeout(async () => {
+      try { console.log('LINK:', await abrirTunel()); } catch (err) { console.log('ERRO DO TÚNEL:', err.message); }
+      abrirJogo(`http://localhost:${PORTA}/demo3d/`);
+      setTimeout(async () => { const img = await janela.webContents.capturePage(); fs.writeFileSync(path.join(__dirname, 'teste-net.png'), img.toPNG()); console.log('entrar(link):', enderecoDoJogo('abc-def.trycloudflare.com', '3d'), enderecoDoJogo('https://abc.trycloudflare.com/demo3d/', '2d'), enderecoDoJogo('192.168.0.15', '3d'), enderecoDoJogo('localhost:3001', '3d')); app.quit(); }, 15000);
+    }, 2000);
+  }
 });
 app.on('window-all-closed', () => app.quit());
+app.on('before-quit', () => fecharTunel()); // fechou o app: o link para de funcionar

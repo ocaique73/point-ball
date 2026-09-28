@@ -34,6 +34,8 @@ cadência/recarga de cada arma — ligar/desligar "você pode morrer" (os bots s
 
 Tem física 3D própria (`public/demo3d/sim3d.js`): tiro e granada seguem a mira, ricochete no muro e no chão, pulo duplo. 8 mapas e bots com 3 níveis.
 
+**Novidades da v0.32**: no **app do PC**, **Hospedar pela internet** cria um link pros amigos de outro lugar (sem Radmin; eles abrem no navegador ou no app); opção de **vassoura sem o modo magia**; vassoura da 1ª pessoa do lado certo; ninguém pisca no começo da partida/round (só quando renasce); a cor só volta quando o round começa.
+
 **Novidades da v0.31** (só no 3D): **Alt esquerdo** troca o ombro da câmera da 3ª pessoa e, no **modo rounds**, quando você morre vira **espectador** de quem está vivo (bot em 3ª pessoa; jogador de verdade na 1ª ou 3ª pessoa, a que ele usa) — clique = próximo, botão direito = anterior.
 
 **Novidades da v0.30** (só no 3D): **modo magia** (tecla Q = magia do seu personagem: escudo, olho, teleporte, parede de pedra ou investida; segurar Espaço no ar = vassoura), faca com corte na horizontal, animação de puxar todas as armas, braços da 1ª pessoa que nunca mostram o fim, fábrica com o elevador na curva do Z e a câmera da 3ª pessoa sem atravessar parede.
