@@ -11,6 +11,7 @@ const os = require('os');
 const fs = require('fs');
 const dgram = require('dgram');
 const { spawn } = require('child_process');
+const { autoUpdater } = require('electron-updater');
 
 const PORTA = 3000; // porta do jogo (a mesma do site em casa)
 const PORTA_AVISO = 41999; // porta UDP onde quem hospeda avisa "tem partida aqui"
@@ -119,6 +120,26 @@ async function abrirTunel() {
   try { return await abrindoTunel; } finally { abrindoTunel = null; }
 }
 
+// ---------- atualização automática (pega a versão mais nova do GitHub Releases sozinho) ----------
+// baixa só quando o jogador clicar (nunca no meio de uma partida sem avisar); instala quando ele fechar o app
+// ou clicar em "Reiniciar e atualizar". Não funciona rodando "npm start" (só no instalado de verdade).
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = true;
+// gancho só pra teste (PB_UPDATE_TEST=1): lê desktop/dev-app-update.yml em vez do config real, pra testar
+// o fluxo de atualização sem precisar do instalador do Windows de verdade. Nunca ativa no app publicado.
+if (process.env.PB_UPDATE_TEST === '1') autoUpdater.forceDevUpdateConfig = true;
+function statusUpdate(s) { if (janela && !janela.isDestroyed()) janela.webContents.send('update', s); }
+autoUpdater.on('checking-for-update', () => statusUpdate({ etapa: 'verificando' }));
+autoUpdater.on('update-available', (info) => statusUpdate({ etapa: 'disponivel', versao: info.version }));
+autoUpdater.on('update-not-available', () => statusUpdate({ etapa: 'atualizado' }));
+autoUpdater.on('download-progress', (p) => statusUpdate({ etapa: 'baixando', pct: Math.floor(p.percent) }));
+autoUpdater.on('update-downloaded', (info) => statusUpdate({ etapa: 'pronto', versao: info.version }));
+autoUpdater.on('error', (err) => statusUpdate({ etapa: 'erro', msg: String((err && err.message) || err).slice(0, 200) }));
+function verificarUpdate() {
+  if (!app.isPackaged && process.env.PB_UPDATE_TEST !== '1') { statusUpdate({ etapa: 'erro', msg: 'atualização automática só funciona no instalado (não no "npm start")' }); return; }
+  autoUpdater.checkForUpdates().catch((err) => statusUpdate({ etapa: 'erro', msg: String((err && err.message) || err).slice(0, 200) }));
+}
+
 function abrirJogo(url) {
   janela.loadURL(url);
   janela.setTitle('Point Ball');
@@ -166,10 +187,15 @@ ipcMain.handle('link', (e) => (daqui(e) ? linkPublico : null));
 ipcMain.handle('copiar', (e, texto) => { if (!daqui(e)) return false; clipboard.writeText(String(texto || '').slice(0, 500)); return true; });
 ipcMain.handle('entrar', (e, ip, modo) => { if (!daqui(e)) return false; const url = enderecoDoJogo(ip, modo); if (!url) return false; abrirJogo(url); return true; });
 ipcMain.handle('inicio', () => { janela.loadFile(path.join(__dirname, 'launcher.html')); return true; });
+ipcMain.handle('versao', () => app.getVersion());
+ipcMain.handle('verificar-update', (e) => { if (!daqui(e)) return false; verificarUpdate(); return true; });
+ipcMain.handle('baixar-update', (e) => { if (!daqui(e)) return false; autoUpdater.downloadUpdate().catch((err) => statusUpdate({ etapa: 'erro', msg: String((err && err.message) || err).slice(0, 200) })); return true; });
+ipcMain.handle('instalar-update', (e) => { if (!daqui(e)) return false; autoUpdater.quitAndInstall(); return true; });
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null); // sem barra de menu: o Alt esquerdo fica só pro jogo (troca o ombro da câmera)
   criarJanela(); ouvirRede();
+  setTimeout(verificarUpdate, 2500); // já avisa sozinho ao abrir, sem precisar clicar em nada
   // teste automático (PB_TESTE=1): hospeda, espera o jogo abrir, tira um print e fecha
   if (process.env.PB_TESTE === '1') {
     janela.webContents.on('console-message', (e, level, msg) => { if (level >= 3) console.log('[erro na página]', msg); });

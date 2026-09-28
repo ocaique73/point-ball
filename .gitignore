@@ -14,3 +14,4 @@ game-config.local.json
 desktop/jogo/
 desktop/node_modules/
 desktop/dist/
+desktop/dev-app-update.yml

@@ -12,23 +12,36 @@ e os outros **entram**. É o mesmo jogo do site (2D e 3D), com salas, times e bo
    npm install
    npm run dist
    ```
-3. Pronto: o instalador fica em `desktop\dist\Point Ball Setup 0.32.0.exe`.
+3. Pronto: o instalador fica em `desktop\dist\Point-Ball-Setup.exe` — sempre com esse **mesmo nome** (sem o número
+   da versão), pra o link do site e a atualização automática nunca precisarem mudar. Junto com ele saem mais 2
+   arquivos pequenos: `Point-Ball-Setup.exe.blockmap` e `latest.yml` (metadados de quem já tem o jogo instalado
+   saber que tem versão nova).
 
-> Pra só testar sem gerar instalador: `cd desktop` → `npm start`.
+> Pra só testar sem gerar instalador: `cd desktop` → `npm start`. (Nesse modo a atualização automática fica
+> desligada — só funciona no `.exe` instalado de verdade.)
 
-## 2. Mandar o instalador pros amigos
-O `.exe` tem uns 80 a 100 MB (grande demais pro Discord/WhatsApp grátis), então o jeito mais fácil é o **Google Drive**:
-1. Abra https://drive.google.com → **Novo → Upload de arquivo** → escolha o `Point Ball Setup 0.32.0.exe`.
-2. Clique com o botão direito no arquivo → **Compartilhar** → em "Acesso geral" escolha
-   **Qualquer pessoa com o link** → **Copiar link**.
-3. Mande o link pros amigos. Eles baixam e instalam (avançar → concluir); cria o atalho **Point Ball** na área de trabalho.
-   - O Windows pode avisar "O Windows protegeu o computador" (o app não tem assinatura paga): clique em
-     **Mais informações → Executar assim mesmo**.
-   - O Chrome pode dizer que o arquivo "não é baixado com frequência": clique em **Manter**.
+## 2. Publicar a versão nova (site sempre atualizado + o app se atualiza sozinho)
+Isso usa o **GitHub Releases** do seu repositório: um lugar pra guardar arquivo grande (o `.exe` não cabe no
+repositório normal) com um link fixo que sempre aponta pra versão mais nova.
 
-> Versão nova do jogo: **quem hospeda** é quem precisa atualizar. Quem entra na partida de alguém joga com o jogo
-> que vem do PC de quem hospeda (o app só guarda a tela de início). Mesmo assim, de vez em quando mande o instalador
-> novo pra todo mundo ter a tela de início mais nova.
+1. Acesse **https://github.com/ocaique73/point-ball/releases** → **"Draft a new release"**.
+2. Em **"Choose a tag"**, digite `vX.Y.Z` igual à versão do jogo (ex: `v0.32.0`) → **"Create new tag"**.
+3. **Target**: a branch `main` (a que está publicada).
+4. **Título**: `Point Ball vX.Y.Z` (pode colar as novidades da versão na descrição).
+5. Arraste pra caixa **"Attach binaries"** os **3 arquivos** que saíram em `desktop\dist`:
+   `Point-Ball-Setup.exe`, `Point-Ball-Setup.exe.blockmap` e `latest.yml`.
+6. Clique em **"Publish release"**.
+
+Pronto — e isso sozinho já resolve as duas coisas:
+- **Botão "⬇️ Baixar app (Windows)" no site**: sempre baixa esse `.exe` que você acabou de subir (o link é fixo,
+  `.../releases/latest/download/Point-Ball-Setup.exe`, não precisa mexer em nada no site a cada versão).
+- **Quem já tem o app instalado**: ele mesmo verifica ao abrir (e tem um botão **"Verificar atualização"** dentro do
+  app também) e mostra uma barra verde no topo — **"Baixar atualização"** e depois **"Reiniciar e atualizar"**.
+  Como é o próprio programa que manda instalar (você não clica duas vezes no arquivo), normalmente nem aparece
+  aquele aviso do Windows de novo.
+
+> Isso só funciona pra quem já instalou uma versão que já tinha essa atualização automática (a partir da v0.32.0).
+> Quem ainda está numa versão bem antiga precisa baixar o instalador manualmente essa **última** vez.
 
 ## 3. Jogar juntos na mesma rede (LAN)
 1. **Quem hospeda** abre o Point Ball e clica em **Hospedar partida**.

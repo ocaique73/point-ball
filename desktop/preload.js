@@ -9,5 +9,10 @@ contextBridge.exposeInMainWorld('pbApp', {
   entrar: (ip, modo) => ipcRenderer.invoke('entrar', ip, modo),
   inicio: () => ipcRenderer.invoke('inicio'),
   aoAcharPartidas: (cb) => ipcRenderer.on('partidas', (_e, lista) => cb(lista)),
-  aoTunel: (cb) => ipcRenderer.on('tunel', (_e, s) => cb(s))
+  aoTunel: (cb) => ipcRenderer.on('tunel', (_e, s) => cb(s)),
+  versao: () => ipcRenderer.invoke('versao'),
+  verificarUpdate: () => ipcRenderer.invoke('verificar-update'), // atualização automática (GitHub Releases)
+  baixarUpdate: () => ipcRenderer.invoke('baixar-update'),
+  instalarUpdate: () => ipcRenderer.invoke('instalar-update'),
+  aoUpdate: (cb) => ipcRenderer.on('update', (_e, s) => cb(s))
 });
