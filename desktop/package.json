@@ -1,7 +1,7 @@
 {
   "name": "point-ball-desktop",
   "productName": "Point Ball",
-  "version": "0.34.0",
+  "version": "0.35.0",
   "description": "Point Ball instalável (Electron) — joga sozinho, em LAN ou pela internet com um link (um PC hospeda, os outros entram)",
   "main": "main.js",
   "author": "Caique",

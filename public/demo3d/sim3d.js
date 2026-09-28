@@ -605,6 +605,7 @@ export class Sim3D {
     p.yaw = p.team === 'A' ? 0 : Math.PI;
     p.shieldUntil = 0; p.shieldHits = 0; p.dashUntil = 0; p.gliding = false;
     p.lastHitBy = {}; p.spin = null; p.ladder = null; p.slowUntil = 0; p.aiming = false; p.aimT0 = 0; p.drinkUntil = 0;
+    p.waiting = false; p.djUsed = false; p.jumps = 0; p.flungUntil = 0; p.sprintOut = 0; // (entrou no meio do round: já pode jogar)
   }
   weaponDef(p) { return this.WEAPONS[p.primary]; }
   // troca a arma principal (menu Esc)
@@ -790,7 +791,7 @@ export class Sim3D {
     this.updatePhase();
     if (this.phase === 'matchEnd') { const ev = this.events; this.events = []; return ev; }
     this.updatePistons();
-    for (const p of this.players.values()) this.updatePlayer(p, dt);
+    for (const p of this.players.values()) if (!p.skip) this.updatePlayer(p, dt); // (skip: online, o comando desse jogador ainda não chegou)
     if (this.magic) this.updateMagic();
     this.updateBullets(dt);
     this.updateNades(dt);
@@ -817,11 +818,14 @@ export class Sim3D {
         protectUntil: p.protectUntil || 0, respawnAt: p.respawnAt || 0, deadAt: p.deadAt || 0, lastHitBy: p.lastHitBy || {},
         look: p.look, slowUntil: p.slowUntil || 0, spin: !!p.spin, climb: !!p.ladder, sprinting: !!p.sprinting, aiming: !!p.aiming, aimT0: p.aimT0 || 0, drinkUntil: p.drinkUntil || 0, slip: !!p.slip,
         shield: p.shieldUntil > this.time ? p.shieldHits : 0, gliding: !!p.gliding, magicReady: p.magicReady || 0, dash: p.dashUntil > this.time,
-        fp: !!p.fp, cs: p.camSide != null ? p.camSide : 1 }); // (espectador: a câmera que ele usa — 1ª/3ª pessoa e o ombro)
+        fp: !!p.fp, cs: p.camSide != null ? p.camSide : 1, // (espectador: a câmera que ele usa — 1ª/3ª pessoa e o ombro)
+        // (online) o que o navegador precisa pra prever o próprio boneco igual ao servidor
+        sq: p.sq || 0, dj: !!p.djUsed, jn: p.jumps || 0, sf: p.slowF || 1, fl: p.flungUntil || 0, so: p.sprintOut || 0,
+        ld: p.ladder ? this.ladders.indexOf(p.ladder) : -1, wt: !!p.waiting });
     }
     return {
       time: this.time, players,
-      bullets: this.bullets.map((b) => ({ id: b.id, team: b.team, x: b.x, y: b.y, z: b.z, vx: b.vx, vy: b.vy, vz: b.vz, r: b.r, kind: b.kind })),
+      bullets: this.bullets.map((b) => ({ id: b.id, o: b.owner, team: b.team, x: b.x, y: b.y, z: b.z, vx: b.vx, vy: b.vy, vz: b.vz, r: b.r, kind: b.kind })),
       nades: this.nades.map((g) => ({ id: g.id, team: g.team, smoke: g.smoke, x: g.x, y: g.y, z: g.z, spin: g.spin, t0: g.t0 })),
       smokes: this.smokes.map((s) => ({ id: s.id, x: s.x, z: s.z, t0: s.t0, until: s.until })),
       tombs: this.tombs.map((t) => ({ id: t.id, x: t.x, y: t.y, z: t.z, name: t.name, team: t.team, t0: t.t0, until: t.until })),
@@ -845,16 +849,17 @@ export class Sim3D {
     };
   }
 
-  updatePlayer(p, dt) {
-    if (p.reloadUntil && this.time >= p.reloadUntil) {
+  // pred = true: só o movimento (o navegador prevê o próprio boneco no online; tiro, dano e renascer ficam com o servidor)
+  updatePlayer(p, dt, pred) {
+    if (!pred && p.reloadUntil && this.time >= p.reloadUntil) {
       p.reloadUntil = 0; p.ammo[p.primary] = this.weaponDef(p).mag; p.mags[p.primary]--;
     }
-    if (!p.alive) { if (this.mode !== 'rounds' && this.time >= p.respawnAt) { this.spawn(p); this.events.push({ type: 'respawn', id: p.id }); } return; }
+    if (!p.alive) { if (!pred && this.mode !== 'rounds' && this.time >= p.respawnAt) { this.spawn(p); this.events.push({ type: 'respawn', id: p.id }); } return; }
     // contagem antes do round / fim de round: ninguém anda nem atira
     if (!this.canAct()) { p.vx = p.vz = 0; p.input.fire = false; p.charge0 = 0; if (p.bot) p.input.fwd = p.input.side = 0; }
     // pego pelo furacão: gira subindo dentro dele e depois é jogado longe
-    if (p.spin) { this.updateSpin(p, dt); return; }
-    if (p.bot) this.botThink(p, dt);
+    if (p.spin) { if (!pred) this.updateSpin(p, dt); return; }
+    if (p.bot && !pred) this.botThink(p, dt);
     // contagem antes do round: todo mundo parado (dá só pra olhar em volta)
     const frozen = this.phase === 'countdown', inF = frozen ? 0 : p.input.fwd, inS = frozen ? 0 : p.input.side;
     // andar relativo para onde olha
@@ -886,7 +891,7 @@ export class Sim3D {
       if (p.gliding && wl > 0.01) { const k2 = Math.min(1, dt * 3); p.vx += (wx * kb - p.vx) * k2; p.vz += (wz * kb - p.vz) * k2; } // (na vassoura: vai pra frente/pra onde virar)
       else if (wl > 0.01 && !(p.flungUntil > this.time)) { p.vx += (wx - p.vx) * k; p.vz += (wz - p.vz) * k; } // (arremessado pela bola: voa sem controle)
     }
-    if (this.magic && p.dashUntil > this.time) { p.vx = p.dashVx; p.vz = p.dashVz; this.dashHits(p); } // investida do bárbaro
+    if (this.magic && p.dashUntil > this.time && !pred) { p.vx = p.dashVx; p.vz = p.dashVz; this.dashHits(p); } // investida do bárbaro
     // navio inclinado: quem está em pé escorrega pro lado mais baixo; no ar, o pulo é levado pro lado (e fica mais alto/baixo com o sobe-desce)
     if (this.deck) {
       // a parte grande da inclinação (onda de lado) só leva forte quem está na água; o resto escorrega pouco
@@ -930,9 +935,9 @@ export class Sim3D {
     }
     // parede invisível em cima da borda: ninguém sai do mapa pulando por cima do muro
     if (p.y >= this.P.borderH - 6) { const m = this.wallT + r; p.x = clamp(p.x, m, this.W - m); p.z = clamp(p.z, m, this.H - m); }
-    if (p.x < -40 || p.z < -40 || p.x > this.W + 40 || p.z > this.H + 40) { this.spawn(p); this.events.push({ type: 'respawn', id: p.id }); return; }
+    if (p.x < -40 || p.z < -40 || p.x > this.W + 40 || p.z > this.H + 40) { if (pred) return; this.spawn(p); this.events.push({ type: 'respawn', id: p.id }); return; }
     // portal: entrou no oval, sai no par dele (olhando pro lado certo, com o mesmo embalo)
-    if (this.portals.length) {
+    if (this.portals.length && !pred) {
       const w = this.portalCross(p, r, true);
       if (w) {
         const oy = p.yaw, fx2 = Math.cos(oy), fz2 = Math.sin(oy);
@@ -949,7 +954,7 @@ export class Sim3D {
       if (d > lim && d > 0) { p.x = pit.x + dx / d * lim; p.z = pit.z + dz / d * lim; }
     }
     // escada de mão: andando pra frente de cara pra escada, sobe; pra trás, desce; pulo solta
-    if (this.ladders.length && this.updateLadder(p, dt, r)) { this.fireInput(p); return; }
+    if (this.ladders.length && this.updateLadder(p, dt, r)) { if (!pred) this.fireInput(p); return; }
     // vertical: gravidade, chão (areia / buraco) e topo dos muros
     const y0 = p.y, ph = this.heightOf(p);
     p.vy -= this.P.gravity * dt;
@@ -973,11 +978,11 @@ export class Sim3D {
       if (!p.grounded) { p.grounded = true; p.djUsed = false; p.jumps = 0; }
     } else p.grounded = false;
     // lá embaixo é lava
-    if (this.holes && p.y < -HOLE.kill) { this.lavaFall(p); return; }
+    if (this.holes && p.y < -HOLE.kill) { if (!pred) this.lavaFall(p); return; }
     // navio: caiu no mar
-    if (this.deck && p.y < this.deck.kill) { this.drown(p); return; }
-    if (this.moat && this.moat.bed == null && p.y < this.moat.water - 25) { this.drown(p); return; } // (lago fundo; o do castelo agora é raso)
-    this.fireInput(p);
+    if (this.deck && p.y < this.deck.kill) { if (!pred) this.drown(p); return; }
+    if (this.moat && this.moat.bed == null && p.y < this.moat.water - 25) { if (!pred) this.drown(p); return; } // (lago fundo; o do castelo agora é raso)
+    if (!pred) this.fireInput(p);
   }
   // ---------- modo magia ----------
   magicOf(p) { const m = (p.look && p.look.m) || (p.bot ? charOfBot(p.id + p.name) : 'hood'); return MAGIC_OF[m] || 'eye'; }

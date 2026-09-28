@@ -5,7 +5,7 @@
 //  - "Hospedar pela internet": liga o mesmo servidor e cria um link público (túnel grátis da Cloudflare, sem conta e
 //    sem abrir porta no roteador) que aponta pra este PC; o amigo de outro lugar abre o link no navegador ou no app.
 //  - "Entrar": mostra as partidas achadas na rede (ou digita o IP / cola o link de quem hospeda) e abre o jogo de lá.
-const { app, BrowserWindow, ipcMain, shell, Menu, clipboard, net } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Menu, clipboard, net, utilityProcess } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -15,7 +15,7 @@ const { autoUpdater } = require('electron-updater');
 
 const PORTA = 3000; // porta do jogo (a mesma do site em casa)
 const PORTA_AVISO = 41999; // porta UDP onde quem hospeda avisa "tem partida aqui"
-let janela = null, servidorLigado = false, aviso = null, ouvinte = null;
+let janela = null, servidorLigado = false, aviso = null, ouvinte = null, servidor = null, servidorPronto = null;
 const achados = new Map(); // ip -> { ip, nome, porta, visto }
 
 function meusIPs() {
@@ -23,23 +23,44 @@ function meusIPs() {
   for (const [nome, lista] of Object.entries(os.networkInterfaces())) for (const a of lista || []) if (a.family === 'IPv4' && !a.internal) out.push({ ip: a.address, rede: nome });
   return out;
 }
-function ligarServidor() {
-  if (servidorLigado) return;
-  process.env.PORT = String(PORTA);
-  process.env.SERVER_LOCATION = process.env.SERVER_LOCATION || 'LAN (PC de ' + os.hostname() + ')';
-  require(path.join(__dirname, 'jogo', 'server.js')); // o servidor do jogo (2D e 3D) roda dentro do app
-  servidorLigado = true;
-  // avisa a rede a cada 1,5 s (os outros PCs com o app aberto veem na lista "Partidas na rede")
-  aviso = dgram.createSocket({ type: 'udp4', reuseAddr: true });
-  aviso.bind(() => {
-    aviso.setBroadcast(true);
-    setInterval(() => {
-      const msg = Buffer.from(JSON.stringify({ pb: 1, nome: os.hostname(), porta: PORTA }));
-      for (const { ip } of meusIPs()) { const p = ip.split('.'); p[3] = '255'; aviso.send(msg, PORTA_AVISO, p.join('.')); }
-      aviso.send(msg, PORTA_AVISO, '255.255.255.255');
-    }, 1500);
+// (v0.35) o servidor do jogo roda num processo SÓ DELE (antes rodava junto com a janela do app e deixava o jogo lento
+// pra quem hospedava: a física da partida e a janela brigavam pelo mesmo processo)
+function esperarServidor(ms = 15000) {
+  const t0 = Date.now();
+  return new Promise((ok) => {
+    const tenta = () => {
+      const r = require('http').get({ host: '127.0.0.1', port: PORTA, path: '/demo3d/', timeout: 1000 }, (resp) => { resp.resume(); ok(true); });
+      r.on('timeout', () => r.destroy());
+      r.on('error', () => { if (Date.now() - t0 > ms || !servidorLigado) ok(false); else setTimeout(tenta, 150); });
+    };
+    tenta();
   });
 }
+function ligarServidor() {
+  if (servidorLigado) return servidorPronto;
+  servidorLigado = true;
+  const env = Object.assign({}, process.env, { PORT: String(PORTA), SERVER_LOCATION: process.env.SERVER_LOCATION || 'LAN (PC de ' + os.hostname() + ')' });
+  servidor = utilityProcess.fork(path.join(__dirname, 'jogo', 'server.js'), [], { env, serviceName: 'Point Ball - servidor do jogo', stdio: 'pipe' });
+  if (servidor.stdout) servidor.stdout.on('data', (d) => process.stdout.write('[servidor] ' + d));
+  if (servidor.stderr) servidor.stderr.on('data', (d) => process.stderr.write('[servidor] ' + d));
+  servidor.on('exit', (code) => { console.log('[servidor] saiu', code); servidorLigado = false; servidor = null; servidorPronto = null; });
+  servidorPronto = esperarServidor();
+  // avisa a rede a cada 1,5 s (os outros PCs com o app aberto veem na lista "Partidas na rede")
+  if (!aviso) {
+    aviso = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+    aviso.bind(() => {
+      aviso.setBroadcast(true);
+      setInterval(() => {
+        if (!servidorLigado) return;
+        const msg = Buffer.from(JSON.stringify({ pb: 1, nome: os.hostname(), porta: PORTA }));
+        for (const { ip } of meusIPs()) { const p = ip.split('.'); p[3] = '255'; aviso.send(msg, PORTA_AVISO, p.join('.')); }
+        aviso.send(msg, PORTA_AVISO, '255.255.255.255');
+      }, 1500);
+    });
+  }
+  return servidorPronto;
+}
+function desligarServidor() { if (servidor) { try { servidor.kill(); } catch (e) {} servidor = null; } servidorLigado = false; }
 function ouvirRede() {
   ouvinte = dgram.createSocket({ type: 'udp4', reuseAddr: true });
   ouvinte.on('message', (buf, rinfo) => {
@@ -86,7 +107,7 @@ async function abrirTunel() {
   if (abrindoTunel) return abrindoTunel;
   abrindoTunel = (async () => {
     if (!servidorLigado) process.env.SERVER_LOCATION = process.env.SERVER_LOCATION || 'PC de ' + os.hostname() + ' (pela internet)';
-    ligarServidor();
+    await ligarServidor();
     const cf = caminhoCF();
     if (!fs.existsSync(cf)) {
       const url = CF_BAIXAR[process.platform];
@@ -181,11 +202,20 @@ function enderecoDoJogo(texto, modo) {
 }
 
 ipcMain.handle('ips', () => meusIPs());
-ipcMain.handle('hospedar', (e, modo) => { if (!daqui(e)) return false; ligarServidor(); setTimeout(() => abrirJogo(`http://localhost:${PORTA}/${modo === '2d' ? '' : 'demo3d/'}`), 700); return { ips: meusIPs(), porta: PORTA }; });
+const comMp = (url, modo, mp) => url + (mp && modo !== '2d' ? '?mp=1' : ''); // (3D: já abre na aba Multiplayer)
+ipcMain.handle('hospedar', async (e, modo, mp) => {
+  if (!daqui(e)) return false;
+  const ok = await ligarServidor();
+  if (!ok) return { erro: 'O servidor não ligou (a porta ' + PORTA + ' já está em uso por outro programa?).' };
+  abrirJogo(comMp(`http://localhost:${PORTA}/${modo === '2d' ? '' : 'demo3d/'}`, modo, mp));
+  return { ips: meusIPs(), porta: PORTA };
+});
+// só liga o servidor (pra "Criar sala na rede": o jogo abre direto na aba Multiplayer)
+ipcMain.handle('ligar', async (e) => { if (!daqui(e)) return false; return !!(await ligarServidor()); });
 ipcMain.handle('hospedar-internet', async (e) => { if (!daqui(e)) return { erro: 'não permitido' }; try { return { link: await abrirTunel() }; } catch (err) { return { erro: String((err && err.message) || err) }; } });
 ipcMain.handle('link', (e) => (daqui(e) ? linkPublico : null));
 ipcMain.handle('copiar', (e, texto) => { if (!daqui(e)) return false; clipboard.writeText(String(texto || '').slice(0, 500)); return true; });
-ipcMain.handle('entrar', (e, ip, modo) => { if (!daqui(e)) return false; const url = enderecoDoJogo(ip, modo); if (!url) return false; abrirJogo(url); return true; });
+ipcMain.handle('entrar', (e, ip, modo, mp) => { if (!daqui(e)) return false; const url = enderecoDoJogo(ip, modo); if (!url) return false; abrirJogo(comMp(url, modo, mp)); return true; });
 ipcMain.handle('inicio', () => { janela.loadFile(path.join(__dirname, 'launcher.html')); return true; });
 ipcMain.handle('versao', () => app.getVersion());
 ipcMain.handle('verificar-update', (e) => { if (!daqui(e)) return false; verificarUpdate(); return true; });
@@ -199,7 +229,7 @@ app.whenReady().then(() => {
   // teste automático (PB_TESTE=1): hospeda, espera o jogo abrir, tira um print e fecha
   if (process.env.PB_TESTE === '1') {
     janela.webContents.on('console-message', (e, level, msg) => { if (level >= 3) console.log('[erro na página]', msg); });
-    setTimeout(async () => { const img = await janela.webContents.capturePage(); require('fs').writeFileSync(path.join(__dirname, 'teste-launcher.png'), img.toPNG()); ligarServidor(); abrirJogo(`http://localhost:${PORTA}/demo3d/`); }, 2500);
+    setTimeout(async () => { const img = await janela.webContents.capturePage(); require('fs').writeFileSync(path.join(__dirname, 'teste-launcher.png'), img.toPNG()); console.log('servidor ligou:', await ligarServidor()); abrirJogo(`http://localhost:${PORTA}/demo3d/`); }, 2500);
     setTimeout(async () => { const img = await janela.webContents.capturePage(); require('fs').writeFileSync(path.join(__dirname, 'teste-jogo.png'), img.toPNG()); console.log('partidas achadas:', JSON.stringify([...achados.values()])); app.quit(); }, 25000);
   }
   // teste do túnel (PB_TESTE=net): cria o link, abre o jogo e mostra o link no console
@@ -213,4 +243,4 @@ app.whenReady().then(() => {
   }
 });
 app.on('window-all-closed', () => app.quit());
-app.on('before-quit', () => fecharTunel()); // fechou o app: o link para de funcionar
+app.on('before-quit', () => { fecharTunel(); desligarServidor(); }); // fechou o app: o link e o servidor param

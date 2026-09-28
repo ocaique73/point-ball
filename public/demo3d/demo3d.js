@@ -3588,23 +3588,23 @@ function ensureSocket() {
     socket.emit('3d_join_room', Object.assign({ clientId: window.PB.clientId(), look: S.look }, lastJoin), (r) => {
       if (!r || !r.ok) { mpStatus('A conexão caiu e não deu pra voltar pra sala.', 'mp-status'); leaveNetRoom(true); return; }
       myPid = r.you; room3d = r.state; renderLobby();
+      if (r.match && r.inMatch) startNetMatch(r.match, true); // (voltou pro mesmo lugar da partida)
+      else if (netMode) { enterLobbyScene(); showMenu(true); }
     });
   });
-  socket.on('3d_room_state', (state) => { room3d = state; renderLobby(); });
+  socket.on('3d_room_state', (state) => {
+    room3d = state; applyOnlineLocks(); renderLobby();
+    if (!netMode && room3d && lobbyMap !== room3d.map) enterLobbyScene(); // (o dono trocou o mapa: o fundo do menu troca junto)
+  });
   socket.on('3d_match_start', (d) => {
     const mine = room3d && room3d.members.find((m) => m.id === myPid);
-    if (!mine || mine.status !== 'team') { mpStatus('A partida começou — escolha um time para entrar na próxima.', 'mp-status2'); return; }
-    enterNetMatch(d);
-    netMode = true;
-    netRoundTime = d.roundTime || 0;
-    socket.emit('3d_action', { t: 'primary', w: S.weapon }); // começa com a arma que você escolheu (se a sala deixar)
-    if (sim.allowed && !sim.allowed.includes(S.weapon)) mpStatus('Sua arma não vale nesta sala — você começa com ' + WEAPONS[sim.pickPrimary(S.weapon)].name.split(' ')[0] + '.', 'mp-status2');
-    $('h-clock').style.display = 'none'; // o tempo agora aparece no placar do modo (em cima, no meio)
-    lockPointer();
+    if (!mine || mine.status !== 'team') { mpStatus('A partida começou — escolha um time pra entrar nela.', 'mp-status2'); return; }
+    startNetMatch(d);
   });
   socket.on('3d_match_end', (result) => {
     if (locked) { try { document.exitPointerLock(); } catch (e) {} }
     $('h-clock').style.display = 'none';
+    enterLobbyScene(); // (acabou: volta pra sala de espera — sem partida nenhuma rodando por trás)
     showMenu(true);
     switchMpView('lobby');
     renderLobby();
@@ -3617,20 +3617,61 @@ function ensureSocket() {
   socket.on('3d_room_closed', () => { mpStatus('A sala foi fechada.', 'mp-status'); leaveNetRoom(true); });
   return socket;
 }
-// sai só da partida (continua na sala de espera); o jogo local volta a rodar por trás do menu
+// entra (ou volta) na partida online: o mundo é montado igual ao do servidor
+function startNetMatch(d, again) {
+  enterNetMatch(d);
+  netMode = true;
+  netRoundTime = d.roundTime || 0;
+  socket.emit('3d_action', { t: 'primary', w: S.weapon }); // começa com a arma que você escolheu (se a sala deixar)
+  if (sim.allowed && !sim.allowed.includes(S.weapon)) mpStatus('Sua arma não vale nesta sala — você começa com ' + WEAPONS[sim.pickPrimary(S.weapon)].name.split(' ')[0] + '.', 'mp-status2');
+  else mpStatus('', 'mp-status2');
+  $('h-clock').style.display = 'none'; // o tempo agora aparece no placar do modo (em cima, no meio)
+  renderLobby(); // (aparece o "Sair da partida")
+  if (!again) lockPointer();
+}
+// sala de espera online: NADA roda por trás (nem você nem bots) — só o mapa da sala girando devagar atrás do menu
+let lobbyMap = null, lobbyT = 0;
+function enterLobbyScene() {
+  if (!room3d) return;
+  netMode = false; spec.id = null; spec.want = null; spec.tag = '';
+  for (const a of avatars.values()) a.remove(); avatars.clear();
+  for (const pool of [bulletMeshes, nadeMeshes, smokeMeshes, tombMeshes, pickupMeshes]) { for (const m of pool.values()) removeBulletMesh(m); pool.clear(); }
+  buildMap(room3d.map); lobbyMap = room3d.map;
+  const wd = mapInfo.world;
+  sim = new Sim3D(wd.walls, wd.W, wd.H, simOptions(wd)); // (sem jogadores: o loop não anda nada)
+  killcam.clear(); killcam.stop(); prevPos = new Map(); netReset(); pendingKc = null;
+  $('feed').innerHTML = ''; for (const id of ['dead', 'spec', 'banner', 'score', 'bombwarn', 'kc']) { const el = $(id); if (el) el.style.display = 'none'; }
+  canvas.style.filter = ''; canvas._sat = 1; $('paused-tag').style.display = 'none';
+}
+function lobbyOrbit(now) {
+  if (now - lobbyT < 40) return; lobbyT = now; // (fundo do menu: 25 quadros por segundo bastam)
+  const W = mapInfo.W || 2000, H = mapInfo.H || 1400, t = now / 1000 * 0.06, R = Math.max(W, H) * 0.62;
+  camera.fov = 60; camera.position.set(W / 2 + Math.cos(t) * R, Math.max(W, H) * 0.32, H / 2 + Math.sin(t) * R);
+  camera.lookAt(W / 2, 0, H / 2); camera.updateProjectionMatrix();
+  renderer.render(scene, camera);
+}
+// sala online: o que muda o jogo de todo mundo é do dono da sala (fica travado aqui); o que é só seu continua liberado
+const ROOM_LOCK = ['o-map', 'o-mode', 'o-kills', 'o-rounds', 'o-hill', 'o-mtime', 'o-bots', 'o-allies', 'o-level', 'o-magic', 'o-broom', 'o-die', 'o-speed', 'o-jumpv', 'o-gundist', 'o-tweapon', 'o-tcd', 'o-treload', 'o-treset'];
+function applyOnlineLocks() {
+  const on = !!room3d;
+  document.body.classList.toggle('mp-room', on);
+  for (const id of ROOM_LOCK) { const el = $(id); if (!el) continue; el.disabled = on; const row = el.closest('.field'); if (row) row.classList.toggle('mp-locked', on); }
+}
+// sai só da partida (continua na sala de espera, sem jogo nenhum rodando por trás)
 function leaveNetMatch() {
   if (socket) socket.emit('3d_leave_match');
   netMode = false; $('h-clock').style.display = 'none';
-  newGame(); showMenu(true); switchMpView('lobby'); renderLobby();
+  enterLobbyScene(); showMenu(true); switchMpView('lobby'); renderLobby();
 }
 window.__pb3dLeaveMatch = () => { if (socket && room3d && room3d.hostId === myPid) socket.emit('3d_end_match'); };
 let lastJoin = null;
 function leaveNetRoom(silent) {
   lastJoin = null;
   if (!silent && socket && room3d) socket.emit('3d_leave_room');
-  room3d = null; netMode = false;
+  room3d = null; netMode = false; lobbyMap = null; netGunDist = null;
+  applyOnlineLocks();
   if (locked) { try { document.exitPointerLock(); } catch (e) {} }
-  newGame();
+  newGame(); // (saiu da sala: volta o jogo sozinho com bots)
   switchMpView('menu');
 }
 function refreshRoomList() {
@@ -3662,9 +3703,11 @@ function joinRoom() {
   ensureSocket().emit('3d_join_room', { name, clientId: window.PB.clientId(), code, password: pass, look: S.look }, (r) => {
     if (!r || !r.ok) { mpStatus(MP_ERR[r && r.error] || 'Não foi possível entrar.'); return; }
     myPid = r.you; room3d = r.state; lastJoin = { name, code, password: pass };
-    mpStatus('');
+    mpStatus(''); applyOnlineLocks();
     switchMpView('lobby'); renderLobby();
-    if (r.match) mpStatus('Partida em andamento — escolha um time para entrar na próxima.', 'mp-status2');
+    if (r.match && r.inMatch) { startNetMatch(r.match, true); return; }
+    enterLobbyScene(); // (entrou na sala: o jogo com bots daqui para — fica só o online)
+    if (r.match) mpStatus('Partida em andamento — escolha um time pra entrar agora.', 'mp-status2');
   });
 }
 // modo streamer: o nome (e a senha) da sala não aparecem na tela; "mostrar" revela por 4 s
@@ -3693,8 +3736,10 @@ function renderLobby() {
   if (isHost) {
     const F = (label, id, opts, val) => `<label class="field" style="grid-template-columns:130px 1fr"><span>${label}</span><select id="${id}">${opts.map(([v, t]) => `<option value="${v}" ${String(v) === String(val) ? 'selected' : ''}>${t}</option>`).join('')}</select><span></span></label>`;
     const nums = (arr) => arr.map((n) => [n, String(n)]);
+    const R = (label, id, min, max, step, val) => `<label class="field" style="grid-template-columns:130px 1fr 44px"><span>${label}</span><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${val}"><span class="v" id="v-${id}">${val}</span></label>`;
     $('mp-host-settings').innerHTML =
-      F('Mapa', 'mp-set-map', Object.keys(MAPS).map((k) => [k, esc(MAPS[k].name)]), room3d.map)
+      (room3d.phase === 'match' ? '<div class="wdesc" style="color:#facc15">Partida rolando: o que você mudar aqui vale na <b>próxima</b> partida (ou encerre e comece de novo).</div>' : '')
+      + F('Mapa', 'mp-set-map', Object.keys(MAPS).map((k) => [k, esc(MAPS[k].name)]), room3d.map)
       + F('Modo', 'mp-set-mode', [['tdm', MODE_NAME.tdm], ['rounds', 'Rounds (eliminação)'], ['ffa', MODE_NAME.ffa], ['koth', MODE_NAME.koth]], md)
       + (md === 'tdm' || md === 'ffa' ? F('Abates pra vencer', 'mp-set-kills', nums([20, 25, 30, 50]), room3d.killLimit) : '')
       + (md === 'rounds' ? F('Rounds', 'mp-set-rounds', nums([1, 2, 3, 5, 7]), room3d.rounds) : '')
@@ -3708,6 +3753,10 @@ function renderLobby() {
       + `<div class="field" style="grid-template-columns:130px 1fr"><span>Extras</span><div class="row2" style="gap:10px;flex-wrap:wrap">${[['noKnife', 'Faca'], ['noNade', 'Granada'], ['noSmoke', 'Fumaça']].map(([k, t]) => `<label style="cursor:pointer"><input type="checkbox" data-mpx="${k}" ${room3d[k] ? '' : 'checked'}> ${t}</label>`).join('')}</div></div>`
       + F('Modo magia ✨', 'mp-set-magic', [['0', 'Desligado'], ['1', 'Ligado (Q = magia, Espaço no ar = vassoura)']], room3d.magic ? '1' : '0')
       + (room3d.magic ? '' : F('Vassoura 🧹', 'mp-set-broom', [['0', 'Desligada'], ['1', 'Ligada (segurar Espaço no ar = plana)']], room3d.broom ? '1' : '0'))
+      // ajustes do jogo (valem pra todo mundo da sala; no online o seu menu não muda isso)
+      + R('Velocidade', 'mp-set-speed', 120, 480, 10, room3d.speed || 260)
+      + R('Altura do pulo', 'mp-set-jumpv', 200, 650, 10, room3d.jumpV || 400)
+      + R('Distância da arma (1ª pessoa, %)', 'mp-set-gundist', 60, 150, 5, room3d.gunDist || 100)
       + `<label class="field" style="grid-template-columns:130px 1fr;cursor:pointer"><span>Lista de salas</span><span><input type="checkbox" id="mp-set-hidden" ${room3d.hidden ? 'checked' : ''}> esconder a sala da lista (entra só quem sabe o nome)</span></label>`;
     const send = (extra) => socket.emit('3d_update_settings', extra);
     document.querySelectorAll('[data-mpw]').forEach((c) => c.addEventListener('change', () => {
@@ -3723,21 +3772,29 @@ function renderLobby() {
     on('mp-set-map', (v) => ({ map: v })); on('mp-set-mode', (v) => ({ mode: v })); on('mp-set-kills', (v) => ({ killLimit: Number(v) }));
     on('mp-set-rounds', (v) => ({ rounds: Number(v) })); on('mp-set-hill', (v) => ({ hillTarget: Number(v) })); on('mp-set-roundtime', (v) => ({ roundTime: Number(v) }));
     on('mp-set-botsA', (v) => ({ botsA: Number(v) })); on('mp-set-botsB', (v) => ({ botsB: Number(v) })); on('mp-set-level', (v) => ({ botLevel: v }));
+    for (const [id, k] of [['mp-set-speed', 'speed'], ['mp-set-jumpv', 'jumpV'], ['mp-set-gundist', 'gunDist']]) {
+      const el = $(id); el.addEventListener('input', () => { $('v-' + id).textContent = el.value; });
+      el.addEventListener('change', () => send({ [k]: Number(el.value) }));
+    }
   } else {
     const lim = md === 'rounds' ? `${room3d.rounds} rounds` : md === 'koth' ? `até ${room3d.hillTarget} pontos` : `até ${room3d.killLimit} abates`;
     const wl = room3d.weapons || WEAPON_IDS, ex = [['noKnife', 'faca'], ['noNade', 'granada'], ['noSmoke', 'fumaça']].filter(([k]) => room3d[k]).map(([, t]) => t);
     const armas = (wl.length >= WEAPON_IDS.length ? 'todas' : wl.length === 1 ? 'só ' + WEAPON_SHORT[wl[0]] : wl.map((w) => WEAPON_SHORT[w]).join(', ')) + (ex.length ? ' · sem ' + ex.join('/') : '');
-    $('mp-host-settings').innerHTML = `<div class="wdesc">Mapa: ${esc(MAPS[room3d.map] ? MAPS[room3d.map].name : room3d.map)} · ${MODE_NAME[md]} (${lim}) · Bots: ${(bots.A || []).length} azul / ${(bots.B || []).length} vermelho (${room3d.botLevel})${md !== 'rounds' ? ' · Tempo: ' + roundTimeLabel(room3d.roundTime) : ''} · Armas: ${armas}${room3d.magic ? ' · ✨ Modo magia' : room3d.broom ? ' · 🧹 Vassoura' : ''}</div>`;
+    const tune = [room3d.speed && room3d.speed !== 260 ? 'Velocidade ' + room3d.speed : '', room3d.jumpV && room3d.jumpV !== 400 ? 'Pulo ' + room3d.jumpV : '', room3d.gunDist && room3d.gunDist !== 100 ? 'Arma ' + room3d.gunDist + '%' : ''].filter(Boolean).join(' · ');
+    $('mp-host-settings').innerHTML = `<div class="wdesc">Mapa: ${esc(MAPS[room3d.map] ? MAPS[room3d.map].name : room3d.map)} · ${MODE_NAME[md]} (${lim}) · Bots: ${(bots.A || []).length} azul / ${(bots.B || []).length} vermelho (${room3d.botLevel})${md !== 'rounds' ? ' · Tempo: ' + roundTimeLabel(room3d.roundTime) : ''} · Armas: ${armas}${room3d.magic ? ' · ✨ Modo magia' : room3d.broom ? ' · 🧹 Vassoura' : ''}${tune ? ' · ' + tune : ''}</div>`
+      + '<div class="wdesc">🔒 Só o dono da sala muda essas regras.</div>';
   }
   const mine = room3d.members.find((m) => m.id === myPid);
   $('mp-start-row').innerHTML = room3d.phase === 'match'
-    ? '<div class="row2"><span class="wdesc">⚔️ Partida em andamento...</span>'
-      + (mine && mine.inMatch ? '<button class="btn" id="mp-leave-match-btn">Sair da partida</button>' : '')
+    ? '<div class="row2"><span class="wdesc">⚔️ Partida em andamento' + (mine && mine.status !== 'team' ? ' — escolha um time pra entrar agora' : '') + '</span>'
+      + (mine && mine.inMatch ? (netMode ? '<button class="btn" id="mp-leave-match-btn">Sair da partida</button>' : '')
+        : mine && mine.status === 'team' ? '<button class="btn primary" id="mp-back-match-btn">▶ Voltar pra partida</button>' : '')
       + (isHost ? '<button class="btn danger" id="mp-end-btn">⏹ Encerrar partida (todos)</button>' : '') + '</div>'
     : (isHost ? '<button class="btn primary" id="mp-start-btn">▶ Iniciar partida</button>' : '<div class="wdesc">Aguardando o dono da sala iniciar...</div>');
   if (isHost && room3d.phase !== 'match') $('mp-start-btn').addEventListener('click', () => socket.emit('3d_start_match'));
   if ($('mp-end-btn')) $('mp-end-btn').addEventListener('click', () => socket.emit('3d_end_match'));
   if ($('mp-leave-match-btn')) $('mp-leave-match-btn').addEventListener('click', leaveNetMatch);
+  if ($('mp-back-match-btn')) $('mp-back-match-btn').addEventListener('click', () => socket.emit('3d_choose_team', { team: mine.team }));
 }
 $('mp-create-btn').addEventListener('click', createRoom);
 applyStreamer(true);
@@ -3918,7 +3975,16 @@ function drawPreview() {
 }
 setInterval(() => { if (menuOpen) drawPreview(); }, 450);
 $('btn-play').addEventListener('click', () => { SFX.init(); lockPointer(); });
-function lockPointer() { try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) {} }
+function lockPointer() {
+  // numa sala online sem estar na partida: não tem o que jogar aqui — mostra a sala (escolher time / esperar o dono)
+  if (room3d && !netMode && !EDIT3D) {
+    const tab = document.querySelector('.tab[data-pane="p-mp"]'); if (tab) tab.click();
+    const mine = room3d.members.find((m) => m.id === myPid);
+    mpStatus(room3d.phase === 'match' ? (mine && mine.status === 'team' ? 'Clique em "Voltar pra partida".' : 'Escolha um time (Azul ou Vermelho) pra entrar na partida.') : 'Esperando o dono da sala iniciar a partida.', 'mp-status2');
+    showMenu(true); return;
+  }
+  try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) {}
+}
 canvas.addEventListener('click', () => { SFX.init(); if (!locked && !EDIT3D && !hudEdit) lockPointer(); });
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === canvas;
@@ -3931,7 +3997,58 @@ let sim = null;
 const keys = {};
 // ---------- multiplayer: estado de rede ----------
 let socket = null, netMode = false, myPid = null, room3d = null, netRoundTime = 0;
-let netYaw = 0, netPitch = 0, netFireHeld = false, netInputT = 0, netRecvT = 0, netInterval = 130;
+let netYaw = 0, netPitch = 0, netFireHeld = false, netInputT = 0, netRecvT = 0, netInterval = 130, netGunDist = null;
+// (v0.35) online liso, igual jogo de tiro: o SEU boneco anda na hora (o navegador prevê e o servidor só confere/corrige);
+// os outros jogadores vêm de um "buffer" com um atrasinho fixo (~0,1 s), pra ficarem sempre suaves mesmo com a internet oscilando
+const NP = { seq: 0, hist: [], out: [], sendT: 0, prev: null, err: [0, 0, 0], jump: false, shotReady: 0, charge: 0, predShots: [], wantW: null, wantT: 0 };
+const NB = { buf: [], clock: null, delay: 0.1, jit: 0, lastT: 0 };
+function netReset() {
+  NP.seq = 0; NP.hist = []; NP.out = []; NP.sendT = 0; NP.prev = null; NP.err = [0, 0, 0]; NP.jump = false; NP.shotReady = 0; NP.charge = 0; NP.predShots = []; NP.wantW = null;
+  NB.buf = []; NB.clock = null; NB.delay = 0.1; NB.jit = 0; NB.lastT = 0;
+}
+const predictable = (p) => !!p && p.alive && !p.spin && !p.waiting && !(p.dashUntil > sim.time);
+// 1 tick do seu boneco: exatamente o mesmo cálculo de movimento que o servidor faz (sem tiro/dano, que continuam com ele)
+function predApply(p, c) {
+  const inp = p.input || (p.input = {});
+  inp.fwd = c.f; inp.side = c.sd; inp.sprint = c.sp; inp.aim = c.a; inp.glide = c.g; inp.fire = false;
+  p.yaw = c.y; p.pitch = c.pt;
+  const n = sim.events.length;
+  if (c.j && p.alive) sim.jump(p);
+  sim.time += STEP;
+  sim.updatePistons();
+  sim.updatePlayer(p, STEP, true);
+  sim.events.length = n; // (os eventos de verdade — pulo, pouso... — chegam do servidor)
+}
+// tiro: o coice, o som e a animação saem na hora que você clica (a bala de verdade continua vindo do servidor)
+function predictShot(p, c, now) {
+  const fire = c.fi;
+  const run = p.sprinting || sim.time < (p.sprintOut || 0);
+  if (!p.alive || p.weapon !== 'primary' || !sim.canAct() || p.reloadUntil || run || sim.time < (p.protectUntil || 0)) { if (!fire) NP.charge = 0; return; }
+  const w = sim.WEAPONS[p.primary]; if (!w) return;
+  const ready = Math.max(p.fireReady || 0, NP.shotReady), ammo = (p.ammo && p.ammo[p.primary]) || 0;
+  let shot = false;
+  if (w.charge) { if (fire && !NP.charge && sim.time >= ready && ammo > 0) NP.charge = sim.time; else if (!fire && NP.charge) { NP.charge = 0; shot = true; } }
+  else if (fire && sim.time >= ready && ammo > 0) shot = true;
+  if (!shot) return;
+  NP.shotReady = sim.time + w.cd; NP.predShots.push(now);
+  const a = avatars.get('me'); if (a) { const sa = SHOOT_ANIM[p.primary]; if (sa) a.trigger(sa[0], sa[1], now); }
+  kick = 1; if (p.primary === 'mao' || p.primary === 'disco') swing = 1;
+  sfxAt(p.primary === 'varinha' ? 'magic' : 'shot', p.x, p.z);
+}
+// posição dos outros (e das balas) no "relógio" atrasado do buffer, interpolando entre 2 snapshots do servidor
+function nbPos(key, o) {
+  const B = NB.buf, T = NB.clock;
+  if (!B.length || T == null) return [o.x, o.y, o.z];
+  let i = B.length - 1; while (i > 0 && B[i].t > T) i--;
+  const A = B[i], C = B[i + 1], pa = A.pos.get(key);
+  if (!C) return pa || [o.x, o.y, o.z];
+  const pc = C.pos.get(key);
+  if (!pa) return pc || [o.x, o.y, o.z];
+  if (!pc) return pa;
+  const k = clamp01((T - A.t) / Math.max(1e-4, C.t - A.t));
+  if (Math.abs(pa[0] - pc[0]) + Math.abs(pa[2] - pc[2]) > 150) return k < 0.5 ? pa : pc; // (passou por portal: pula, não risca o mapa)
+  return [pa[0] + (pc[0] - pa[0]) * k, pa[1] + (pc[1] - pa[1]) * k, pa[2] + (pc[2] - pa[2]) * k];
+}
 document.addEventListener('mousemove', (e) => {
   if (!locked || !sim) return;
   const s = S.sens * 0.0012 * (adsK > 0.5 && S.adszoom === '1' ? 0.65 : 1); // mirando com zoom: mira mais fina
@@ -3964,7 +4081,11 @@ window.addEventListener('wheel', (e) => { // rodinha: troca de arma
   if (!locked) return;
   e.preventDefault();
   const now = performance.now(); if (now - wheelT < 110) return; wheelT = now;
-  if (netMode) { if (socket) socket.emit('3d_action', { t: 'cycle', dir: e.deltaY > 0 ? 1 : -1 }); return; }
+  if (netMode) {
+    if (socket) socket.emit('3d_action', { t: 'cycle', dir: e.deltaY > 0 ? 1 : -1 });
+    const me = sim.players.get('me'); if (me) { sim.cycleWeapon(me, e.deltaY > 0 ? 1 : -1); NP.wantW = me.weapon; NP.wantT = now; } // (a arma troca na tela na hora)
+    return;
+  }
   sim.cycleWeapon(sim.players.get('me'), e.deltaY > 0 ? 1 : -1);
 }, { passive: false });
 window.addEventListener('keydown', (e) => {
@@ -3978,14 +4099,11 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'AltLeft') { e.preventDefault(); S.camSide = S.camSide === '1' ? '-1' : '1'; $('o-camside').value = S.camSide; save(); return; } // (3ª pessoa: troca o lado da câmera)
   if (netMode) {
     if (!socket) return;
-    if (e.code === 'Space') socket.emit('3d_action', { t: 'jump' });
+    const DIG = { Digit1: 'primary', Digit2: 'potion', Digit3: 'knife', Digit4: 'nade', Digit5: 'smoke' };
+    if (e.code === 'Space') NP.jump = true; // (vai junto no próximo comando: pula na hora aqui e no servidor no mesmo tick)
     else if (e.code === 'KeyQ') socket.emit('3d_action', { t: 'ability' }); // (modo magia)
     else if (e.code === 'KeyR') socket.emit('3d_action', { t: 'reload' });
-    else if (e.code === 'Digit1') socket.emit('3d_action', { t: 'weapon', w: 'primary' });
-    else if (e.code === 'Digit2') socket.emit('3d_action', { t: 'weapon', w: 'potion' });
-    else if (e.code === 'Digit3') socket.emit('3d_action', { t: 'weapon', w: 'knife' });
-    else if (e.code === 'Digit4') socket.emit('3d_action', { t: 'weapon', w: 'nade' });
-    else if (e.code === 'Digit5') socket.emit('3d_action', { t: 'weapon', w: 'smoke' });
+    else if (DIG[e.code]) { socket.emit('3d_action', { t: 'weapon', w: DIG[e.code] }); sim.setWeapon(me, DIG[e.code]); NP.wantW = me.weapon; NP.wantT = performance.now(); } // (a arma troca na tela na hora)
     return;
   }
   if (e.code === 'Space') sim.jump(me);
@@ -4218,10 +4336,14 @@ function hud(me) {
   if (!me.alive) {
     const killer = [...sim.players.values()].find((p) => me.lastHitBy[p.id] && Math.abs(me.lastHitBy[p.id] - me.deadAt) < 0.05);
     $('dead').style.display = spec.id != null ? 'none' : 'block'; // (assistindo alguém: só o aviso de quem você assiste)
-    if (deadTitleAt !== me.deadAt) { // (v0.33) só reanima o "MORREU" quando morre de novo, não toda hora
-      deadTitleAt = me.deadAt; const dt = $('dead-title'); dt.style.animation = 'none'; void dt.offsetWidth; dt.style.animation = '';
+    $('dead-title').style.display = me.waiting ? 'none' : '';
+    if (me.waiting) $('dead-msg').innerHTML = '⏳ Você entrou no meio do round<small>joga a partir do próximo round</small>';
+    else {
+      if (deadTitleAt !== me.deadAt) { // (v0.33) só reanima o "MORREU" quando morre de novo, não toda hora
+        deadTitleAt = me.deadAt; const dt = $('dead-title'); dt.style.animation = 'none'; void dt.offsetWidth; dt.style.animation = '';
+      }
+      $('dead-msg').innerHTML = `Você foi eliminado${killer ? ' por <span class="t' + killer.team + '">' + esc(killer.name) + '</span>' : ''}<small>${sim.mode === 'rounds' ? 'volta no próximo round' : `renascendo em ${Math.max(0, Math.ceil(me.respawnAt - sim.time))}s`}</small>`;
     }
-    $('dead-msg').innerHTML = `Você foi eliminado${killer ? ' por <span class="t' + killer.team + '">' + esc(killer.name) + '</span>' : ''}<small>${sim.mode === 'rounds' ? 'volta no próximo round' : `renascendo em ${Math.max(0, Math.ceil(me.respawnAt - sim.time))}s`}</small>`;
   } else $('dead').style.display = 'none';
   // indicador de granada inimiga: distância em metros e seta de direção pra correr
   let nearest = null, best = 1e9;
@@ -4248,6 +4370,7 @@ const WICON = { bolt: '⚡', dragon: '🐉', sea: '🌊', lancador: '🔫', esti
 // ---------- jogo ----------
 let prevPos = new Map(), acc = 0, last = performance.now(), fpsN = 0, fpsT = performance.now();
 function newGame() {
+  if (room3d) { enterLobbyScene(); return; } // (numa sala online não existe jogo sozinho rodando junto)
   netMode = false;
   for (const a of avatars.values()) a.remove(); avatars.clear();
   for (const pool of [bulletMeshes, nadeMeshes, smokeMeshes, tombMeshes, pickupMeshes]) { for (const m of pool.values()) removeBulletMesh(m); pool.clear(); }
@@ -4287,11 +4410,14 @@ function enterNetMatch(info) {
   for (const pool of [bulletMeshes, nadeMeshes, smokeMeshes, tombMeshes, pickupMeshes]) { for (const m of pool.values()) removeBulletMesh(m); pool.clear(); }
   buildMap(info.map); // o mundo é montado igual ao do servidor; o que muda (portais, buracos...) vem nos snapshots
   const wd = mapInfo.world;
-  sim = new Sim3D(wd.walls, wd.W, wd.H, Object.assign(simOptions(wd), info.rules || {})); // (armas liberadas na sala)
+  const base = simOptions(wd);
+  // (o mesmo mundo e as mesmas regras do servidor — velocidade/pulo do dono da sala —, senão a previsão do seu boneco erra)
+  sim = new Sim3D(wd.walls, wd.W, wd.H, Object.assign(base, info.rules || {}, { params: Object.assign({}, base.params || {}, info.params || {}) })); // (armas liberadas na sala)
   killcam.clear();
   prevPos = new Map();
   netYaw = 0; netPitch = 0; netFireHeld = false;
-  netRecvT = 0; netInterval = 130;
+  netRecvT = 0; netInterval = 130; netGunDist = info.gunDist || null;
+  netReset(); acc = 0;
 }
 const netRemapId = (id) => (id != null && id === myPid ? 'me' : id);
 function netRemapEvent(e) {
@@ -4311,6 +4437,19 @@ function applySnapshot(snap, evs) {
   for (const b of sim.bullets) newPrev.set('b' + b.id, [b.x, b.y, b.z]);
   for (const g of sim.nades) newPrev.set('n' + g.id, [g.x, g.y, g.z]);
   prevPos = newPrev;
+  const oldMe = sim.players.get('me');
+  // buffer dos outros: guarda as posições desse snapshot no tempo do servidor
+  const bpos = new Map();
+  for (const sp of snap.players) if (sp.id !== myPid) bpos.set(sp.id, [sp.x, sp.y, sp.z]);
+  for (const b of snap.bullets) bpos.set('b' + b.id, [b.x, b.y, b.z]);
+  for (const g of snap.nades) bpos.set('n' + g.id, [g.x, g.y, g.z]);
+  if (NB.buf.length && snap.time < NB.buf[NB.buf.length - 1].t - 0.5) NB.buf = []; // (partida nova: relógio voltou pro zero)
+  NB.buf.push({ t: snap.time, pos: bpos }); if (NB.buf.length > 40) NB.buf.shift();
+  // atraso do buffer se ajusta à internet: mais oscilação = um pouquinho mais de folga (nunca trava)
+  if (NB.lastT) { const gap = (now - NB.lastT) / 1000, exp = 1 / 30; NB.jit += (Math.abs(gap - exp) - NB.jit) * 0.1; }
+  NB.lastT = now;
+  NB.delay = Math.max(0.07, Math.min(0.25, 0.075 + NB.jit * 2.2));
+  { const target = snap.time - NB.delay; if (NB.clock == null || Math.abs(target - NB.clock) > 0.35) NB.clock = target; else NB.clock += (target - NB.clock) * 0.06; }
   sim.time = snap.time;
   const newPlayers = new Map();
   for (const sp of snap.players) {
@@ -4327,7 +4466,9 @@ function applySnapshot(snap, evs) {
       shieldUntil: sp.shield ? snap.time + 1 : 0, shieldHits: sp.shield || 0, gliding: !!sp.gliding, magicReady: sp.magicReady || 0, dashUntil: sp.dash ? snap.time + 0.1 : 0,
       look: sp.look || null, slowUntil: sp.slowUntil || 0, spin: sp.spin, climb: !!sp.climb, sprinting: sp.sprinting, aiming: sp.aiming, aimT0: sp.aimT0 || 0, drinkUntil: sp.drinkUntil || 0, slip: !!sp.slip,
       fp: !!sp.fp, camSide: sp.cs != null ? sp.cs : 1,
-      input: { fwd: 0, side: 0, fire: false }
+      input: { fwd: 0, side: 0, fire: false },
+      sq: sp.sq || 0, djUsed: !!sp.dj, jumps: sp.jn || 0, slowF: sp.sf || 1, flungUntil: sp.fl || 0, sprintOut: sp.so || 0,
+      ladder: sp.ld != null && sp.ld >= 0 ? sim.ladders[sp.ld] || null : null, waiting: !!sp.wt
     };
     if (id === 'me') { p.yaw = netYaw; p.pitch = netPitch; }
     newPlayers.set(id, p);
@@ -4351,9 +4492,27 @@ function applySnapshot(snap, evs) {
   sim.lastKill = snap.lastKill || null;
   sim.magic = !!snap.magic; sim.broom = !!snap.broom; sim.eyes = snap.eyes || []; sim.magicWalls = snap.mwalls || []; // (modo magia)
   for (const k of ['mode', 'phase', 'phaseUntil', 'hzStart', 'score', 'round', 'totalRounds', 'killLimit', 'hillTarget', 'matchTime', 'hill', 'result']) if (snap[k] !== undefined) sim[k] = snap[k];
+  // o seu boneco: parte do que o servidor confirmou e refaz por cima os comandos que ele ainda não processou
+  const srv = newPlayers.get('me');
+  if (srv) {
+    if (oldMe) srv.camPos = oldMe.camPos;
+    NP.hist = NP.hist.filter((c) => c.s > srv.sq);
+    const before = oldMe && oldMe.alive ? [oldMe.x, oldMe.y, oldMe.z] : null;
+    if (predictable(srv)) for (const c of NP.hist) predApply(srv, c); else sim.time += NP.hist.length * STEP;
+    srv.yaw = netYaw; srv.pitch = netPitch;
+    // trocou de arma agora há pouco: mostra a nova até o servidor confirmar (não fica piscando a antiga)
+    if (NP.wantW && now - NP.wantT < 700 && srv.alive) { if (srv.weapon === NP.wantW) NP.wantW = null; else srv.weapon = NP.wantW; } else NP.wantW = null;
+    if (before && srv.alive) {
+      const d = [before[0] - srv.x, before[1] - srv.y, before[2] - srv.z];
+      if (Math.hypot(d[0], d[1], d[2]) < 120) { // diferença pequena: corrige aos pouquinhos (sem tranco na tela)
+        for (let i = 0; i < 3; i++) NP.err[i] += d[i];
+        if (NP.prev) for (let i = 0; i < 3; i++) NP.prev[i] -= d[i];
+      } else { NP.err = [0, 0, 0]; NP.prev = null; } // (portal / renasceu: pula direto)
+    } else { NP.err = [0, 0, 0]; NP.prev = null; }
+  } else sim.time = snap.time;
   const prevRecvT = netRecvT; netRecvT = now;
   if (prevRecvT) netInterval = Math.max(60, Math.min(400, now - prevRecvT));
-  killcam.record(sim);
+  { const tPred = sim.time; sim.time = snap.time; killcam.record(sim); sim.time = tPred; } // (killcam grava no relógio do servidor)
   for (const e of evs || []) handleEvent(netRemapEvent(e), now);
 }
 
@@ -4607,7 +4766,7 @@ function renderFP() {
   if (!any) return;
   if (fpCam.aspect !== camera.aspect) { fpCam.aspect = camera.aspect; fpCam.updateProjectionMatrix(); }
   // distância da arma (configuração): afasta/aproxima a arma da câmera sem mudar onde ela aparece na tela
-  const gk = Math.max(0.6, Math.min(1.5, (Number(S.gunDist) || 100) / 100)), moved = [];
+  const gk = Math.max(0.6, Math.min(1.5, (Number(netMode && netGunDist ? netGunDist : S.gunDist) || 100) / 100)), moved = []; // (online: o dono da sala escolhe)
   for (const k in VIEW) { const g = VIEW[k]; if (g.visible) { moved.push([g, g.position.clone()]); g.position.multiplyScalar(gk); } }
   fpHemi.color.copy(hemi.color); fpHemi.groundColor.copy(hemi.groundColor); fpHemi.intensity = Math.min(1.5, Math.max(0.6, hemi.intensity));
   fpSun.color.copy(sun.color); fpSun.intensity = Math.min(1.8, Math.max(0.55, sun.intensity * 0.7));
@@ -4793,7 +4952,7 @@ function updateSpec(me, dtR) {
   // mira macia (no online a mira dos outros chega umas 8 vezes por segundo)
   const k = Math.min(1, dtR * (netMode ? 14 : 30)); let dy = t.yaw - spec.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
   spec.yaw += dy * k; spec.pitch += (t.pitch - spec.pitch) * k;
-  const n = L.length, tag = `👁 Assistindo <span class="t${t.team}">${esc(t.name)}</span>${t.bot ? ' (bot)' : ''} · ${spec.fp ? '1ª' : '3ª'} pessoa<small>${n > 1 ? `Clique = próximo · Botão direito = anterior (${n} vivos)` : 'último vivo'}</small>`;
+  const n = L.length, tag = (me.waiting ? '⏳ Você entra no próximo round · ' : '') + `👁 Assistindo <span class="t${t.team}">${esc(t.name)}</span>${t.bot ? ' (bot)' : ''} · ${spec.fp ? '1ª' : '3ª'} pessoa<small>${n > 1 ? `Clique = próximo · Botão direito = anterior (${n} vivos)` : 'último vivo'}</small>`;
   if (tag !== spec.tag) { spec.tag = tag; $('spec').innerHTML = tag; }
   $('spec').style.display = menuOpen ? 'none' : 'block';
   return t;
@@ -4803,7 +4962,7 @@ function frame(now) {
   const dtR = Math.min(0.1, (now - last) / 1000);
   acc += dtR; last = now;
   const me = sim.players.get('me');
-  if (!me) { requestAnimationFrame(frame); return; } // multiplayer: ainda não estou numa partida (na sala de espera)
+  if (!me) { if (room3d && mapInfo) lobbyOrbit(now); acc = 0; requestAnimationFrame(frame); return; } // multiplayer: ainda não estou numa partida (na sala de espera)
   const f = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0), sd = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
   me.input.fwd = locked ? f : 0; me.input.side = locked ? sd : 0;
   me.input.sprint = locked && !!(keys.ShiftLeft || keys.ShiftRight); // Shift = correr (sem atirar)
@@ -4814,10 +4973,25 @@ function frame(now) {
   if (netMode) {
     $('paused-tag').style.display = 'none'; // online: nunca pausa
     me.yaw = netYaw; me.pitch = netPitch;
-    if (locked && socket && now - netInputT > 50) {
-      netInputT = now;
-      socket.emit('3d_input', { fwd: me.input.fwd, side: me.input.side, fire: netFireHeld, sprint: me.input.sprint, aim: me.input.aim, glide: me.input.glide, yaw: netYaw, pitch: netPitch, fp: S.cam === '1', cs: Number(S.camSide) || 0 });
+    // (v0.35) 60 comandos por segundo: cada um já move o seu boneco aqui na hora e vai pro servidor fazer igual
+    if (acc > 0.25) acc = 0.25;
+    while (acc >= STEP) {
+      acc -= STEP;
+      const c = { s: ++NP.seq, f: me.input.fwd, sd: me.input.side, sp: me.input.sprint, a: me.input.aim, g: me.input.glide, fi: locked && netFireHeld, j: NP.jump, y: netYaw, pt: netPitch };
+      NP.jump = false;
+      NP.prev = [me.x, me.y, me.z];
+      if (predictable(me)) predApply(me, c); else sim.time += STEP;
+      predictShot(me, c, now);
+      NP.hist.push(c); NP.out.push(c);
+      if (NP.hist.length > 300) NP.hist.shift();
     }
+    while (NP.predShots.length && now - NP.predShots[0] > 1000) NP.predShots.shift();
+    if (socket && NP.out.length && (NP.out.length >= 2 || now - NP.sendT > 30)) {
+      socket.emit('3d_cmds', { c: NP.out, fp: S.cam === '1', cs: Number(S.camSide) || 0, cp: me.camPos && S.cam !== '1' ? me.camPos.map((v) => Math.round(v)) : null });
+      NP.out = []; NP.sendT = now;
+    }
+    const kd = Math.exp(-dtR * 9); for (let i = 0; i < 3; i++) NP.err[i] *= kd; // a correção do servidor some aos pouquinhos
+    if (NB.clock != null) NB.clock += dtR;
   } else {
     // sozinho: com o menu (Esc) aberto o jogo fica pausado (no online nunca pausa)
     const paused = menuOpen && S.pause !== '0' && !EDIT3D && !killcam.active;
@@ -4837,7 +5011,17 @@ function frame(now) {
   }
   const k = netMode ? Math.min(1, (now - netRecvT) / netInterval) : acc / STEP;
   // (passou por portal = pulo grande: não suaviza, senão risca o mapa)
-  const ip = (id, o) => { const p0 = prevPos.get(id); return p0 && Math.abs(p0[0] - o.x) + Math.abs(p0[2] - o.z) < 150 ? [lerp(p0[0], o.x, k), lerp(p0[1], o.y, k), lerp(p0[2], o.z, k)] : [o.x, o.y, o.z]; };
+  const ipOff = (id, o) => { const p0 = prevPos.get(id); return p0 && Math.abs(p0[0] - o.x) + Math.abs(p0[2] - o.z) < 150 ? [lerp(p0[0], o.x, k), lerp(p0[1], o.y, k), lerp(p0[2], o.z, k)] : [o.x, o.y, o.z]; };
+  // online: você = posição prevista (entre os 2 últimos ticks + a correção sumindo); suas balas = a mais nova; o resto = buffer suave
+  const ipNet = (id, o) => {
+    if (id === 'me') {
+      const a = acc / STEP, P0 = NP.prev, b = P0 && Math.abs(P0[0] - o.x) + Math.abs(P0[2] - o.z) < 150 ? [lerp(P0[0], o.x, a), lerp(P0[1], o.y, a), lerp(P0[2], o.z, a)] : [o.x, o.y, o.z];
+      return [b[0] + NP.err[0], b[1] + NP.err[1], b[2] + NP.err[2]];
+    }
+    if (o.o != null && o.o === myPid && id[0] === 'b') { const t = Math.min(0.06, (now - netRecvT) / 1000); return [o.x + (o.vx || 0) * t, o.y + (o.vy || 0) * t, o.z + (o.vz || 0) * t]; }
+    return nbPos(id, o);
+  };
+  const ip = netMode ? ipNet : ipOff;
   const firstPerson = S.cam === '1';
   // tempestade de areia (deserto): igual à versão antiga — a areia fecha a neblina no mapa todo (não deixa lento)
   if (sim.hazard === 'sand' && scene.fog) {
@@ -5258,7 +5442,8 @@ function handleEvent(e, now) {
   const a = avatars.get(e.id), p = e.id && sim.players.get(e.id);
   const pos = p ? [p.x, p.z] : (a ? [a.root.position.x, a.root.position.z] : null);
   if (e.type === 'shot' && p && e.id !== 'me') shotSeen.set(e.id, { t: now, x: p.x, z: p.z }); // aparece no minimapa quando atira
-  if (e.type === 'shot' && a) { const s = SHOOT_ANIM[e.weapon]; a.trigger(s[0], s[1], now); if (isViewer(e.id)) { kick = 1; if (e.weapon === 'mao' || e.weapon === 'disco') swing = 1; } if (pos) sfxAt(e.weapon === 'varinha' ? 'magic' : 'shot', pos[0], pos[1], isViewer(e.id) ? undefined : { far: true, pitch: 0.62, gain: 0.5 }); } // tiro dos outros: mais baixo e mais grave (espectador em 1ª pessoa: o de quem você assiste soa como o seu)
+  if (e.type === 'shot' && a && netMode && e.id === 'me' && NP.predShots.length) NP.predShots.shift(); // (esse tiro já deu coice e som na hora do clique)
+  else if (e.type === 'shot' && a) { const s = SHOOT_ANIM[e.weapon]; a.trigger(s[0], s[1], now); if (isViewer(e.id)) { kick = 1; if (e.weapon === 'mao' || e.weapon === 'disco') swing = 1; } if (pos) sfxAt(e.weapon === 'varinha' ? 'magic' : 'shot', pos[0], pos[1], isViewer(e.id) ? undefined : { far: true, pitch: 0.62, gain: 0.5 }); } // tiro dos outros: mais baixo e mais grave (espectador em 1ª pessoa: o de quem você assiste soa como o seu)
   if (e.type === 'knife' && a) { a.trigger(CLIPS.KnifeSlice ? 'KnifeSlice' : '1H_Melee_Attack_Stab', 1.9, now); if (isViewer(e.id)) swing = 1; if (pos) sfxAt('knife', pos[0], pos[1]); }
   if ((e.type === 'nade_throw' || e.type === 'smoke_throw') && a) { a.trigger('Throw', 2.2, now); if (isViewer(e.id)) { nadeThrowAnim = { t: now, kind: e.type === 'nade_throw' ? 'nade' : 'smoke', k: e.k != null ? e.k : 0.6 }; SFX.play('throw', 1); } } // (arremesso dos outros não faz som)
   if (e.type === 'drink' && a) { a.trigger('Use_Item', 1.1, now); if (e.id === 'me') { healFx = 1.2; feed('🧪 +1 vida'); } if (pos) sfxAt('drink', pos[0], pos[1]); }
@@ -5332,6 +5517,8 @@ loadModels().then(() => {
   $('loading').textContent = 'Pronto! Clique em Jogar';
   newGame();
   requestAnimationFrame(frame);
+  // (v0.35) abriu pelo app do PC em "Multiplayer" / "LAN" / "Host": já cai na aba Multiplayer (criar sala ou lista de salas)
+  try { if (new URLSearchParams(location.search).get('mp') === '1') { const t = document.querySelector('.tab[data-pane="p-mp"]'); if (t) t.click(); refreshRoomList(); } } catch (e) {}
   if (EDIT3D_MAP) { // editor de mapa em 3D: sem menu, câmera voando
     showMenu(false);
     import('/demo3d/edit3d.js').then((m) => {
@@ -5355,7 +5542,7 @@ if (window.pbApp && window.pbApp.link) {
   }).catch(() => {});
   updLink(); setInterval(updLink, 4000);
 }
-window.__pb3d = { get sim() { return sim; }, get camD() { return thirdCamD; }, spec, get mapInfo() { return mapInfo; }, killcam, lock: (v) => { locked = v; showMenu(!v); }, keys,
+window.__pb3d = { np: NP, nb: NB, get sim() { return sim; }, get camD() { return thirdCamD; }, spec, get mapInfo() { return mapInfo; }, killcam, lock: (v) => { locked = v; showMenu(!v); }, keys,
   get BASE() { return BASE; }, get scene() { return scene; }, get camera() { return camera; }, get edit3d() { return EDIT3D; },
   fx: { eruptFx: (x, z, d) => eruptFx(x, z, 84, performance.now(), d) },
   step: (sec) => { const now = performance.now(); for (let i = 0; i < Math.round(sec * 60); i++) { const evs = sim.step(STEP); killcam.record(sim); for (const e of evs) handleEvent(e, now); } } }; // testes

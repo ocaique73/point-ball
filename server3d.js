@@ -17,10 +17,22 @@ const VALID_MODES = ['tdm', 'rounds', 'ffa', 'koth'];
 const VALID_ROUNDS = [1, 2, 3, 5, 7];
 const VALID_KILLS = [20, 25, 30, 50];
 const VALID_HILL = [50, 75, 100, 150];
+// ajustes de jogo que só o dono da sala muda (velocidade, pulo, distância da arma na 1ª pessoa)
+const clampNum = (v, a, b, def) => { const n = Number(v); return Number.isFinite(n) ? Math.max(a, Math.min(b, n)) : def; };
+const DEF_SPEED = 260, DEF_JUMPV = 400, DEF_GUNDIST = 100;
 const PRIMARY_IDS = ['arco', 'estilingue', 'mao', 'varinha']; // armas principais (as mesmas do sim3d)
 // regras de armas da sala: quais armas principais valem (pelo menos 1) e se faca / granada / fumaça estão liberadas
 function cleanWeapons(list) { const a = Array.isArray(list) ? PRIMARY_IDS.filter((w) => list.includes(w)) : []; return a.length ? a : PRIMARY_IDS.slice(); }
 function roomRules(room) { return { allowed: room.weapons.length < PRIMARY_IDS.length ? room.weapons.slice() : null, noKnife: !!room.noKnife, noNade: !!room.noNade, noSmoke: !!room.noSmoke, magic: !!room.magic, broom: !!room.broom }; }
+function roomParams(room) { const o = {}; if (room.speed !== DEF_SPEED) o.speed = room.speed; if (room.jumpV !== DEF_JUMPV) o.jumpV = room.jumpV; return o; }
+// comando de 1 tick que o navegador manda (andar/mirar/atirar/pular): só números e booleanos conhecidos
+function cleanCmd(c) {
+  if (!c || typeof c !== 'object') return null;
+  const s = Math.floor(Number(c.s)); if (!Number.isFinite(s) || s < 0) return null;
+  const n = (v, a, b) => { const x = Number(v); return Number.isFinite(x) ? Math.max(a, Math.min(b, x)) : 0; };
+  return { s, f: n(c.f, -1, 1), sd: n(c.sd, -1, 1), sp: !!c.sp, a: !!c.a, g: !!c.g, fi: !!c.fi, j: !!c.j,
+    y: Number.isFinite(Number(c.y)) ? Number(c.y) : null, pt: Number.isFinite(Number(c.pt)) ? n(c.pt, -1.5, 1.5) : null };
+}
 // sala sem nome: "1", "2"... até 9999; depois número + letra ("1A", "2A"...)
 function autoRoomName(rooms) {
   for (let n = 1; n <= 9999; n++) if (!rooms.has(String(n))) return String(n);
@@ -90,6 +102,7 @@ async function setup3D(io, CFG) {
       code: room.code, hasPassword: !!room.password, hidden: !!room.hidden, map: room.map, hostId: room.hostId, phase: room.phase,
       weapons: room.weapons, noKnife: !!room.noKnife, noNade: !!room.noNade, noSmoke: !!room.noSmoke, magic: !!room.magic, broom: !!room.broom,
       botLevel: room.botLevel, roundTime: room.roundTime, mode: room.mode, rounds: room.rounds, killLimit: room.killLimit, hillTarget: room.hillTarget,
+      speed: room.speed, jumpV: room.jumpV, gunDist: room.gunDist,
       bots: { A: room.bots.A.map((b) => ({ id: b.id, name: b.name, team: 'A', bot: true })), B: room.bots.B.map((b) => ({ id: b.id, name: b.name, team: 'B', bot: true })) },
       members: [...room.members.values()].map((m) => ({ id: m.pid, name: m.name, status: m.status, team: m.team, connected: m.connected, inMatch: m.inMatch }))
     };
@@ -119,34 +132,67 @@ async function setup3D(io, CFG) {
     if (!m) return;
     if (m.graceTimer) clearTimeout(m.graceTimer);
     room.members.delete(cid);
-    if (room.sim && m.inMatch) {
-      const p = room.sim.players.get(m.pid);
-      if (p) p.input = { fwd: 0, side: 0, fire: false, sprint: false };
-    }
+    if (room.sim && m.inMatch) room.sim.players.delete(m.pid); // saiu da sala: sai da partida também
     pickHost(room);
     scheduleCloseIfEmpty(room);
     broadcastState(room);
   }
 
+  // entra na partida que já está rolando (no modo rounds, no meio do round: espera o próximo assistindo)
+  function addToMatch(room, m) {
+    const sim = room.sim; if (!sim) return;
+    let p = sim.players.get(m.pid);
+    if (!p) {
+      p = sim.addPlayer({ id: m.pid, name: m.name, team: m.team, look: m.look });
+      if (sim.mode === 'rounds' && sim.phase !== 'countdown') { p.alive = false; p.waiting = true; p.lives = 0; p.deadAt = -99; }
+    }
+    m.inMatch = true; m.cmds = []; m.lastCmd = null; m.jumpPend = false;
+  }
   function startMatch(room) {
     // o mundo 3D (mapa 40% maior, caverna, iglus, portas, andar de cima dos portais...) é montado igual ao do navegador
     const world = world3D(room.map, G, ALL_MAPS, CFG);
+    const params = Object.assign({}, simOptions(world).params || {}, roomParams(room));
     const sim = new Sim3D(world.walls, world.W, world.H, Object.assign(simOptions(world), {
       mode: room.mode, rounds: room.rounds, killLimit: room.killLimit, hillTarget: room.hillTarget,
       matchTime: room.mode === 'rounds' ? 0 : room.roundTime,
-      endDelay: 7 // fim do round: espera a killcam final passar antes da contagem do próximo
+      endDelay: 7, // fim do round: espera a killcam final passar antes da contagem do próximo
+      params
     }, roomRules(room)));
-    room.matchInfo = { map: room.map, roundTime: room.mode === 'rounds' ? 0 : room.roundTime, mode: room.mode, rules: roomRules(room) };
-    for (const m of room.members.values()) {
-      if (m.status === 'team' && m.connected) { sim.addPlayer({ id: m.pid, name: m.name, team: m.team, look: m.look }); m.inMatch = true; }
-    }
-    for (const t of ['A', 'B']) for (const b of room.bots[t]) sim.addPlayer({ id: b.id, name: b.name, team: t, bot: true, level: room.botLevel });
+    room.matchInfo = { map: room.map, roundTime: room.mode === 'rounds' ? 0 : room.roundTime, mode: room.mode, rules: roomRules(room), params: roomParams(room), gunDist: room.gunDist };
     room.sim = sim;
+    for (const m of room.members.values()) if (m.status === 'team' && m.connected) addToMatch(room, m);
+    for (const t of ['A', 'B']) for (const b of room.bots[t]) sim.addPlayer({ id: b.id, name: b.name, team: t, bot: true, level: room.botLevel });
     room.phase = 'match';
     const dt = 1 / CFG.tickRate;
     const every = Math.max(1, Math.round(CFG.tickRate / CFG.sendRate));
     let tick = 0, pending = [];
-    room.loop = setInterval(() => {
+    // 1 tick do servidor: cada jogador gasta 1 comando da fila dele (o mesmo que o navegador já previu na tela dele)
+    const tickOnce = () => {
+      for (const m of room.members.values()) {
+        if (!m.inMatch) continue;
+        const p = sim.players.get(m.pid); if (!p) continue;
+        const q = m.cmds || (m.cmds = []);
+        const use = (c) => {
+          p.input.fwd = c.f; p.input.side = c.sd; p.input.sprint = c.sp; p.input.aim = c.a; p.input.glide = c.g; p.input.fire = c.fi;
+          if (c.y != null) p.yaw = c.y;
+          if (c.pt != null) p.pitch = c.pt;
+          p.sq = c.s; m.lastCmd = c;
+          if ((c.j || m.jumpPend) && p.alive) sim.jump(p);
+          m.jumpPend = false;
+        };
+        // fila enorme (a internet travou e chegou tudo de uma vez): joga fora os mais velhos pra não ficar atrasado
+        if (q.length > 12) { const drop = q.splice(0, q.length - 4); for (const c of drop) if (c.j) m.jumpPend = true; p.sq = drop[drop.length - 1].s; }
+        // cada comando do navegador = exatamente 1 passo do boneco aqui (igual ele já fez na tela dele): assim quase nunca precisa corrigir
+        if (!q.length) {
+          m.stall = (m.stall || 0) + 1;
+          p.skip = m.stall <= 30; // (comando atrasou um pouquinho: espera ele chegar em vez de inventar; sumiu de vez: segue com o último)
+          continue;
+        }
+        m.stall = 0; p.skip = false;
+        // atrasado (chegaram vários juntos): anda 1 passo a mais agora pra alcançar, sem pular nenhum comando
+        for (let extra = Math.min(2, q.length - 6); extra > 0; extra--) { use(q.shift()); if (p.alive) sim.updatePlayer(p, dt); }
+        use(q.shift());
+      }
       const evs = sim.step(dt);
       if (evs.length) pending.push(...evs);
       // acabou a partida (limite de abates / pontos / rounds / tempo): mostra o resultado uns segundos e volta pra sala
@@ -155,7 +201,14 @@ async function setup3D(io, CFG) {
         io.to(key(room.code)).emit('3d_state', { s: sim.snapshot(), e: pending });
         pending = [];
       }
-    }, 1000 / CFG.tickRate);
+    };
+    // relógio de verdade (o setInterval do Node atrasa/adianta): sempre 60 passos por segundo, nem mais nem menos
+    let lastT = process.hrtime.bigint(), accT = 0;
+    room.loop = setInterval(() => {
+      const t = process.hrtime.bigint(); accT += Number(t - lastT) / 1e9; lastT = t;
+      if (accT > 0.25) accT = 0.25; // servidor travou: não tenta recuperar tudo de uma vez
+      while (accT >= dt) { accT -= dt; tickOnce(); }
+    }, 5); // (acorda 200x/s só pra olhar o relógio: leve até no servidor grátis)
     io.to(key(room.code)).emit('3d_match_start', room.matchInfo);
     broadcastState(room);
   }
@@ -197,7 +250,8 @@ async function setup3D(io, CFG) {
         code, password: pass, hidden: !!d.hidden, weapons: PRIMARY_IDS.slice(), noKnife: false, noNade: false, noSmoke: false, map: ALL_MAPS[d.map] && d.map !== 'teste' ? d.map : 'deserto',
         hostId: null, creatorPid: pidOf(d.clientId), phase: 'lobby', members: new Map(),
         sim: null, loop: null, closeTimer: null, bots: { A: [], B: [] }, botLevel: 'amador',
-        roundTime: 300, mode: 'tdm', rounds: 3, killLimit: 30, hillTarget: 100
+        roundTime: 300, mode: 'tdm', rounds: 3, killLimit: 30, hillTarget: 100,
+        speed: DEF_SPEED, jumpV: DEF_JUMPV, gunDist: DEF_GUNDIST
       };
       rooms.set(code, room);
       scheduleCloseIfEmpty(room);
@@ -221,6 +275,7 @@ async function setup3D(io, CFG) {
         }
         if (m.graceTimer) { clearTimeout(m.graceTimer); m.graceTimer = null; }
         m.name = cleanName(d.name) || m.name; m.look = cleanLook(d.look) || m.look;
+        m.cmds = []; m.lastCmd = null;
       } else {
         if (room.password && String(d.password || '') !== room.password) return ack({ ok: false, error: d.password ? 'wrong_password' : 'need_password' });
         if (teamCount(room) >= MAX_PER_TEAM * 2 + 4) return ack({ ok: false, error: 'full' });
@@ -233,7 +288,7 @@ async function setup3D(io, CFG) {
       if (!room.hostId || (room.creatorPid === m.pid && !room.members.has(room.hostId))) pickHost(room);
       if (!room.hostId) room.hostId = m.pid;
       scheduleCloseIfEmpty(room);
-      ack({ ok: true, you: m.pid, state: publicState(room), match: room.phase === 'match' ? room.matchInfo : null });
+      ack({ ok: true, you: m.pid, state: publicState(room), match: room.phase === 'match' ? room.matchInfo : null, inMatch: !!m.inMatch });
       broadcastState(room);
     });
 
@@ -243,11 +298,13 @@ async function setup3D(io, CFG) {
       if (m.inMatch) return socket.emit('3d_toast', 'Não dá pra trocar de time durante a partida.');
       if (teamCount(room, team) >= MAX_PER_TEAM) return socket.emit('3d_toast', 'Esse time está cheio.');
       m.status = 'team'; m.team = team;
+      // partida rolando: já entra nela (no modo rounds, no meio do round: espera o próximo)
+      if (room.phase === 'match' && room.sim && m.connected) { addToMatch(room, m); broadcastState(room); socket.emit('3d_match_start', room.matchInfo); return; }
       broadcastState(room);
     });
 
     socket.on('3d_update_settings', (d) => {
-      const { room, m } = ctx(); if (!m || room.hostId !== m.pid || room.phase !== 'lobby') return;
+      const { room, m } = ctx(); if (!m || room.hostId !== m.pid) return; // (com a partida rolando: vale na próxima)
       if (d && ALL_MAPS[d.map] && d.map !== 'teste') room.map = d.map;
       if (d && VALID_LEVELS.includes(d.botLevel)) room.botLevel = d.botLevel;
       if (d && d.botsA != null) setBots(room, d.botsA, 'A');
@@ -259,6 +316,9 @@ async function setup3D(io, CFG) {
       if (d && VALID_HILL.includes(Number(d.hillTarget))) room.hillTarget = Number(d.hillTarget);
       if (d && d.weapons != null) room.weapons = cleanWeapons(d.weapons);
       for (const k of ['noKnife', 'noNade', 'noSmoke', 'hidden', 'magic', 'broom']) if (d && typeof d[k] === 'boolean') room[k] = d[k];
+      if (d && d.speed != null) room.speed = Math.round(clampNum(d.speed, 120, 480, DEF_SPEED));
+      if (d && d.jumpV != null) room.jumpV = Math.round(clampNum(d.jumpV, 200, 650, DEF_JUMPV));
+      if (d && d.gunDist != null) room.gunDist = Math.round(clampNum(d.gunDist, 60, 150, DEF_GUNDIST));
       broadcastState(room);
     });
 
@@ -279,8 +339,7 @@ async function setup3D(io, CFG) {
     socket.on('3d_leave_match', () => {
       const { room, m } = ctx(); if (!m || !m.inMatch) return;
       m.inMatch = false;
-      if (room.sim) room.sim.players.delete(m.pid);
-      if (room.sim && ![...room.sim.players.values()].some((p) => !p.bot)) endMatch(room);
+      if (room.sim) room.sim.players.delete(m.pid); // (a partida continua com quem ficou — até só com bots; o dono encerra quando quiser)
       broadcastState(room);
     });
 
@@ -294,6 +353,23 @@ async function setup3D(io, CFG) {
       if (d.cs != null) p.camSide = Number(d.cs) < 0 ? -1 : Number(d.cs) > 0 ? 1 : 0; // ombro da câmera da 3ª pessoa (quem assiste vê igual)
       if (Number.isFinite(d.yaw)) p.yaw = Number(d.yaw);
       if (Number.isFinite(d.pitch)) p.pitch = Math.max(-1.5, Math.min(1.5, Number(d.pitch)));
+    });
+    // (v0.35) comandos por tick: o navegador prevê o próprio boneco e o servidor gasta 1 comando por tick, na mesma ordem
+    socket.on('3d_cmds', (d) => {
+      const { room, m } = ctx(); if (!m || !room.sim || !m.inMatch || !d || !Array.isArray(d.c)) return;
+      const q = m.cmds || (m.cmds = []);
+      const doneS = m.lastCmd ? m.lastCmd.s : -1; // (já usados: ignora repetidos; fora de ordem: encaixa no lugar certo)
+      for (const raw of d.c.slice(0, 40)) {
+        const c = cleanCmd(raw); if (!c || c.s <= doneS) continue;
+        let i = q.length; while (i > 0 && q[i - 1].s > c.s) i--;
+        if (i > 0 && q[i - 1].s === c.s) continue;
+        q.splice(i, 0, c);
+      }
+      if (q.length > 40) q.splice(0, q.length - 40);
+      const p = room.sim.players.get(m.pid); if (!p) return;
+      p.fp = !!d.fp; if (d.cs != null) p.camSide = Number(d.cs) < 0 ? -1 : Number(d.cs) > 0 ? 1 : 0;
+      // 3ª pessoa: o tiro sai da câmera (igual à mira na tela) — só aceita câmera perto do boneco
+      if (Array.isArray(d.cp) && d.cp.length === 3 && d.cp.every((v) => Number.isFinite(Number(v))) && Math.hypot(d.cp[0] - p.x, d.cp[2] - p.z) < 450) p.camPos = d.cp.map(Number); else p.camPos = null;
     });
     // ações pontuais
     socket.on('3d_action', (d) => {

@@ -43,29 +43,36 @@ Pronto — e isso sozinho já resolve as duas coisas:
 > Isso só funciona pra quem já instalou uma versão que já tinha essa atualização automática (a partir da v0.32.0).
 > Quem ainda está numa versão bem antiga precisa baixar o instalador manualmente essa **última** vez.
 
-## 3. Jogar juntos na mesma rede (LAN)
-1. **Quem hospeda** abre o Point Ball e clica em **Hospedar partida**.
-   Na primeira vez o Windows pergunta do firewall: marque **Redes privadas** e clique em **Permitir**.
-2. O jogo abre. No menu (Esc) → **Multiplayer** → crie a sala.
-3. **Os amigos** abrem o Point Ball: a partida aparece em **Partidas na rede** → **Entrar**.
-   Se não aparecer, digite o IP que aparece na tela de quem hospeda (ex: `192.168.0.15`) e clique em **Entrar**.
-4. Dentro do jogo: Esc → **Multiplayer** → entra na sala e escolhe o time.
+## 3. A tela de início: 4 jeitos de jogar
+- **🎮 Jogar sozinho (offline)** — contra bots, sem internet.
+- **🌐 Multiplayer online (servidor do site)** — abre o jogo já na aba **Multiplayer**, com **Criar sala** e a
+  **lista de salas**. Joga com qualquer um, de qualquer lugar (quem está no site e quem está no app jogam juntos).
+- **🏠 LAN (mesma rede)** — **Criar partida na LAN** liga o servidor neste PC e abre o jogo na aba Multiplayer pra você
+  criar a sala. Os amigos na mesma Wi-Fi/cabo veem a partida em **Partidas achadas na rede** → **Entrar**
+  (ou digitam o seu IP, ex: `192.168.0.15`). Na primeira vez o Windows pergunta do firewall: marque **Redes privadas**
+  e clique em **Permitir**.
+- **🌎 Host pela internet (seu PC é o servidor)** — pra amigo de outro lugar, sem o lag do servidor do site (abaixo).
 
-## 4. Jogar pela internet (amigo em outro lugar) — sem Radmin, sem abrir porta
-1. **Quem hospeda** abre o Point Ball → **Hospedar pela internet → Criar link**.
+Numa sala online, **quem manda nas regras é o dono da sala** (aba Multiplayer): mapa, modo, bots, armas, magia,
+vassoura, **velocidade, pulo e distância da arma**. O que é só seu continua no seu menu: câmera, campo de visão,
+sensibilidade, som, sombras, mira, personagem. A partida pode começar **só com bots** e quem chega **entra no meio**
+(no modo rounds, espera o próximo round assistindo).
+
+## 4. Host pela internet (amigo em outro lugar) — sem Radmin, sem abrir porta
+1. **Quem hospeda** abre o Point Ball → **Host pela internet → Criar link**.
    - Na primeira vez o app baixa o **cloudflared** (o programa oficial de túnel da Cloudflare, uns 40 MB) — só uma vez.
    - Em alguns segundos aparece o link (tipo `https://palavras-aleatorias.trycloudflare.com/demo3d/`) e ele **já é copiado**.
-2. Mande o link pros amigos (WhatsApp, Discord...). Clique em **Abrir o jogo** → Esc → **Multiplayer** → crie a sala.
+2. Mande o link pros amigos (WhatsApp, Discord...). Clique em **Abrir o jogo** → cria a sala na aba Multiplayer.
    No 3D o link também aparece no topo do menu **Multiplayer**, com o botão **Copiar**.
 3. **Os amigos** entram de 2 jeitos (os dois jogam juntos):
    - **pelo navegador**: abrem o link no Chrome/Edge (não precisa instalar nada), ou
-   - **pelo app**: colam o link no campo **Entrar** e clicam em **Entrar**.
-   Depois é igual: Esc → **Multiplayer** → entra na sala.
+   - **pelo app**: colam o link no campo **Entrar** (no quadro LAN) e clicam em **Entrar**.
 4. Se o link não abrir na hora, esperem uns 10 segundos e tentem de novo (o link novo demora um pouquinho pra "espalhar").
 
 Coisas boas de saber:
 - **Quem hospeda joga com ping zero**; os outros jogam com o ping até o PC de quem hospeda (passando pela Cloudflare,
   que tem servidor em São Paulo) — normalmente bem melhor que o servidor grátis do site (que fica nos EUA).
+- (v0.35) O servidor roda num **processo separado** do jogo: hospedar não deixa mais o jogo de quem hospeda lento.
 - O link **muda cada vez** que você cria e **para de funcionar quando você fecha o app**.
 - O PC de quem hospeda precisa ficar ligado e com internet boa (de preferência no cabo).
 - Quem tem o link consegue abrir o jogo no seu PC (só o jogo, nada mais do computador). Mande só pros amigos.
@@ -75,10 +82,16 @@ Coisas boas de saber:
 
 ## 5. Site x app: quem joga com quem?
 Cada **servidor** é um "mundo" separado, com as suas salas:
-- **Site** (`point-ball.onrender.com`): quem joga pelo navegador no site e quem clica em **Abrir o servidor do site**
+- **Site** (`point-ball.onrender.com`): quem joga pelo navegador no site e quem clica em **Multiplayer online**
   no app jogam juntos.
 - **PC de quem hospeda** (LAN ou link da internet): quem entrou pelo IP/link — pelo app **ou** pelo navegador — joga junto.
 - Uma sala do site **não aparece** no PC de quem hospeda (e vice-versa). Combinem todos no mesmo lugar.
+
+## 6. Por que agora o online não "puxa" mais o seu boneco (v0.35)
+Igual jogo de tiro de verdade: o **seu** boneco anda na hora, aqui no seu PC (o jogo prevê o movimento com a mesma
+física do servidor), e o servidor só confere. Os **outros** aparecem com um atrasinho fixo e bem suave (~0,1 s).
+Antes, o seu próprio boneco esperava a resposta do servidor (ida e volta até os EUA) pra andar — por isso parecia lag.
+O tiro também dá o coice e o som na hora do clique (a bala de verdade continua vindo do servidor).
 
 ## Dicas
 - F11 = tela cheia. Pra voltar pra tela de início, feche e abra o app de novo.
