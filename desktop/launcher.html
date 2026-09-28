@@ -27,12 +27,15 @@
   .ips b { color: var(--gold); }
   .modo { margin: 14px 0 0; }
   label.opt { margin-right: 14px; cursor: pointer; }
+  .wide { grid-column: 1 / -1; }
+  #netlink { width: min(430px, 100%); color: var(--gold); font-weight: 700; }
+  .ok { color: #86efac; } .err { color: #fca5a5; }
 </style>
 </head>
 <body>
 <main>
   <h1>Point <b>Ball</b></h1>
-  <div class="sub">Joga sozinho, ou em rede com os amigos: um PC <b>hospeda</b> e os outros <b>entram</b> (todos na mesma rede Wi-Fi/cabo).</div>
+  <div class="sub">Joga sozinho, ou com os amigos: um PC <b>hospeda</b> e os outros <b>entram</b> — na mesma rede (Wi-Fi/cabo) ou pela internet com um link.</div>
   <div class="grid">
     <section class="card">
       <h2>🏠 Hospedar / jogar sozinho</h2>
@@ -44,8 +47,18 @@
       <h2>🎮 Entrar numa partida</h2>
       <p>Partidas achadas na sua rede (atualiza sozinho):</p>
       <div class="list" id="list"><div class="muted">Procurando partidas na rede...</div></div>
-      <p style="margin:12px 0 6px">Ou digite o IP do PC de quem está hospedando:</p>
-      <div class="row"><input id="ip" placeholder="ex: 192.168.0.15"><button class="sec" id="join">Entrar</button></div>
+      <p style="margin:12px 0 6px">Ou digite o IP do PC de quem está hospedando, ou cole o link que ele mandou:</p>
+      <div class="row"><input id="ip" placeholder="192.168.0.15 ou o link" style="width:260px"><button class="sec" id="join">Entrar</button></div>
+      <p style="margin:12px 0 6px">Ou jogue no servidor do site (junto com quem joga pelo navegador):</p>
+      <button class="sec" id="site">Abrir o servidor do site</button>
+    </section>
+    <section class="card wide">
+      <h2>🌎 Hospedar pela internet (amigo em outro lugar)</h2>
+      <p>O seu PC vira o servidor e o app cria um <b>link</b> pros amigos (túnel grátis da Cloudflare: não precisa abrir porta no roteador nem instalar Radmin/Hamachi).
+        O amigo abre o link <b>no navegador</b> ou cola no campo <b>Entrar</b> do app. Quem hospeda joga sem lag; os outros jogam com o ping até o seu PC.
+        O link muda cada vez que abre e para de funcionar quando você fecha o app.</p>
+      <div class="row"><button id="net">Criar link</button><span class="muted" id="netst"></span></div>
+      <div class="row" id="netbox" style="display:none;margin-top:10px"><input id="netlink" readonly><button class="sec" id="netcopy">Copiar link</button><button id="netgo">Abrir o jogo</button></div>
     </section>
   </div>
   <div class="modo muted">Versão do jogo: <label class="opt"><input type="radio" name="modo" value="3d" checked style="width:auto"> 3D</label><label class="opt"><input type="radio" name="modo" value="2d" style="width:auto"> 2D</label> · F11 = tela cheia · no jogo, Esc abre o menu (Multiplayer → criar/entrar na sala)</div>
@@ -56,6 +69,27 @@
   window.pbApp.ips().then((l) => { $('ips').innerHTML = l.length ? 'Seu IP na rede: ' + l.map((a) => '<b>' + a.ip + '</b>').join(' · ') + ' (passe pros amigos, se a partida não aparecer na lista deles)' : 'Sem rede: dá pra jogar sozinho.'; });
   $('host').onclick = () => { $('host').disabled = true; $('host').textContent = 'Abrindo...'; window.pbApp.hospedar(modo()); };
   $('join').onclick = () => { const ip = $('ip').value.trim(); if (ip) window.pbApp.entrar(ip, modo()); };
+  $('site').onclick = () => window.pbApp.entrar('https://point-ball.onrender.com', modo()); // (servidor grátis do Render: demora ~1 min pra acordar)
+  // hospedar pela internet: baixa o túnel na 1ª vez, cria o link e já copia
+  const netSt = (t, cls) => { $('netst').textContent = t; $('netst').className = cls || 'muted'; };
+  const linkDoModo = () => $('netlink').dataset.base ? $('netlink').dataset.base + (modo() === '2d' ? '/' : '/demo3d/') : '';
+  window.pbApp.aoTunel((s) => {
+    if (s.etapa === 'baixando') netSt('Baixando o túnel da Cloudflare (só na 1ª vez)... ' + s.pct + '%');
+    else if (s.etapa === 'conectando') netSt('Criando o link...');
+    else if (s.etapa === 'caiu') { netSt('O link caiu (internet caiu?). Clique em "Criar link" de novo.', 'err'); $('net').disabled = false; $('netbox').style.display = 'none'; }
+  });
+  $('net').onclick = async () => {
+    $('net').disabled = true; netSt('Preparando...');
+    const r = await window.pbApp.hospedarInternet();
+    if (r && r.link) {
+      $('netlink').dataset.base = r.link; $('netlink').value = linkDoModo(); $('netbox').style.display = 'flex';
+      window.pbApp.copiar($('netlink').value);
+      netSt('Pronto! O link já foi copiado — mande pros amigos (se não abrir na hora, esperem uns 10 segundos).', 'ok');
+    } else { $('net').disabled = false; netSt('Não deu pra criar o link: ' + ((r && r.erro) || 'erro desconhecido'), 'err'); }
+  };
+  document.querySelectorAll('input[name=modo]').forEach((r) => r.addEventListener('change', () => { if ($('netlink').dataset.base) $('netlink').value = linkDoModo(); }));
+  $('netcopy').onclick = () => { window.pbApp.copiar($('netlink').value); netSt('Link copiado!', 'ok'); };
+  $('netgo').onclick = () => window.pbApp.hospedar(modo()); // o servidor já está ligado: só abre o jogo (Esc → Multiplayer → criar a sala)
   $('ip').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('join').click(); });
   window.pbApp.aoAcharPartidas((lista) => {
     const el = $('list');

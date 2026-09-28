@@ -20,7 +20,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 // ---------- configurações (ficam salvas neste navegador) ----------
 const DEFAULTS = {
-  cam: '1', map: 'deserto', bots: '2', allies: '0', level: 'amador', shadow: '1', fov: 80, camDist: 150, camSide: '1', streamer: '0', gunDist: 100, pause: '1', armSize: 100, armLen: 100, armW: 100, magic: '0', weapon: 'arco', sens: 1.6, invert: '0',
+  cam: '1', map: 'deserto', bots: '2', allies: '0', level: 'amador', shadow: '1', fov: 80, camDist: 150, camSide: '1', streamer: '0', gunDist: 100, pause: '1', armSize: 100, armLen: 100, armW: 100, magic: '0', broom: '0', weapon: 'arco', sens: 1.6, invert: '0',
   mode: 'tdm', kills: '30', rounds: '3', hill: '100', mtime: '300', kc: '1', sfx: {}, adszoom: '1',
   die: '1', speed: P.speed, jumpv: P.jumpV, tweapon: WEAPON_IDS[0], wtune: {},
   x: { color: '#ffffff', outline: '1', len: 7, thick: 2, gap: 4, dot: '1', dotsize: 2, ring: '1', ringr: 22, ringw: 2, hit: '1', hitlen: 10, hitw: 1 }
@@ -3707,6 +3707,7 @@ function renderLobby() {
       + `<div class="field" style="grid-template-columns:130px 1fr"><span>Armas da sala</span><div class="row2" style="gap:10px;flex-wrap:wrap">${WEAPON_IDS.map((w) => `<label style="cursor:pointer"><input type="checkbox" data-mpw="${w}" ${(room3d.weapons || WEAPON_IDS).includes(w) ? 'checked' : ''}> ${WEAPON_SHORT[w] || w}</label>`).join('')}<button class="btn" id="mp-w-all" style="padding:2px 8px">Todas</button></div></div>`
       + `<div class="field" style="grid-template-columns:130px 1fr"><span>Extras</span><div class="row2" style="gap:10px;flex-wrap:wrap">${[['noKnife', 'Faca'], ['noNade', 'Granada'], ['noSmoke', 'Fumaça']].map(([k, t]) => `<label style="cursor:pointer"><input type="checkbox" data-mpx="${k}" ${room3d[k] ? '' : 'checked'}> ${t}</label>`).join('')}</div></div>`
       + F('Modo magia ✨', 'mp-set-magic', [['0', 'Desligado'], ['1', 'Ligado (Q = magia, Espaço no ar = vassoura)']], room3d.magic ? '1' : '0')
+      + (room3d.magic ? '' : F('Vassoura 🧹', 'mp-set-broom', [['0', 'Desligada'], ['1', 'Ligada (segurar Espaço no ar = plana)']], room3d.broom ? '1' : '0'))
       + `<label class="field" style="grid-template-columns:130px 1fr;cursor:pointer"><span>Lista de salas</span><span><input type="checkbox" id="mp-set-hidden" ${room3d.hidden ? 'checked' : ''}> esconder a sala da lista (entra só quem sabe o nome)</span></label>`;
     const send = (extra) => socket.emit('3d_update_settings', extra);
     document.querySelectorAll('[data-mpw]').forEach((c) => c.addEventListener('change', () => {
@@ -3718,7 +3719,7 @@ function renderLobby() {
     document.querySelectorAll('[data-mpx]').forEach((c) => c.addEventListener('change', () => send({ [c.dataset.mpx]: !c.checked })));
     $('mp-set-hidden').addEventListener('change', () => send({ hidden: $('mp-set-hidden').checked }));
     const on = (id, fn) => { const el = $(id); if (el) el.addEventListener('change', () => send(fn(el.value))); };
-    on('mp-set-magic', (v) => ({ magic: v === '1' }));
+    on('mp-set-magic', (v) => ({ magic: v === '1' })); on('mp-set-broom', (v) => ({ broom: v === '1' }));
     on('mp-set-map', (v) => ({ map: v })); on('mp-set-mode', (v) => ({ mode: v })); on('mp-set-kills', (v) => ({ killLimit: Number(v) }));
     on('mp-set-rounds', (v) => ({ rounds: Number(v) })); on('mp-set-hill', (v) => ({ hillTarget: Number(v) })); on('mp-set-roundtime', (v) => ({ roundTime: Number(v) }));
     on('mp-set-botsA', (v) => ({ botsA: Number(v) })); on('mp-set-botsB', (v) => ({ botsB: Number(v) })); on('mp-set-level', (v) => ({ botLevel: v }));
@@ -3726,7 +3727,7 @@ function renderLobby() {
     const lim = md === 'rounds' ? `${room3d.rounds} rounds` : md === 'koth' ? `até ${room3d.hillTarget} pontos` : `até ${room3d.killLimit} abates`;
     const wl = room3d.weapons || WEAPON_IDS, ex = [['noKnife', 'faca'], ['noNade', 'granada'], ['noSmoke', 'fumaça']].filter(([k]) => room3d[k]).map(([, t]) => t);
     const armas = (wl.length >= WEAPON_IDS.length ? 'todas' : wl.length === 1 ? 'só ' + WEAPON_SHORT[wl[0]] : wl.map((w) => WEAPON_SHORT[w]).join(', ')) + (ex.length ? ' · sem ' + ex.join('/') : '');
-    $('mp-host-settings').innerHTML = `<div class="wdesc">Mapa: ${esc(MAPS[room3d.map] ? MAPS[room3d.map].name : room3d.map)} · ${MODE_NAME[md]} (${lim}) · Bots: ${(bots.A || []).length} azul / ${(bots.B || []).length} vermelho (${room3d.botLevel})${md !== 'rounds' ? ' · Tempo: ' + roundTimeLabel(room3d.roundTime) : ''} · Armas: ${armas}${room3d.magic ? ' · ✨ Modo magia' : ''}</div>`;
+    $('mp-host-settings').innerHTML = `<div class="wdesc">Mapa: ${esc(MAPS[room3d.map] ? MAPS[room3d.map].name : room3d.map)} · ${MODE_NAME[md]} (${lim}) · Bots: ${(bots.A || []).length} azul / ${(bots.B || []).length} vermelho (${room3d.botLevel})${md !== 'rounds' ? ' · Tempo: ' + roundTimeLabel(room3d.roundTime) : ''} · Armas: ${armas}${room3d.magic ? ' · ✨ Modo magia' : room3d.broom ? ' · 🧹 Vassoura' : ''}</div>`;
   }
   const mine = room3d.members.find((m) => m.id === myPid);
   $('mp-start-row').innerHTML = room3d.phase === 'match'
@@ -3853,6 +3854,7 @@ bindSetting('o-gundist', 'gunDist');
 for (const [id, k] of [['o-armsize', 'armSize'], ['o-armlen', 'armLen'], ['o-armw', 'armW']]) bindSetting(id, k, null, () => { FPA.key = ''; }); // braços da 1ª pessoa (refaz na hora)
 bindSetting('o-pause', 'pause');
 bindSetting('o-magic', 'magic', null, () => { if (!netMode) newGame(); });
+bindSetting('o-broom', 'broom', null, () => { if (!netMode) newGame(); });
 bindSetting('o-camside', 'camSide');
 bindSetting('o-weapon', 'weapon', null, () => {
   if (netMode) { if (sim.allowed && !sim.allowed.includes(S.weapon)) mpStatus('Essa arma está bloqueada nesta sala.', 'mp-status2'); else if (socket) socket.emit('3d_action', { t: 'primary', w: S.weapon }); }
@@ -3973,7 +3975,7 @@ window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
   const me = sim.players.get('me'); if (!me) return;
   if (e.code === 'KeyV') { S.cam = S.cam === '1' ? '3' : '1'; $('o-cam').value = S.cam; save(); return; }
-  if (e.code === 'AltLeft') { e.preventDefault(); S.camSide = S.camSide === '1' ? '-1' : '1'; $('o-camside').value = S.camSide; save(); feed(S.camSide === '1' ? '📷 Câmera no ombro direito' : '📷 Câmera no ombro esquerdo'); return; } // (3ª pessoa: troca o lado da câmera)
+  if (e.code === 'AltLeft') { e.preventDefault(); S.camSide = S.camSide === '1' ? '-1' : '1'; $('o-camside').value = S.camSide; save(); return; } // (3ª pessoa: troca o lado da câmera)
   if (netMode) {
     if (!socket) return;
     if (e.code === 'Space') socket.emit('3d_action', { t: 'jump' });
@@ -4210,7 +4212,7 @@ function hud(me) {
   $('h-weapon').textContent = me.weapon === 'primary' ? w.name : '';
   const dj = sim.time >= me.djReadyAt;
   $('h-jump').innerHTML = (dj ? '🦘 Pulo duplo <b style="color:#86efac">PRONTO</b> (Espaço 2x)' : `🦘 Pulo duplo em ${Math.ceil(me.djReadyAt - sim.time)}s`)
-    + (sim.magic ? (() => { const k = sim.magicOf(me), left = (me.magicReady || 0) - sim.time; return `<br>✨ Q: ${MAGIC_NAME[k]} ` + (left <= 0 ? '<b style="color:#c4b5fd">PRONTO</b>' : `em ${Math.ceil(left)}s`) + ' · 🧹 segure Espaço no ar'; })() : '');
+    + (sim.magic ? (() => { const k = sim.magicOf(me), left = (me.magicReady || 0) - sim.time; return `<br>✨ Q: ${MAGIC_NAME[k]} ` + (left <= 0 ? '<b style="color:#c4b5fd">PRONTO</b>' : `em ${Math.ceil(left)}s`) + ' · 🧹 segure Espaço no ar'; })() : sim.broom ? '<br>🧹 Vassoura: segure Espaço no ar' : '');
   const slot = (k, name, off) => `<div class="slot ${me.weapon === k ? 'on' : ''} ${off ? 'off' : ''}"><b>${SLOT_NAMES[k]}</b>${name}</div>`;
   $('slots').innerHTML = slot('primary', w.name.split(' ')[0]) + slot('potion', `Poção ×${me.potions}`, !me.potions || me.lives >= P.lives) + (sim.noKnife ? '' : slot('knife', 'Faca')) + (sim.noNade ? '' : slot('nade', `Granada ×${me.nades}`, !me.nades)) + (sim.noSmoke ? '' : slot('smoke', `Fumaça ×${me.smokes}`, !me.smokes)); // (armas bloqueadas na sala somem)
   if (!me.alive) {
@@ -4252,6 +4254,7 @@ function newGame() {
   sim = new Sim3D(wd.walls, wd.W, wd.H, Object.assign(simOptions(wd), {
     godIds: S.die === '0' ? ['me'] : [], // "você pode morrer: não" = só você não morre; os bots morrem normal
     magic: S.magic === '1', // modo magia
+    broom: S.broom === '1', // vassoura sem o modo magia
     mode: isTestRoom ? 'livre' : S.mode, killLimit: Number(S.kills), rounds: Number(S.rounds), hillTarget: Number(S.hill), matchTime: Number(S.mtime),
     params: Object.assign({}, simOptions(wd).params || {}, S.speed !== P.speed ? { speed: S.speed } : {}, S.jumpv !== P.jumpV ? { jumpV: S.jumpv } : {}),
     weapons: (() => { const a = simOptions(wd).weapons || {}, o = {}; for (const k of WEAPON_IDS) o[k] = Object.assign({}, a[k] || {}, (S.wtune || {})[k] || {}); return o; })()
@@ -4343,7 +4346,7 @@ function applySnapshot(snap, evs) {
   sim.doorsT = snap.doorsT || null;
   sim.meteors = snap.meteors || []; sim.meteorFall = snap.meteorFall; sim.ceilHoles = snap.ceilHoles || [];
   sim.lastKill = snap.lastKill || null;
-  sim.magic = !!snap.magic; sim.eyes = snap.eyes || []; sim.magicWalls = snap.mwalls || []; // (modo magia)
+  sim.magic = !!snap.magic; sim.broom = !!snap.broom; sim.eyes = snap.eyes || []; sim.magicWalls = snap.mwalls || []; // (modo magia)
   for (const k of ['mode', 'phase', 'phaseUntil', 'hzStart', 'score', 'round', 'totalRounds', 'killLimit', 'hillTarget', 'matchTime', 'hill', 'result']) if (snap[k] !== undefined) sim[k] = snap[k];
   const prevRecvT = netRecvT; netRecvT = now;
   if (prevRecvT) netInterval = Math.max(60, Math.min(400, now - prevRecvT));
@@ -4734,7 +4737,7 @@ function dispScale(p, dt) {
   return cur;
 }
 // câmera de 3ª pessoa (atrás do ombro, sem atravessar muro nem passar do teto) — usada no jogo e na killcam
-let thirdCamD = 999, camSideSm = null, camSideT = 0; // (câmera muito colada no boneco: esconde o seu boneco pra não tampar a tela)
+let thirdCamD = 999, camSideSm = null, camSideT = 0, satT = -1e9; // (câmera muito colada no boneco: esconde o seu boneco pra não tampar a tela)
 function thirdCam(x, y, z, yaw, pitch, ignoreId, sideOv) {
   const dx = Math.cos(pitch) * Math.cos(yaw), dy = Math.sin(pitch), dz = Math.cos(pitch) * Math.sin(yaw);
   // distância e lado (ombro direito/esquerdo/meio) vêm das configurações (espectador: o ombro de quem você assiste)
@@ -4757,7 +4760,7 @@ function thirdCam(x, y, z, yaw, pitch, ignoreId, sideOv) {
 // ---------- (v0.31) espectador: morreu no modo rounds -> assiste quem ainda está vivo ----------
 // bot = 3ª pessoa; jogador de verdade = a câmera que ele está usando (1ª ou 3ª pessoa, no mesmo ombro)
 // Clique = próximo · Botão direito = anterior (primeiro os do seu time; se não sobrou ninguém do time, qualquer um)
-const SPEC_DELAY = 1.4; // segundos vendo a própria lápide antes de ir pro espectador
+const SPEC_DELAY = 1.0; // segundos vendo a própria lápide antes de ir pro espectador
 const spec = { id: null, want: null, fp: false, yaw: 0, pitch: 0, lx: null, lz: null, tag: '' };
 const isViewer = (id) => id === 'me' || (spec.id != null && spec.fp && id === spec.id); // de quem é a arma na tela
 function specOn(me) { return !!(sim && me) && sim.mode === 'rounds' && !me.alive && sim.time - (me.deadAt || 0) > SPEC_DELAY && !killcam.active && !EDIT3D; }
@@ -5139,8 +5142,9 @@ function frame(now) {
   if (pendingKc && now >= pendingKc.at) { const lk = pendingKc.lk; pendingKc = null; killcam.startFinal(lk, now); }
   // fim do round (sozinho): o próximo só começa a contar depois que a killcam final terminar
   if (!netMode && sim.phase === 'roundEnd' && (pendingKc || killcam.active)) sim.phaseUntil = Math.max(sim.phaseUntil, sim.time + 0.6);
-  // contagem do round: tela quase preto e branco e a cor volta aos poucos (normal 0,5 s antes de começar)
-  { let sat = 1; if (sim.phase === 'countdown' && !EDIT3D) { const rem = sim.phaseUntil - sim.time, tot = Math.max(0.6, (sim.startDelay || 3) - 0.5); sat = Math.max(0.06, Math.min(1, 1 - (rem - 0.5) / tot)); }
+  // contagem do round: tela quase preto e branco a contagem toda; (v0.32) a cor só volta quando o round começa (rapidinho, pra ver que começou)
+  { let sat = 1; if (sim.phase === 'countdown' && !EDIT3D) { const rem = sim.phaseUntil - sim.time, tot = Math.max(0.6, sim.startDelay || 3); sat = 0.06 + 0.12 * clamp01(1 - rem / tot); satT = now; }
+    else if (now - satT < 280) sat = 0.18 + 0.82 * clamp01((now - satT) / 280);
     if (Math.abs(sat - (canvas._sat || 1)) > 0.01) { canvas._sat = sat; canvas.style.filter = sat >= 0.999 ? '' : `saturate(${sat.toFixed(2)}) brightness(${(0.85 + 0.15 * sat).toFixed(2)})`; } }
   const kcOn = killcam.apply(now);
   if (EDIT3D && EDIT3D.fly) { EDIT3D.frame(dtR, now); $('cross').style.display = 'none'; }
@@ -5194,13 +5198,13 @@ function magicEvent(e, now) {
   if (e.type === 'dash_hit') { sfxAt('hit', e.x, e.z); if (e.victim === 'me') feed('💥 Levou uma investida!'); }
 }
 function updateMagicFx(now) {
-  const on = !!(sim && sim.magic);
+  const on = !!(sim && sim.magic), onB = !!(sim && sim.broom); // (vassoura: modo magia ou a opção só da vassoura)
   for (const [id, a] of avatars) {
     const p = sim.players.get(id); if (!p) continue;
     const sh = on && p.alive && (p.shieldUntil || 0) > sim.time;
     if (sh && !a.shieldM) { a.shieldM = new THREE.Mesh(_shieldGeo, new THREE.MeshStandardMaterial({ color: TEAM_EMIS[p.team] || 0xffffff, emissive: TEAM_EMIS[p.team] || 0xffffff, emissiveIntensity: 0.6, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide })); a.root.add(a.shieldM); }
     if (a.shieldM) { a.shieldM.visible = sh; if (sh) { const k = 1 + 0.04 * Math.sin(now / 120); a.shieldM.scale.set(36 * k, 46 * k, 36 * k); a.shieldM.position.y = 32; a.shieldM.material.opacity = ((p.shieldHits || 1) > 1 ? 0.22 : 0.13) + 0.05 * Math.sin(now / 90); } }
-    const gl = on && p.alive && !!p.gliding;
+    const gl = onB && p.alive && !!p.gliding;
     if (gl && !a.broomG) { a.broomG = makeBroom(); a.root.add(a.broomG); }
     if (a.broomG) { a.broomG.visible = gl; if (gl) { a.broomG.rotation.y = a.model.rotation.y; a.broomG.position.y = 12 + Math.sin(now / 200) * 1.5; } }
   }
@@ -5225,8 +5229,8 @@ function updateMagicFx(now) {
   for (const [id, m] of MAGIC_FX.walls) if (!seenW.has(id)) { scene.remove(m); m.geometry.dispose(); MAGIC_FX.walls.delete(id); }
   const me = sim.players.get('me');
   $('shieldfx').style.opacity = on && me && me.alive && (me.shieldUntil || 0) > sim.time ? '1' : '0';
-  if (!fpBroom) { fpBroom = makeBroom(); fpBroom.scale.setScalar(0.35); fpBroom.position.set(2, -15, -20); fpBroom.rotation.set(0.35, 0.15, 0); fpBroom.visible = false; fpCam.add(fpBroom); } // (1ª pessoa: o cabo da vassoura embaixo)
-  fpBroom.visible = on && !!me && me.alive && !!me.gliding && S.cam === '1';
+  if (!fpBroom) { fpBroom = makeBroom(); fpBroom.scale.setScalar(0.35); fpBroom.position.set(3, -14, -12); fpBroom.rotation.set(0.3, Math.PI + 0.12, 0); fpBroom.visible = false; fpCam.add(fpBroom); } // (1ª pessoa: o cabo da vassoura embaixo, apontando pra frente; a palha fica pra trás, fora da tela)
+  fpBroom.visible = onB && !!me && me.alive && !!me.gliding && S.cam === '1';
 }
 function handleEvent(e, now) {
   addEffect(e, now);
@@ -5318,6 +5322,18 @@ loadModels().then(() => {
     }).catch((e) => console.error('editor 3D', e));
   }
 }).catch((e) => { $('loading').textContent = 'Erro ao carregar os bonecos: ' + e.message; console.error(e); });
+// (app do PC) hospedando pela internet: o link pros amigos aparece no menu Multiplayer, com botão de copiar
+if (window.pbApp && window.pbApp.link) {
+  let lastLink = '';
+  const updLink = () => window.pbApp.link().then((u) => {
+    u = u || ''; const key = u + '|' + S.streamer; if (key === lastLink) return; lastLink = key;
+    const el = $('mp-applink'); if (!el) return;
+    if (!u) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.style.display = ''; el.innerHTML = `🌎 Link pros amigos de qualquer lugar (abre no navegador ou no app): <b style="color:var(--acc)">${S.streamer === '1' ? 'escondido (modo streamer) — use o Copiar' : esc(u) + '/demo3d/'}</b> <button class="btn" id="mp-applink-copy" style="padding:4px 10px;margin-left:6px">Copiar</button>`;
+    $('mp-applink-copy').onclick = () => { window.pbApp.copiar(u + '/demo3d/'); $('mp-applink-copy').textContent = 'Copiado!'; };
+  }).catch(() => {});
+  updLink(); setInterval(updLink, 4000);
+}
 window.__pb3d = { get sim() { return sim; }, get camD() { return thirdCamD; }, spec, get mapInfo() { return mapInfo; }, killcam, lock: (v) => { locked = v; showMenu(!v); }, keys,
   get BASE() { return BASE; }, get scene() { return scene; }, get camera() { return camera; }, get edit3d() { return EDIT3D; },
   fx: { eruptFx: (x, z, d) => eruptFx(x, z, 84, performance.now(), d) },
