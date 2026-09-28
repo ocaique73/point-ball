@@ -34,6 +34,8 @@ cadência/recarga de cada arma — ligar/desligar "você pode morrer" (os bots s
 
 Tem física 3D própria (`public/demo3d/sim3d.js`): tiro e granada seguem a mira, ricochete no muro e no chão, pulo duplo. 8 mapas e bots com 3 níveis.
 
+**Novidades da v0.35**: **online liso** — o seu boneco anda na hora (previsão igual jogo de tiro; o servidor só confere) e os outros aparecem suaves; ao entrar numa sala o jogo com bots para; dá pra **entrar no meio da partida** (rounds: espera o próximo); **só o dono da sala muda as regras** (incluindo velocidade, pulo e distância da arma); no app do PC o servidor de quem hospeda roda separado (sem lentidão) e a tela inicial tem nomes claros (Jogar sozinho / Multiplayer online / LAN / Host pela internet).
+
 **Novidades da v0.34**: a cor do round volta suave 0,7s antes de começar (não é mais de repente), tela de morte estilo GTA ("MORREU" em vermelho, tela meio sem cor por 1,4s vendo a própria lápide) e indicador de dano piscando rápido na tela quando você leva um tiro.
 
 **Novidades da v0.33**: o botão **"⬇️ Baixar app (Windows)"** no site sempre baixa a versão mais nova, e quem já tem o app instalado recebe aviso e atualiza sozinho (barra verde no launcher) — os dois alimentados por um único GitHub Release (`desktop/LEIA-ME.md`, seção 2).

@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 28/09/2026 — v0.34.0 (Three.js): cor do round volta suave 0,7s antes de começar, tela de morte estilo GTA ("MORREU" em vermelho + tela meio sem cor por 1,4s) e indicador de dano na tela quando leva um tiro.
+Última atualização: 28/09/2026 — v0.35.0 (online + app do PC): **online liso** (o seu boneco anda na hora, previsão igual jogo de tiro; os outros suaves), sala online sem jogo com bots rodando por trás, **entrar no meio da partida**, **só o dono muda as regras**, servidor do host num processo separado (sem lentidão) e tela inicial do app com nomes claros.
 
 ---
 
@@ -345,6 +345,17 @@
   - [x] **Tela de morte estilo GTA**: "MORREU" em vermelho grande no lugar de "Você foi eliminado", e a tela fica meio sem cor (uns 40% saturada, não é literalmente preto e branco) enquanto olha a própria lápide
   - [x] **Lápide**: tempo vendo a própria lápide (antes de ir pro espectador, no modo rounds) aumentado de 1s pra 1,4s
   - [x] **Indicador de dano**: ao levar um tiro/acerto, pisca um flash vermelho rápido nas bordas da tela, igual jogo de tiro
+
+- [x] v0.35.0 (online + app do PC): online fino
+  - [x] **Previsão do seu boneco** (igual CS/Valorant): o navegador move você na hora com a mesma física do servidor e manda 1 comando por tick (60/s); o servidor gasta exatamente 1 comando por passo, na mesma ordem (espera até 0,5 s se atrasar, alcança se chegar vários) e só corrige se algo de fora mexer em você (tiro, empurrão). Testado com 250 ms de ping + 150 ms de oscilação: **0 correções** em todos os mapas (só o navio balança uns décimos)
+  - [x] **Os outros** vêm de um buffer com atraso fixo e adaptável (~0,1 s) interpolando no relógio do servidor: sempre suaves; suas balas aparecem na hora (sem o atraso do buffer)
+  - [x] Tiro: coice, som e animação saem no clique; trocar de arma troca na tela na hora; na 3ª pessoa o tiro sai da câmera (igual à mira)
+  - [x] Servidor com relógio de verdade (sempre 60 passos/s; antes o setInterval do Node rodava ~62,5/s e atrasava quando pesava)
+  - [x] **Sala online**: ao entrar numa sala, o jogo sozinho com bots para (antes parecia estar em 2 partidas); atrás do menu fica só o mapa da sala girando
+  - [x] **Entrar no meio**: partida pode começar só com bots; quem escolhe time entra na hora; no modo rounds, no meio do round, espera o próximo assistindo ("Você entra no próximo round"); "Sair da partida" e "Voltar pra partida"
+  - [x] **Só o dono muda as regras**: no online, mapa/modo/bots/magia/vassoura/velocidade/pulo/distância da arma ficam travados no seu menu (aviso 🔒); o dono ajusta **velocidade, pulo e distância da arma** na aba Multiplayer (valem pra todos; com partida rolando, valem na próxima). Câmera, FOV, sensibilidade, som etc. continuam de cada um
+  - [x] **App do PC**: o servidor de quem hospeda roda num processo separado (utilityProcess) — antes dividia o processo com a janela e deixava o jogo lento pra quem hospedava
+  - [x] **Tela inicial do app**: 🎮 Jogar sozinho · 🌐 Multiplayer online · 🏠 LAN · 🌎 Host pela internet; online/LAN/host abrem o jogo direto na aba Multiplayer (criar sala / lista de salas)
 
 - [x] v0.31.0 (Three.js): câmera
   - [x] **Alt esquerdo** = troca o ombro da câmera da 3ª pessoa (no esquerdo vai pro direito e vice-versa); a câmera desliza pro outro lado em vez de pular e fica salvo nas configurações; no app do PC a barra de menu saiu (o Alt não abre mais nada)

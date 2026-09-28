@@ -54,6 +54,10 @@
   #bombwarn { position: fixed; left: 50%; top: 78px; transform: translate(-50%, 0); display: none; text-align: center; padding: 6px 14px; border-radius: 10px; background: rgba(120,20,10,.55); border: 1px solid #ef4444; color: #fecaca; font-weight: 800; }
   #bombwarn .arrow { display: inline-block; margin-right: 6px; font-size: 18px; }
   #dead small { display: block; font-size: 15px; color: var(--muted); }
+  /* sala online: o que é do dono da sala fica travado aqui (continua valendo o que é só seu) */
+  .mp-lock-note { display: none; margin-bottom: 8px; padding: 8px 10px; border: 1px solid #3a3320; border-radius: 8px; background: rgba(255,204,51,.07); color: var(--muted); font-size: 12px; }
+  body.mp-room .mp-lock-note { display: block; }
+  .field.mp-locked { opacity: .4; pointer-events: none; }
   #dead .dead-title { display: block; font-size: 54px; font-weight: 900; color: #ef4444; letter-spacing: 5px; text-shadow: 0 0 18px rgba(239,68,68,.85), 0 3px 10px #000; margin-bottom: 6px; animation: deadPop .32s cubic-bezier(.2,1.4,.4,1); }
   @keyframes deadPop { from { transform: scale(1.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
   /* acerto levado: flash rápido nas bordas da tela, igual jogo de tiro */
@@ -154,6 +158,7 @@
     <a class="tablink" href="/demo3d/editor.html" target="_blank" title="Abre o editor de mapa e de efeitos numa aba nova">🛠️ Editor de mapa</a>
   </div>
   <div class="pane on" id="p-game">
+    <div class="mp-lock-note">🔒 <b>Você está numa sala online.</b> O que muda o jogo pra todo mundo (mapa, modo, bots, velocidade, pulo, magia, vassoura, distância da arma...) quem escolhe é o <b>dono da sala</b>, na aba <b>Multiplayer</b>. Aqui continua valendo o que é só seu: câmera, campo de visão, sensibilidade, som, sombras, mira...</div>
     <label class="field"><span>Modo magia ✨</span><select id="o-magic"><option value="0">Desligado</option><option value="1">Ligado — Q = magia do seu personagem, segurar Espaço no ar = vassoura</option></select><span></span></label>
     <label class="field"><span>Vassoura 🧹 (sem magia)</span><select id="o-broom"><option value="0">Desligada</option><option value="1">Ligada — segurar Espaço no ar = plana com a vassoura</option></select><span></span></label>
     <label class="field"><span>Pausar no menu (Esc)</span><select id="o-pause"><option value="1">Pausa quando abro o menu (jogando sozinho)</option><option value="0">Não pausa</option></select><span></span></label>
@@ -230,6 +235,7 @@
     </div>
   </div>
   <div class="pane" id="p-test">
+    <div class="mp-lock-note">🔒 <b>Você está numa sala online.</b> O que muda o jogo pra todo mundo (mapa, modo, bots, velocidade, pulo, magia, vassoura, distância da arma...) quem escolhe é o <b>dono da sala</b>, na aba <b>Multiplayer</b>. Aqui continua valendo o que é só seu: câmera, campo de visão, sensibilidade, som, sombras, mira...</div>
     <label class="field"><span>Você pode morrer</span><select id="o-die"><option value="1">Sim (normal)</option><option value="0">Não (pra testar)</option></select><span></span></label>
     <label class="field"><span>Velocidade do personagem</span><input type="range" id="o-speed" min="120" max="480" step="10"><span class="v" id="v-o-speed"></span></label>
     <label class="field"><span>Altura do pulo</span><input type="range" id="o-jumpv" min="200" max="650" step="10"><span class="v" id="v-o-jumpv"></span></label>
