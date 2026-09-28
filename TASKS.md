@@ -3,7 +3,7 @@
 > Documento de controle do projeto. **Sempre ler antes de continuar o trabalho** e marcar `[x]` no que for concluído.
 > Legenda: `[x]` feito · `[ ]` a fazer · `[~]` feito mas precisa de ajuste/validação do Caique
 
-Última atualização: 27/09/2026 — v0.32.0 (Three.js + app do PC): **hospedar pela internet com um link** (túnel da Cloudflare, sem Radmin), opção de **vassoura sem o modo magia**, vassoura da 1ª pessoa do lado certo, sem piscar no começo da partida/round, cor volta só quando o round começa, espectador com 1 s de lápide.
+Última atualização: 28/09/2026 — v0.33.0 (app do PC): **botão "Baixar app" sempre atualizado no site** e **o app se atualiza sozinho** (avisa, baixa e instala) via GitHub Releases — publicar uma versão nova alimenta as duas coisas de uma vez.
 
 ---
 
@@ -332,6 +332,12 @@
   - [x] **Piscar (proteção)**: só quando renasce depois de morrer (mata-mata, cada um por si, rei da colina); no começo da partida e dos rounds ninguém pisca
   - [x] **Começo do round**: a tela fica quase preto e branco a contagem toda e a cor só volta quando o round começa (rapidinho, pra ver que começou)
   - [x] Espectador: 1 s de lápide (era 1,4 s); trocar o ombro com o Alt não aparece mais no feed
+
+- [x] v0.33.0 (app do PC): botão sempre atualizado no site + app se atualiza sozinho
+  - [x] **Site (`public/index.html`)**: botão "⬇️ Baixar app (Windows)" com link fixo pra `.../releases/latest/download/Point-Ball-Setup.exe` — nunca precisa mudar o link a cada versão
+  - [x] **App (`desktop/`)**: `electron-updater` integrado — verifica sozinho ao abrir (e tem botão "Verificar atualização"), mostra barra verde no launcher com **Baixar atualização** → **Reiniciar e atualizar**
+  - [x] **Build**: `electron-builder` gera nome de arquivo fixo (`Point-Ball-Setup.exe`, sem versão no nome) + `latest.yml`/`.blockmap` pro auto-update funcionar
+  - [x] **Publicar**: passo a passo em `desktop/LEIA-ME.md` (seção 2) — criar um GitHub Release com os 3 arquivos alimenta o botão do site E o auto-update de quem já tem o app instalado (a partir da v0.32.0+)
   - [ ] Testar o link da internet com um amigo de outro lugar (aqui no teste não dá pra abrir o túnel de verdade)
 
 - [x] v0.31.0 (Three.js): câmera

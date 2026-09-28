@@ -1,7 +1,7 @@
 {
   "name": "point-ball-desktop",
   "productName": "Point Ball",
-  "version": "0.32.0",
+  "version": "0.33.0",
   "description": "Point Ball instalável (Electron) — joga sozinho, em LAN ou pela internet com um link (um PC hospeda, os outros entram)",
   "main": "main.js",
   "author": "Caique",
@@ -15,7 +15,8 @@
   "dependencies": {
     "express": "^4.21.2",
     "socket.io": "^4.8.1",
-    "three": "^0.186.1"
+    "three": "^0.186.1",
+    "electron-updater": "^6.3.9"
   },
   "devDependencies": {
     "electron": "^44.4.5",
@@ -25,6 +26,11 @@
     "appId": "com.caique.pointball",
     "productName": "Point Ball",
     "asar": false,
+    "publish": {
+      "provider": "generic",
+      "url": "https://github.com/ocaique73/point-ball/releases/latest/download/",
+      "channel": "latest"
+    },
     "directories": {
       "output": "dist"
     },
@@ -44,7 +50,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "Point Ball"
+      "shortcutName": "Point Ball",
+      "artifactName": "Point-Ball-Setup.${ext}"
     },
     "extraResources": [
       {

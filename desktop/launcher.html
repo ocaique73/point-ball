@@ -30,12 +30,18 @@
   .wide { grid-column: 1 / -1; }
   #netlink { width: min(430px, 100%); color: var(--gold); font-weight: 700; }
   .ok { color: #86efac; } .err { color: #fca5a5; }
+  #updbar { display: none; align-items: center; gap: 10px; background: #1b2a1f; border: 1px solid #2f5c3a; border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; font-size: 14px; }
+  #updbar.upd-new { background: #24361b; border-color: #4a7a2a; }
+  #updbar.upd-err { background: #331c1c; border-color: #6b2f2f; }
+  #updbar button { padding: 7px 14px; font-size: 13px; }
+  #upd-ver { color: var(--muted); font-size: 12px; margin-left: auto; }
 </style>
 </head>
 <body>
 <main>
   <h1>Point <b>Ball</b></h1>
   <div class="sub">Joga sozinho, ou com os amigos: um PC <b>hospeda</b> e os outros <b>entram</b> — na mesma rede (Wi-Fi/cabo) ou pela internet com um link.</div>
+  <div id="updbar"><span id="upd-txt">Procurando atualização...</span><button id="upd-btn" style="display:none"></button><span id="upd-ver"></span></div>
   <div class="grid">
     <section class="card">
       <h2>🏠 Hospedar / jogar sozinho</h2>
@@ -61,7 +67,7 @@
       <div class="row" id="netbox" style="display:none;margin-top:10px"><input id="netlink" readonly><button class="sec" id="netcopy">Copiar link</button><button id="netgo">Abrir o jogo</button></div>
     </section>
   </div>
-  <div class="modo muted">Versão do jogo: <label class="opt"><input type="radio" name="modo" value="3d" checked style="width:auto"> 3D</label><label class="opt"><input type="radio" name="modo" value="2d" style="width:auto"> 2D</label> · F11 = tela cheia · no jogo, Esc abre o menu (Multiplayer → criar/entrar na sala)</div>
+  <div class="modo muted">Versão do jogo: <label class="opt"><input type="radio" name="modo" value="3d" checked style="width:auto"> 3D</label><label class="opt"><input type="radio" name="modo" value="2d" style="width:auto"> 2D</label> · F11 = tela cheia · no jogo, Esc abre o menu (Multiplayer → criar/entrar na sala) · app <span id="app-ver">v...</span></div>
 </main>
 <script>
   const $ = (id) => document.getElementById(id);
@@ -91,6 +97,23 @@
   $('netcopy').onclick = () => { window.pbApp.copiar($('netlink').value); netSt('Link copiado!', 'ok'); };
   $('netgo').onclick = () => window.pbApp.hospedar(modo()); // o servidor já está ligado: só abre o jogo (Esc → Multiplayer → criar a sala)
   $('ip').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('join').click(); });
+  // atualização automática: o app já verifica sozinho ao abrir; aqui só mostra o status e os botões
+  let versaoAtual = '';
+  window.pbApp.versao().then((v) => { versaoAtual = v; $('upd-ver').textContent = 'v' + v; $('app-ver').textContent = 'v' + v; });
+  const updBar = $('updbar'), updTxt = $('upd-txt'), updBtn = $('upd-btn');
+  const mostraUpd = (cls, texto, botao) => {
+    updBar.style.display = 'flex'; updBar.className = cls || '';
+    updTxt.textContent = texto;
+    if (botao) { updBtn.style.display = ''; updBtn.textContent = botao.texto; updBtn.onclick = botao.clique; } else updBtn.style.display = 'none';
+  };
+  window.pbApp.aoUpdate((s) => {
+    if (s.etapa === 'verificando') mostraUpd('', 'Procurando atualização...');
+    else if (s.etapa === 'atualizado') { updBar.style.display = 'none'; } // já está na última: não precisa incomodar
+    else if (s.etapa === 'disponivel') mostraUpd('upd-new', `🆕 Versão v${s.versao} disponível!`, { texto: 'Baixar atualização', clique: () => { window.pbApp.baixarUpdate(); mostraUpd('upd-new', 'Baixando atualização... 0%'); } });
+    else if (s.etapa === 'baixando') mostraUpd('upd-new', `Baixando atualização... ${s.pct}%`);
+    else if (s.etapa === 'pronto') mostraUpd('upd-new', `✅ Versão v${s.versao} pronta!`, { texto: 'Reiniciar e atualizar', clique: () => window.pbApp.instalarUpdate() });
+    else if (s.etapa === 'erro') mostraUpd('upd-err', 'Não deu pra verificar atualização: ' + (s.msg || 'erro'), { texto: 'Tentar de novo', clique: () => { window.pbApp.verificarUpdate(); mostraUpd('', 'Procurando atualização...'); } });
+  });
   window.pbApp.aoAcharPartidas((lista) => {
     const el = $('list');
     if (!lista.length) { el.innerHTML = '<div class="muted">Nenhuma partida achada ainda. Peça pro amigo clicar em "Hospedar partida".</div>'; return; }
