@@ -27,6 +27,20 @@
   .it img { width: 100%; height: 100%; display: block; }
   .it b { position: absolute; right: 3px; bottom: 1px; font-size: 16px; color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; }
   .it span { position: absolute; left: 0; right: 0; top: -17px; text-align: center; font-size: 10px; color: var(--muted); white-space: nowrap; }
+  .it.sel { border-color: #ffd166; box-shadow: 0 0 10px #ffd166; background: rgba(255,209,102,.18); }
+  #cross { position: fixed; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; pointer-events: none; }
+  #cross::before, #cross::after { content: ''; position: absolute; background: #fff; box-shadow: 0 0 3px #000; }
+  #cross::before { left: 10px; top: 0; width: 2px; height: 22px; } #cross::after { top: 10px; left: 0; height: 2px; width: 22px; }
+  #cross.dot::before { top: 7px; height: 8px; } #cross.dot::after { left: 7px; width: 8px; }
+  #pwr { position: fixed; left: 50%; top: calc(50% + 30px); width: 120px; height: 12px; margin-left: -60px; border: 2px solid #fff; border-radius: 7px; background: rgba(0,0,0,.55); overflow: hidden; display: none; pointer-events: none; }
+  #pwr i { display: block; height: 100%; width: 0; background: linear-gradient(90deg,#4ade80,#facc15,#ef4444); }
+  #pwrl { position: fixed; left: 50%; top: calc(50% + 48px); transform: translateX(-50%); font-size: 12px; color: #fff; text-shadow: 0 0 3px #000; pointer-events: none; display: none; }
+  #pause { position: fixed; inset: 0; background: rgba(5,8,14,.72); z-index: 15; display: flex; align-items: center; justify-content: center; }
+  #pause .box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 26px; text-align: center; min-width: 260px; }
+  #pause button { display: block; width: 100%; margin-top: 10px; }
+  .it em { position: absolute; left: 4px; top: 2px; font-size: 11px; font-style: normal; color: #cbd5e1; text-shadow: 0 0 3px #000; }
+  .it.empty { opacity: .45; } .it.ex { width: 44px; height: 44px; margin-left: 8px; }
+  #items:empty::before { content: none; }
   .it.cd img { opacity: .35; } .it.cd b { color: #ffd28a; font-size: 14px; }
   .it.curse { border-color: #ef4444; animation: pulse .6s infinite alternate; }
   @keyframes pulse { to { background: rgba(239,68,68,.35); } }
@@ -54,14 +68,16 @@
 <body>
 <canvas id="view"></canvas>
 <div id="smokeov"></div>
+<div id="pause" class="hidden"><div class="box"><h1 style="font-size:24px">Pausado</h1><button class="acc" id="btn-resume">Continuar</button><button id="btn-menu">Voltar ao menu</button></div></div>
 <div id="hud" class="hidden">
   <div id="score" class="panel"></div>
   <div id="timer" class="panel"></div>
   <div id="mapwrap" class="panel"><canvas id="mini" width="150" height="150"></canvas></div>
   <div id="items" class="panel"></div>
+  <div id="cross"></div><div id="pwr"><i></i></div><div id="pwrl">solte para jogar</div>
   <div id="msg" class="panel"></div>
   <div id="toast" class="panel"></div>
-  <div id="help" class="panel"><b>WASD</b> andar · <b>Mouse</b> (clique pra travar) ou <b>Q/E</b> girar<br><b>Espaço</b> bomba (de novo em cima dela: pega, com a luva; solta pra jogar)<br><b>F</b> fumaça · <b>G</b> super pulo (se tiver o item) · <b>C</b> 1ª/3ª pessoa · <b>M</b> som · <b>Esc</b> menu</div>
+  <div id="help" class="panel"><b>WASD</b> andar · <b>Mouse</b> mirar (clique pra travar) · <b>Esc</b> pausa/menu<br><b>Botão esq.</b> plantar bomba · <b>Espaço</b> pular · <b>Espaço x2</b> super pulo (item) · <b>V</b> 1ª/3ª pessoa · <b>Z</b> zoom<br><b>Luva:</b> botão dir. pega a bomba → segure o esq. p/ força e solte; bomba plantada: dir. lança 2 casas (3s)<br><b>Chute:</b> segure <b>Shift</b> e ande na bomba · <b>4</b> fumaça na mão (esq. joga) · <b>1</b> bomba · <b>Tab</b> trocar câmera · <b>K</b> matar bots · <b>M</b> som</div>
 </div>
 <div id="menu">
   <div class="box">
@@ -74,6 +90,7 @@
         <label>Mapa</label><select id="map"></select>
         <div class="row"><div><label>Bots</label><select id="bots"><option value="0">0 (treino livre)</option><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option></select></div>
         <div><label>Vitórias pra ganhar</label><select id="rounds"><option>1</option><option>2</option><option selected>3</option><option>5</option></select></div></div>
+        <label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="spec" checked style="width:auto"> Assistir os outros jogadores depois de morrer</label>
         <div style="margin-top:12px"><button class="acc" id="btn-solo" style="width:100%">Jogar solo</button></div>
       </div>
       <div class="sec">

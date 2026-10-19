@@ -17,7 +17,7 @@ export const BM = {
   curseTime: 14,
   roundTime: 180, sudden: 120, hard: 240, ready: 3, endDelay: 3.5,
   wallH: 122, pillarH: 148,      // paredes bem mais altas que o personagem (64): não dá pra ver o corredor do lado
-  jumpCd: 15, jumpTime: 0.5, jumpCells: 2, // super pulo: pula 2 células (por cima de parede/bomba) e só de novo depois de 15 s
+  jumpCd: 15, lobCd: 3, lobCells: 2, throwMax: 6, superH: 170, jumpTime: 0.5, jumpCells: 2, // super pulo: pula 2 células (por cima de parede/bomba) e só de novo depois de 15 s
   beltSpeed: 110, windSpeed: 100, iceAccel: 2.2
 };
 // Mapas inspirados nos do Point Ball 3D. Cada um é 1/4 do mapa (8x8, espelhado nos outros 3):
@@ -112,7 +112,7 @@ export class BomberSim {
       Object.assign(p, {
         x: centerOf(cx), z: centerOf(cz), yaw: cx < this.N / 2 ? 0 : Math.PI, vx: 0, vz: 0, alive: true,
         maxBombs: BM.startBombs, range: BM.startRange, skate: false, glove: false, kick: false, smoke: 0,
-        curse: null, curseLeft: 0, curseCool: 0, carry: null, jumpItem: false, jumpCd: 0, jmp: null, jumpGuard: 0, portCool: 0, cvx: 0, cvz: 0, inv: 1.2, autoT: 0, lastIn: this.time, ai: null, corr: false, deadT: 0
+        curse: null, curseLeft: 0, curseCool: 0, carry: null, lobCd: 0, shift: false, jumpItem: false, jumpCd: 0, jmp: null, jumpGuard: 0, portCool: 0, cvx: 0, cvz: 0, inv: 1.2, autoT: 0, lastIn: this.time, ai: null, corr: false, deadT: 0
       });
     }
     this.events.push({ e: 'round', n: this.round });
@@ -208,7 +208,7 @@ export class BomberSim {
   startJump(p) {
     if (!p.alive || !p.jumpItem || p.jumpCd > 0 || p.jmp || this.phase !== 'play') return false;
     const [dx, dz] = this.snapDir(p.yaw), cx = cellOf(p.x), cz = cellOf(p.z), N = this.N; let tgt = null;
-    for (const k of [BM.jumpCells, BM.jumpCells + 1]) { const x = cx + dx * k, z = cz + dz * k; if (x > 0 && z > 0 && x < N - 1 && z < N - 1 && !this.solidCell(x, z) && !this.bombAtCell(x, z)) { tgt = [x, z]; break; } }
+    for (const k of [BM.jumpCells, BM.jumpCells + 1, BM.jumpCells + 2]) { const x = cx + dx * k, z = cz + dz * k; if (x > 0 && z > 0 && x < N - 1 && z < N - 1 && !this.solidCell(x, z) && !this.bombAtCell(x, z)) { tgt = [x, z]; break; } }
     if (!tgt) return false;
     p.jmp = { sx: p.x, sz: p.z, tx: centerOf(tgt[0]), tz: centerOf(tgt[1]), t: 0, T: BM.jumpTime }; p.jumpCd = BM.jumpCd; p.jumpGuard = 0.6; p.vx = p.vz = 0;
     this.events.push({ e: 'jump', pid: p.id }); return true;
@@ -233,7 +233,7 @@ export class BomberSim {
   }
   afterMove(p, dx, dz) {
     const len = Math.hypot(dx, dz);
-    if (len > 0.2 && p.kick) this.tryKick(p, dx, dz);
+    if (len > 0.2 && p.kick && p.shift) this.tryKick(p, dx, dz);
   }
   tryKick(p, dx, dz) {
     const horiz = Math.abs(dx) >= Math.abs(dz), sx = horiz ? Math.sign(dx) : 0, sz = horiz ? 0 : Math.sign(dz);
@@ -247,19 +247,45 @@ export class BomberSim {
   }
 
   // ---------- ações ----------
-  act(id, what) {
-    const p = this.players.get(id); if (!p || !p.alive || this.phase !== 'play') return;
+  act(id, what, arg) {
+    const p = this.players.get(id); if (!p) return;
+    if (what === 'killbots') { this.killBots(p); return; }
+    if (!p.alive || this.phase !== 'play') return;
     if (what === 'bomb') this.actBomb(p);
+    else if (what === 'grab') this.grabBomb(p);
+    else if (what === 'throw') { if (p.carry) this.throwBomb(p, 2 + Math.round(clamp(Number(arg) || 0, 0, 1) * (BM.throwMax - 2))); }
     else if (what === 'smoke') this.throwSmoke(p);
     else if (what === 'jump') this.startJump(p);
   }
+  // K: mata os bots. Se você já morreu, sobra 1 bot pra ganhar a rodada e a partida continua.
+  killBots(me) {
+    if (this.phase !== 'play') return;
+    const bots = [...this.players.values()].filter((q) => q.bot && q.alive); if (!bots.length) return;
+    if (!me.alive && !(bots.length === 1)) bots.splice(Math.floor(Math.random() * bots.length), 1); else if (!me.alive) return;
+    for (const q of bots) this.kill(q, null);
+  }
+  // mouse direito (com a luva): bomba plantada aqui -> lança com força mínima (recarga 3s); senão pega uma bomba nova na mão
+  grabBomb(p) {
+    if (!p.glove) return;
+    if (p.carry) { const b = this.bombs.find((x) => x.id === p.carry); const cx = cellOf(p.x), cz = cellOf(p.z); if (b && !this.bombAtCell(cx, cz)) { b.st = 'idle'; b.carrier = null; b.x = centerOf(cx); b.z = centerOf(cz); b.y = 0; p.carry = null; b.pass = new Set([p.id]); (p.pass || (p.pass = new Set())).add(b.id); this.events.push({ e: 'place', id: b.id, pid: p.id, cx, cz }); } return; }
+    const cx = cellOf(p.x), cz = cellOf(p.z), here = this.bombAtCell(cx, cz);
+    if (here) { if (here.st !== 'idle' || p.lobCd > 0) return; this.pickUp(p, here); this.throwBomb(p, BM.lobCells); p.lobCd = BM.lobCd; return; }
+    if (!this.canPlace(p) || this.solidCell(cx, cz)) return;
+    const b = { id: this.nextId++, o: p.id, x: p.x, z: p.z, y: BM.wallH, f: BM.fuse, r: this.rangeOf(p), st: 'carried', carrier: p.id, dx: 0, dz: 0, pass: new Set(), ft: null, ct: 0 };
+    this.bombs.push(b); p.carry = b.id; this.events.push({ e: 'pickup_bomb', pid: p.id, id: b.id });
+  }
   canPlace(p) { return p.alive && p.curse !== 'nobomb' && !p.carry && this.activeBombs(p) < p.maxBombs; }
   actBomb(p) {
-    if (p.carry) { this.throwBomb(p); return; }
+    if (p.carry) return;
     const cx = cellOf(p.x), cz = cellOf(p.z), here = this.bombAtCell(cx, cz);
-    if (here) { if (p.glove && here.st === 'idle') this.pickUp(p, here); return; }
+    if (here) return;
     if (!this.canPlace(p) || this.solidCell(cx, cz)) return;
+    // a bomba aparece na frente de quem planta; se a frente está bloqueada (parede/bloco/bomba), cai aqui e o jogador é empurrado pra trás
+    const [dx, dz] = this.snapDir(p.yaw), fx = cx + dx, fz = cz + dz;
+    if (fx > 0 && fz > 0 && fx < this.N - 1 && fz < this.N - 1 && !this.solidCell(fx, fz) && !this.bombAtCell(fx, fz)) { this.placeBomb(p, fx, fz); return; }
+    const bx = cx - dx, bz = cz - dz;
     this.placeBomb(p, cx, cz);
+    if (!this.solidCell(bx, bz) && !this.bombAtCell(bx, bz) && bx > 0 && bz > 0 && bx < this.N - 1 && bz < this.N - 1) { p.x = centerOf(bx); p.z = centerOf(bz); p.corr = true; p.cvx = p.cvz = 0; p.jumpGuard = 0.3; }
   }
   placeBomb(p, cx, cz) {
     const b = { id: this.nextId++, o: p.id, x: centerOf(cx), z: centerOf(cz), y: 0, f: BM.fuse, r: this.rangeOf(p), st: 'idle', dx: 0, dz: 0, pass: new Set(), ft: null };
@@ -274,11 +300,11 @@ export class BomberSim {
     this.events.push({ e: 'pickup_bomb', pid: p.id, id: b.id });
   }
   snapDir(yaw) { const c = Math.cos(yaw), s = Math.sin(yaw); return Math.abs(c) >= Math.abs(s) ? [Math.sign(c) || 1, 0] : [0, Math.sign(s) || 1]; }
-  throwBomb(p) {
+  throwBomb(p, cells) {
     const b = this.bombs.find((x) => x.id === p.carry); p.carry = null; if (!b) return;
     const [dx, dz] = this.snapDir(p.yaw), cx = cellOf(p.x), cz = cellOf(p.z);
     const N = this.N, free = (x, z) => x > 0 && z > 0 && x < N - 1 && z < N - 1 && !this.solidCell(x, z) && !this.bombAtCell(x, z);
-    const tc = this.mp.lowg ? 5 : BM.throwCells; let tx = clamp(cx + dx * tc, 1, N - 2), tz = clamp(cz + dz * tc, 1, N - 2), found = null;
+    const tc = Math.round((cells || BM.throwCells) * (this.mp.lowg ? 1.6 : 1)); let tx = clamp(cx + dx * tc, 1, N - 2), tz = clamp(cz + dz * tc, 1, N - 2), found = null;
     for (let x = tx, z = tz; x > 0 && z > 0 && x < N - 1 && z < N - 1; x += dx, z += dz) if (free(x, z)) { found = [x, z]; break; } // não achou: quica pra frente até uma célula livre
     if (!found) for (let x = tx - dx, z = tz - dz; x !== cx || z !== cz; x -= dx, z -= dz) if (free(x, z)) { found = [x, z]; break; }
     if (!found) found = [cx, cz];
@@ -315,7 +341,7 @@ export class BomberSim {
     const cx = cellOf(b.x), cz = cellOf(b.z), res = this.blast(cx, cz, b.r, b);
     for (const c of res.cells) {
       const f = this.fires.find((f2) => f2.cx === c.cx && f2.cz === c.cz);
-      if (f) { f.t = BM.fire; f.T = BM.fire; f.hz = false; if (c.k === 'c') f.k = 'c'; } else this.fires.push({ cx: c.cx, cz: c.cz, k: c.k, t: BM.fire, T: BM.fire });
+      if (f) { f.t = BM.fire; f.T = BM.fire; f.hz = false; f.o = b.o; if (c.k === 'c') f.k = 'c'; } else this.fires.push({ cx: c.cx, cz: c.cz, k: c.k, t: BM.fire, T: BM.fire, o: b.o });
       // item no chão queima (menos o que acabou de aparecer)
       for (let j = this.items.length - 1; j >= 0; j--) { const it = this.items[j]; if (it.cx === c.cx && it.cz === c.cz && this.time >= it.safe) { this.items.splice(j, 1); this.events.push({ e: 'item_burn', cx: c.cx, cz: c.cz }); } }
     }
@@ -367,7 +393,7 @@ export class BomberSim {
       if (!p.alive) continue;
       if (p.inv > 0) p.inv -= dt;
       if (p.curseCool > 0) p.curseCool -= dt;
-      if (p.jumpCd > 0) p.jumpCd -= dt;
+      if (p.jumpCd > 0) p.jumpCd -= dt; if (p.lobCd > 0) p.lobCd -= dt;
       if (p.portCool > 0) p.portCool -= dt;
       if (p.jmp) this.advanceJump(p, dt);
       this.portalCheck(p);
@@ -429,6 +455,7 @@ export class BomberSim {
       if (b.st === 'carried') {
         const c = this.players.get(b.carrier);
         if (c) { b.x = c.x; b.z = c.z; b.y = BM.wallH; }
+        b.ct = (b.ct || 0) + dt; if (c && b.ct > 2.6) { this.throwBomb(c, BM.throwMax); continue; }
         b.f -= dt; if (b.f <= 0 && c) b.f = 0.05; // não explode na mão: só quando ela largar... ou o carregador morrer
         continue;
       }
@@ -634,6 +661,25 @@ export class BomberSim {
     if (this.rt >= this.roundTime - (BM.roundTime - BM.sudden) - 3) for (let i = this.dropI; i < Math.min(this.spiral.length, this.dropI + 14); i++) set.add(this.idx(this.spiral[i][0], this.spiral[i][1]));
     return set;
   }
+  // célula -> daqui a quantos segundos vira fogo (0 = já está), contando reação em cadeia
+  dangerTimes(extra) {
+    const T = new Map(), put = (i, t) => { if (!T.has(i) || T.get(i) > t) T.set(i, t); };
+    for (const f of this.fires) put(this.idx(f.cx, f.cz), 0);
+    const bl = this.bombs.filter((b) => b.st === 'idle' || b.st === 'slide').map((b) => ({ b, t: Math.max(0, b.f) }));
+    if (extra) bl.push(extra);
+    for (let pass = 0; pass < bl.length + 1; pass++) {
+      let ch = false;
+      for (const e of bl) {
+        const r = this.blast(cellOf(e.b.x), cellOf(e.b.z), e.b.r, e.b);
+        for (const o of r.hit) { const oe = bl.find((q) => q.b === o); if (oe && oe.t > e.t + 0.05) { oe.t = e.t + 0.05; ch = true; } }
+      }
+      if (!ch) break;
+    }
+    for (const e of bl) for (const c of this.blast(cellOf(e.b.x), cellOf(e.b.z), e.b.r, e.b).cells) put(this.idx(c.cx, c.cz), e.t);
+    for (const s of this.strikes) if (s.w <= 3.4 || s.a < s.T) for (const c of this.strikeCells(s)) put(c, Math.max(0, s.w));
+    if (this.rt >= this.roundTime - (BM.roundTime - BM.sudden) - 3) for (let i = this.dropI; i < Math.min(this.spiral.length, this.dropI + 14); i++) put(this.idx(this.spiral[i][0], this.spiral[i][1]), 1.5);
+    return T;
+  }
   // busca em largura: devolve a lista de células até a primeira que satisfaz goal()
   bfs(sx, sz, goal, passable, maxLen) {
     const N = this.N, prev = new Int32Array(N * N).fill(-2), dist = new Int16Array(N * N), q = [this.idx(sx, sz)];
@@ -644,7 +690,7 @@ export class BomberSim {
       if (maxLen && dist[cur] >= maxLen) continue;
       for (const [dx, dz] of DIRS) {
         const nx = cx + dx, nz = cz + dz; if (nx < 0 || nz < 0 || nx >= N || nz >= N) continue;
-        const ni = this.idx(nx, nz); if (prev[ni] !== -2 || !passable(nx, nz)) continue;
+        const ni = this.idx(nx, nz); if (prev[ni] !== -2 || !passable(nx, nz, dist[cur] + 1)) continue;
         prev[ni] = cur; dist[ni] = dist[cur] + 1; q.push(ni);
       }
     }
@@ -652,21 +698,26 @@ export class BomberSim {
   }
   botThink(p, dt) {
     const ai = p.ai || (p.ai = { t: 0, path: [], cool: 0 });
+    p.shift = false;
     ai.t -= dt; ai.cool -= dt;
     const cx = cellOf(p.x), cz = cellOf(p.z);
     if (ai.t <= 0) {
       ai.t = 0.1 + Math.random() * 0.1;
-      const danger = this.dangerSet(1.5), here = danger.has(this.idx(cx, cz));
-      const solid = (x, z) => this.solidCell(x, z) || !!this.bombAtCell(x, z);
+      const T = this.dangerTimes(), danger = new Set(T.keys()), fireNow = new Set(this.fires.map((f) => this.idx(f.cx, f.cz))), here = danger.has(this.idx(cx, cz)) || this.overlapDanger(p, danger);
+      const solid = (x, z) => this.solidCell(x, z) || !!this.bombAtCell(x, z) || fireNow.has(this.idx(x, z));
+      const spd = this.speedOf(p), arrive = (d) => d * CELL / spd + 0.22;
+      const timeOk = (tm) => (x, z, d) => { if (solid(x, z)) return false; const t = tm.get(this.idx(x, z)); return t === undefined || arrive(d) < t; };
       if (here) {
-        ai.path = this.bfs(cx, cz, (x, z) => !danger.has(this.idx(x, z)), (x, z) => !solid(x, z), 12) || [];
+        const goalOk = ai.path.length && ai.mode === 'flee' && !danger.has(this.idx(...ai.path[ai.path.length - 1])) && ai.path.every(([x, z], k) => timeOk(T)(x, z, k + 1));
+        if (!goalOk) { ai.path = this.bfs(cx, cz, (x, z) => !danger.has(this.idx(x, z)), timeOk(T), 16) || this.bfs(cx, cz, (x, z) => !danger.has(this.idx(x, z)), (x, z) => !solid(x, z), 16) || []; }
+        ai.mode = 'flee';
       } else {
+        if (ai.mode === 'flee') { ai.mode = ''; ai.path = []; }
         let acted = false;
         if (ai.cool <= 0 && this.canPlace(p) && !this.bombAtCell(cx, cz) && this.botWantsBomb(p, cx, cz)) {
-          const b = this.blast(cx, cz, this.rangeOf(p)), unsafe = new Set(danger);
-          for (const c of b.cells) unsafe.add(this.idx(c.cx, c.cz));
-          const esc = this.bfs(cx, cz, (x, z) => !unsafe.has(this.idx(x, z)), (x, z) => !solid(x, z), 9);
-          if (esc && esc.length <= 8) { this.placeBomb(p, cx, cz); ai.path = esc; ai.cool = 0.5 + Math.random() * 0.8; acted = true; }
+          const mine = { b: { x: centerOf(cx), z: centerOf(cz), r: this.rangeOf(p) }, t: BM.fuse }, T2 = this.dangerTimes(mine), un = new Set(T2.keys());
+          const esc = this.bfs(cx, cz, (x, z) => !un.has(this.idx(x, z)), timeOk(T2), 9);
+          if (esc) { this.placeBomb(p, cx, cz); ai.path = esc; ai.mode = 'flee'; ai.cool = 0.5 + Math.random() * 0.8; acted = true; }
         }
         if (!acted) {
           const safe = (x, z) => !solid(x, z) && !danger.has(this.idx(x, z));
@@ -689,7 +740,15 @@ export class BomberSim {
     if (ai.path.length) {
       const [px, pz] = ai.path[0], dx = centerOf(px) - p.x, dz = centerOf(pz) - p.z, d = Math.hypot(dx, dz) || 1;
       p.yaw = Math.atan2(dz, dx); this.moveLocal(p, dx / d, dz / d, dt);
-    } else { p.vx = p.vz = 0; }
+    } else { // parado: vai pro centro da própria célula (não fica com o corpo metade em cima de uma célula perigosa)
+      const ox = centerOf(cx) - p.x, oz = centerOf(cz) - p.z, d = Math.hypot(ox, oz);
+      if (d > 6) { p.yaw = Math.atan2(oz, ox); this.moveLocal(p, ox / d, oz / d, dt); } else { p.vx = p.vz = 0; }
+    }
+  }
+  overlapDanger(p, danger) {
+    const cx = cellOf(p.x), cz = cellOf(p.z);
+    for (let z = cz - 1; z <= cz + 1; z++) for (let x = cx - 1; x <= cx + 1; x++) if (danger.has(this.idx(x, z)) && this.overlapsCell(p, x, z, 4)) return true;
+    return false;
   }
   itemWanted(p, it) {
     if (it.k === 'skate') return !p.skate; if (it.k === 'glove') return !p.glove; if (it.k === 'kick') return !p.kick;
@@ -710,7 +769,7 @@ export class BomberSim {
     for (const p of this.players.values()) {
       pl.push({ id: p.id, nm: p.name, sl: p.slot, bt: p.bot ? 1 : 0, ch: p.ch, x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10, yaw: Math.round(p.yaw * 100) / 100,
         vx: Math.round(p.vx), vz: Math.round(p.vz), al: p.alive ? 1 : 0, mb: p.maxBombs, rg: p.range, sk: p.skate ? 1 : 0, gl: p.glove ? 1 : 0, kk: p.kick ? 1 : 0, sm: p.smoke,
-        cu: p.curse, cl: p.curse ? Math.round(p.curseLeft * 10) / 10 : 0, cr: p.carry || 0, jp: p.jumpItem ? 1 : 0, jc: Math.round(Math.max(0, p.jumpCd) * 10) / 10, jm: p.jmp ? Math.round(p.jmp.t / p.jmp.T * 100) / 100 : -1, wn: p.wins, sp: p.inSmoke ? 1 : 0, iv: p.inv > 0 ? 1 : 0, dt: Math.round(p.deadT * 10) / 10, ab: this.activeBombs(p) });
+        cu: p.curse, cl: p.curse ? Math.round(p.curseLeft * 10) / 10 : 0, cr: p.carry || 0, jp: p.jumpItem ? 1 : 0, jc: Math.round(Math.max(0, p.jumpCd) * 10) / 10, lc: Math.round(Math.max(0, p.lobCd || 0) * 10) / 10, sh: p.kick && p.shift ? 1 : 0, jm: p.jmp ? Math.round(p.jmp.t / p.jmp.T * 100) / 100 : -1, wn: p.wins, sp: p.inSmoke ? 1 : 0, iv: p.inv > 0 ? 1 : 0, dt: Math.round(p.deadT * 10) / 10, ab: this.activeBombs(p) });
     }
     return {
       t: Math.round(this.time * 1000) / 1000, ph: this.phase, pt: Math.max(0, Math.round(this.phaseT * 10) / 10), rt: Math.round(this.rt * 10) / 10, rn: this.round, rl: this.roundTime, n: this.N, g: this.gridString(),

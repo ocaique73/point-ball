@@ -71,11 +71,14 @@ async function setupBomber(io) {
       const r = rooms.get(sock.data.bmRoom); if (!r || !r.sim || !d) return;
       const p = r.sim.players.get(sock.id); if (!p) return;
       const yaw = Number(d.yaw); if (Number.isFinite(yaw)) p.yaw = yaw;
+      p.shift = !!d.sh;
       r.sim.acceptPos(p, Number(d.x), Number(d.z), Number(d.dx) || 0, Number(d.dz) || 0);
     });
     sock.on('bm_act', (d) => {
       const r = rooms.get(sock.data.bmRoom); if (!r || !r.sim) return;
-      if (d && (d.a === 'bomb' || d.a === 'smoke')) r.sim.act(sock.id, d.a);
+      if (!d) return;
+      if (['bomb', 'grab', 'throw', 'smoke', 'jump'].includes(d.a)) r.sim.act(sock.id, d.a, d.c);
+      else if (d.a === 'killbots' && r.host === sock.id) r.sim.act(sock.id, 'killbots');
     });
     sock.on('bm_leave', () => leave(sock));
     sock.on('disconnect', () => leave(sock));
