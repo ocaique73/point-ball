@@ -268,8 +268,9 @@ export class BomberSim {
   grabBomb(p) {
     if (!p.glove) return;
     if (p.carry) { const b = this.bombs.find((x) => x.id === p.carry); const cx = cellOf(p.x), cz = cellOf(p.z); if (b && !this.bombAtCell(cx, cz)) { b.st = 'idle'; b.carrier = null; b.x = centerOf(cx); b.z = centerOf(cz); b.y = 0; p.carry = null; b.pass = new Set([p.id]); (p.pass || (p.pass = new Set())).add(b.id); this.events.push({ e: 'place', id: b.id, pid: p.id, cx, cz }); } return; }
-    const cx = cellOf(p.x), cz = cellOf(p.z), here = this.bombAtCell(cx, cz);
-    if (here) { if (here.st !== 'idle' || p.lobCd > 0) return; this.pickUp(p, here); this.throwBomb(p, BM.lobCells); p.lobCd = BM.lobCd; return; }
+    const cx = cellOf(p.x), cz = cellOf(p.z), [fdx, fdz] = this.snapDir(p.yaw);
+    const here = this.bombAtCell(cx, cz) || this.bombAtCell(cx + fdx, cz + fdz); // bomba plantada aqui ou logo na frente
+    if (here) { if (here.st !== 'idle' || p.lobCd > 0) return; const bx = cellOf(here.x), bz = cellOf(here.z); this.pickUp(p, here); this.throwBomb(p, BM.lobCells, bx, bz); p.lobCd = BM.lobCd; return; }
     if (!this.canPlace(p) || this.solidCell(cx, cz)) return;
     const b = { id: this.nextId++, o: p.id, x: p.x, z: p.z, y: BM.wallH, f: BM.fuse, r: this.rangeOf(p), st: 'carried', carrier: p.id, dx: 0, dz: 0, pass: new Set(), ft: null, ct: 0 };
     this.bombs.push(b); p.carry = b.id; this.events.push({ e: 'pickup_bomb', pid: p.id, id: b.id });
@@ -300,13 +301,13 @@ export class BomberSim {
     this.events.push({ e: 'pickup_bomb', pid: p.id, id: b.id });
   }
   snapDir(yaw) { const c = Math.cos(yaw), s = Math.sin(yaw); return Math.abs(c) >= Math.abs(s) ? [Math.sign(c) || 1, 0] : [0, Math.sign(s) || 1]; }
-  throwBomb(p, cells) {
+  throwBomb(p, cells, fromX, fromZ) {
     const b = this.bombs.find((x) => x.id === p.carry); p.carry = null; if (!b) return;
-    const [dx, dz] = this.snapDir(p.yaw), cx = cellOf(p.x), cz = cellOf(p.z);
+    const [dx, dz] = this.snapDir(p.yaw), cx = fromX != null ? fromX : cellOf(p.x), cz = fromZ != null ? fromZ : cellOf(p.z);
     const N = this.N, free = (x, z) => x > 0 && z > 0 && x < N - 1 && z < N - 1 && !this.solidCell(x, z) && !this.bombAtCell(x, z);
     const tc = Math.round((cells || BM.throwCells) * (this.mp.lowg ? 1.6 : 1)); let tx = clamp(cx + dx * tc, 1, N - 2), tz = clamp(cz + dz * tc, 1, N - 2), found = null;
-    for (let x = tx, z = tz; x > 0 && z > 0 && x < N - 1 && z < N - 1; x += dx, z += dz) if (free(x, z)) { found = [x, z]; break; } // não achou: quica pra frente até uma célula livre
-    if (!found) for (let x = tx - dx, z = tz - dz; x !== cx || z !== cz; x -= dx, z -= dz) if (free(x, z)) { found = [x, z]; break; }
+    let bestK = 99; // célula livre mais perto da distância pedida, andando na linha da mira
+    for (let k = 1; k <= N; k++) { const x = cx + dx * k, z = cz + dz * k; if (x <= 0 || z <= 0 || x >= N - 1 || z >= N - 1) break; if (free(x, z) && Math.abs(k - tc) < bestK) { bestK = Math.abs(k - tc); found = [x, z]; } }
     if (!found) found = [cx, cz];
     b.st = 'thrown'; b.carrier = null; b.ft = { sx: b.x, sz: b.z, tx: centerOf(found[0]), tz: centerOf(found[1]), t: 0, T: this.mp.lowg ? 0.9 : BM.throwTime };
     this.events.push({ e: 'throw', pid: p.id, id: b.id });
