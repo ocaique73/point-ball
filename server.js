@@ -420,6 +420,7 @@ io.on('connection', (socket) => {
 });
 
 setup3D(io, CONFIG).catch((e) => console.error('[3d] falha ao iniciar multiplayer 3D:', e));
+require('./serverBomber').setupBomber(io).catch((e) => console.error('[bomber] falha ao iniciar o modo Bomber:', e));
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Point Ball rodando em http://localhost:${PORT}`));

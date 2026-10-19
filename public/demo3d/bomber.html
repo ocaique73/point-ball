@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Point Ball · Bomber 3D</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Ccircle cx=%228%22 cy=%2210%22 r=%225%22 fill=%22%23222%22/%3E%3Crect x=%227%22 y=%222%22 width=%222%22 height=%224%22 fill=%22%23ff8a00%22/%3E%3C/svg%3E">
+<style>
+  :root { --panel: rgba(10,14,22,.82); --line: #2a3850; --acc: #ffb020; --text: #e8edf5; --muted: #93a3bb; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0b0f17; color: var(--text); font: 14px/1.35 "Segoe UI", system-ui, sans-serif; overflow: hidden; user-select: none; }
+  #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .panel { position: fixed; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+  #smokeov { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(150,155,165,.55), rgba(110,115,125,.9)); opacity: 0; transition: opacity .25s; }
+  #score { top: 10px; left: 10px; display: flex; flex-direction: column; gap: 4px; min-width: 190px; }
+  .pl { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .pl i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+  .pl.dead { opacity: .4; text-decoration: line-through; }
+  .pl b { margin-left: auto; color: var(--acc); }
+  #timer { top: 10px; left: 50%; transform: translateX(-50%); font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; text-align: center; }
+  #timer small { display: block; font-size: 11px; color: var(--muted); font-weight: 500; }
+  #mapwrap { top: 10px; right: 10px; padding: 6px; }
+  #mini { display: block; width: 150px; height: 150px; image-rendering: pixelated; }
+  #items { bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; padding: 8px; min-height: 76px; align-items: center; }
+  #items:empty::before { content: 'Nenhum item ainda — quebre blocos!'; color: var(--muted); padding: 0 10px; font-size: 12px; }
+  .it { position: relative; width: 58px; height: 58px; border: 1px solid #34476a; border-radius: 8px; background: rgba(255,255,255,.04); }
+  .it img { width: 100%; height: 100%; display: block; }
+  .it b { position: absolute; right: 3px; bottom: 1px; font-size: 16px; color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+  .it span { position: absolute; left: 0; right: 0; top: -17px; text-align: center; font-size: 10px; color: var(--muted); white-space: nowrap; }
+  .it.cd img { opacity: .35; } .it.cd b { color: #ffd28a; font-size: 14px; }
+  .it.curse { border-color: #ef4444; animation: pulse .6s infinite alternate; }
+  @keyframes pulse { to { background: rgba(239,68,68,.35); } }
+  #msg { top: 22%; left: 50%; transform: translateX(-50%); font-size: 54px; font-weight: 900; text-shadow: 0 3px 12px #000; pointer-events: none; text-align: center; background: none; border: 0; }
+  #msg small { display: block; font-size: 20px; font-weight: 600; color: var(--acc); }
+  #help { bottom: 12px; left: 12px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+  #help b { color: var(--text); }
+  #toast { bottom: 108px; left: 50%; transform: translateX(-50%); font-weight: 700; color: #fca5a5; display: none; }
+  #menu { position: fixed; inset: 0; background: radial-gradient(circle at 50% 30%, #1b2640, #090c14); display: flex; align-items: center; justify-content: center; z-index: 20; }
+  #menu .box { width: min(520px, 94vw); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; }
+  h1 { margin: 0 0 4px; font-size: 30px; } h1 span { color: var(--acc); }
+  p.sub { margin: 0 0 16px; color: var(--muted); }
+  label { display: block; margin: 10px 0 4px; color: var(--muted); font-size: 12px; }
+  input, select { width: 100%; background: #111a2b; color: var(--text); border: 1px solid #2d3d5a; border-radius: 8px; padding: 9px 10px; font: inherit; }
+  .row { display: flex; gap: 10px; } .row > * { flex: 1; }
+  button { background: #1d2a44; color: var(--text); border: 1px solid #355085; border-radius: 9px; padding: 10px 14px; font: inherit; font-weight: 700; cursor: pointer; }
+  button:hover { background: #26375a; } button.acc { background: var(--acc); color: #1d1300; border-color: var(--acc); }
+  button.acc:hover { background: #ffc45a; }
+  .sec { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+  #lobbyList div { padding: 6px 10px; margin: 4px 0; background: #111a2b; border-radius: 8px; }
+  #err { color: #fca5a5; min-height: 18px; margin-top: 8px; }
+  a { color: var(--acc); } .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="smokeov"></div>
+<div id="hud" class="hidden">
+  <div id="score" class="panel"></div>
+  <div id="timer" class="panel"></div>
+  <div id="mapwrap" class="panel"><canvas id="mini" width="150" height="150"></canvas></div>
+  <div id="items" class="panel"></div>
+  <div id="msg" class="panel"></div>
+  <div id="toast" class="panel"></div>
+  <div id="help" class="panel"><b>WASD</b> andar · <b>Mouse</b> (clique pra travar) ou <b>Q/E</b> girar<br><b>Espaço</b> bomba (de novo em cima dela: pega, com a luva; solta pra jogar)<br><b>F</b> fumaça · <b>G</b> super pulo (se tiver o item) · <b>C</b> 1ª/3ª pessoa · <b>M</b> som · <b>Esc</b> menu</div>
+</div>
+<div id="menu">
+  <div class="box">
+    <h1>Point Ball <span>Bomber 3D</span></h1>
+    <p class="sub">De 1 a 4 jogadores, cada um num canto. Quebre blocos, pegue itens e exploda os outros.</p>
+    <div id="m-main">
+      <label>Seu nome</label><input id="name" maxlength="16" value="Jogador">
+      <div class="sec">
+        <b>Solo contra bots</b>
+        <label>Mapa</label><select id="map"></select>
+        <div class="row"><div><label>Bots</label><select id="bots"><option value="0">0 (treino livre)</option><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option></select></div>
+        <div><label>Vitórias pra ganhar</label><select id="rounds"><option>1</option><option>2</option><option selected>3</option><option>5</option></select></div></div>
+        <div style="margin-top:12px"><button class="acc" id="btn-solo" style="width:100%">Jogar solo</button></div>
+      </div>
+      <div class="sec">
+        <b>Online / LAN</b>
+        <label>Sala (até 5 letras ou números)</label>
+        <div class="row"><input id="room" maxlength="5" value="BOMB"><button id="btn-online">Entrar / criar</button></div>
+      </div>
+    </div>
+    <div id="m-lobby" class="hidden">
+      <b>Sala <span id="lobbyRoom"></span></b>
+      <div id="lobbyList"></div>
+      <div id="hostOpts" class="hidden"><label>Mapa</label><select id="lmap"></select><div class="row">
+        <div><label>Bots pra completar</label><select id="lbots"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></div>
+        <div><label>Vitórias pra ganhar</label><select id="lrounds"><option>1</option><option>2</option><option selected>3</option><option>5</option></select></div>
+      </div></div>
+      <div class="row" style="margin-top:12px"><button id="btn-start" class="acc hidden">Começar</button><button id="btn-leave">Sair</button></div>
+      <p class="sub" id="lobbyWait" style="margin-top:10px">Esperando o dono da sala começar…</p>
+    </div>
+    <div id="err"></div>
+    <p class="sub" style="margin:10px 0 0;font-size:12px"><a href="/demo3d/">← voltar pro 3D</a></p>
+  </div>
+</div>
+<script src="/socket.io/socket.io.js"></script>
+<script type="importmap">{ "imports": { "three": "/vendor/three/three.module.js", "three/addons/": "/vendor/three-addons/" } }</script>
+<script type="module" src="/demo3d/bomber.js"></script>
+</body>
+</html>
