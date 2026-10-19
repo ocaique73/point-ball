@@ -20,7 +20,7 @@
   #timer { top: 10px; left: 50%; transform: translateX(-50%); font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; text-align: center; }
   #timer small { display: block; font-size: 11px; color: var(--muted); font-weight: 500; }
   #mapwrap { top: 10px; right: 10px; padding: 6px; }
-  #mini { display: block; width: 150px; height: 150px; image-rendering: pixelated; }
+  #mini { display: block; width: 190px; height: 190px; image-rendering: pixelated; }
   #items { bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; padding: 8px; min-height: 76px; align-items: center; }
   #items:empty::before { content: 'Nenhum item ainda — quebre blocos!'; color: var(--muted); padding: 0 10px; font-size: 12px; }
   .it { position: relative; width: 58px; height: 58px; border: 1px solid #34476a; border-radius: 8px; background: rgba(255,255,255,.04); }
@@ -72,12 +72,12 @@
 <div id="hud" class="hidden">
   <div id="score" class="panel"></div>
   <div id="timer" class="panel"></div>
-  <div id="mapwrap" class="panel"><canvas id="mini" width="150" height="150"></canvas></div>
+  <div id="mapwrap" class="panel"><canvas id="mini" width="190" height="190"></canvas></div>
   <div id="items" class="panel"></div>
   <div id="cross"></div><div id="pwr"><i></i></div><div id="pwrl">solte para jogar</div>
   <div id="msg" class="panel"></div>
   <div id="toast" class="panel"></div>
-  <div id="help" class="panel"><b>WASD</b> andar · <b>Mouse</b> mirar (clique pra travar) · <b>Esc</b> pausa/menu<br><b>Botão esq.</b> plantar bomba · <b>Espaço</b> pular · <b>Espaço x2</b> super pulo (item) · <b>V</b> 1ª/3ª pessoa · <b>Z</b> zoom<br><b>Luva:</b> botão dir. pega a bomba → segure o esq. p/ força e solte; bomba plantada: dir. lança 2 casas (3s)<br><b>Chute:</b> segure <b>Shift</b> e ande na bomba · <b>4</b> fumaça na mão (esq. joga) · <b>1</b> bomba · <b>Tab</b> trocar câmera · <b>K</b> matar bots · <b>M</b> som</div>
+  <div id="help" class="panel"><b>WASD</b> andar · <b>Mouse</b> mirar (clique pra travar) · <b>Esc</b> pausa/menu<br><b>Botão esq.</b> plantar bomba (modo Arremessar: segure p/ força) · <b>Espaço</b> pular · <b>Espaço x2</b> super pulo (item) · <b>V</b> 1ª/3ª pessoa · <b>Z</b> zoom<br><b>Luva:</b> botão dir. pega a bomba → segure o esq. p/ força e solte; bomba plantada: dir. lança 2 casas (3s)<br><b>Chute:</b> segure <b>Shift</b> e ande na bomba · <b>4</b> fumaça na mão (esq. joga) · <b>1</b> bomba · <b>Tab</b> trocar câmera · <b>K</b> matar bots · <b>M</b> som</div>
 </div>
 <div id="menu">
   <div class="box">
@@ -91,6 +91,7 @@
         <div class="row"><div><label>Bots</label><select id="bots"><option value="0">0 (treino livre)</option><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option></select></div>
         <div><label>Vitórias pra ganhar</label><select id="rounds"><option>1</option><option>2</option><option selected>3</option><option>5</option></select></div></div>
         <label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="spec" checked style="width:auto"> Assistir os outros jogadores depois de morrer</label>
+        <label>Bombas</label><select id="tmode"><option value="0">Plantar (clássico)</option><option value="1">Arremessar (segure o botão esq. p/ força)</option></select>
         <div style="margin-top:12px"><button class="acc" id="btn-solo" style="width:100%">Jogar solo</button></div>
       </div>
       <div class="sec">
@@ -102,7 +103,7 @@
     <div id="m-lobby" class="hidden">
       <b>Sala <span id="lobbyRoom"></span></b>
       <div id="lobbyList"></div>
-      <div id="hostOpts" class="hidden"><label>Mapa</label><select id="lmap"></select><div class="row">
+      <div id="hostOpts" class="hidden"><label>Mapa</label><select id="lmap"></select><label>Bombas</label><select id="ltmode"><option value="0">Plantar (clássico)</option><option value="1">Arremessar</option></select><div class="row">
         <div><label>Bots pra completar</label><select id="lbots"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></div>
         <div><label>Vitórias pra ganhar</label><select id="lrounds"><option>1</option><option>2</option><option selected>3</option><option>5</option></select></div>
       </div></div>

@@ -135,6 +135,12 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0x182036); scene.fog = new THREE.Fog(0x182036, 600, 2200);
 const camera = new THREE.PerspectiveCamera(70, 1, 3, 4000);
 const hemi = new THREE.HemisphereLight(0xdfe9ff, 0x3a3250, 1.05); scene.add(hemi);
+// mãozinhas da 1ª pessoa: ficam presas na câmera (sobem quando empurra/segura bomba, balançam andando)
+const fpHands = new THREE.Group(), handMat = new THREE.MeshStandardMaterial({ color: 0x8a5a44, roughness: 0.8 }), sleeveMat = new THREE.MeshStandardMaterial({ color: 0x2f6b4a, roughness: 0.9 });
+for (const sd of [-1, 1]) {
+  const h = new THREE.Group(), fist = new THREE.Mesh(new THREE.BoxGeometry(5.5, 5, 6.5), handMat), arm = new THREE.Mesh(new THREE.BoxGeometry(5, 4.6, 22), sleeveMat); arm.position.set(0, 0, 14); fist.castShadow = false; h.add(fist, arm); h.userData.sd = sd; fpHands.add(h);
+}
+fpHands.visible = false; scene.add(camera); camera.add(fpHands);
 const sun = new THREE.DirectionalLight(0xfff1d6, 1.7); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
 { const c = sun.shadow.camera; c.left = -950; c.right = 950; c.top = 950; c.bottom = -950; c.near = 100; c.far = 3000; sun.shadow.bias = -0.0006; }
 scene.add(sun, sun.target);
@@ -289,6 +295,7 @@ class Avatar {
       }
     });
     this.root.add(this.model);
+    this.hideFp = []; this.model.traverse((o) => { if (o.name === 'Rogue_Head_Hooded' || o.name === 'Rogue_Cape') this.hideFp.push(o); });
     this.arms = []; this.model.traverse((o) => { if (/^upperarm[._]?[lr]$/i.test(o.name)) this.arms.push(o); });
     let hs = null; this.model.traverse((o) => { if (/^handslot[._]?r$/i.test(o.name)) hs = o; }); this.smk = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), new THREE.MeshStandardMaterial({ color: 0x9aa3b0, roughness: 1 })); this.smk.visible = false; if (hs) hs.add(this.smk);
     this.label = textSprite(p.nm, SLOT_CSS[p.sl % 4]); this.label.position.y = CHAR_H + 26; this.root.add(this.label);
@@ -325,6 +332,7 @@ class Avatar {
       this.mixer.update(dt); return;
     }
     if (this.dead) { this.dead = false; this.curName = ''; this.root.visible = true; this.ring.visible = this.label.visible = true; }
+    this.ring.visible = !v.fpv;
     if (now >= this.oneUntil) {
       if (this.curName.endsWith('#')) this.curName = '';
       if (v.winner) this.play('Cheer');
@@ -339,6 +347,7 @@ class Avatar {
     this.label.visible = !isMe && v.cu !== 'invisible'; this.skull.visible = !!v.cu; if (v.cu) this.skull.position.y = CHAR_H + 52 + Math.sin(now / 120) * 3;
     const em = v.cu ? 0.35 + 0.3 * Math.sin(now / 90) : 0, c = v.cu ? 0x8a1fd0 : 0x000000; for (const m of this.mats) { m.emissive.setHex(c); m.emissiveIntensity = em; }
     this.mixer.update(dt);
+    for (const m of this.hideFp) m.visible = !v.fpv; // 1ª pessoa: sem a cabeça/capuz na frente da câmera, só os braços
     if (v.sh) for (const b of this.arms) { b.rotation.x += ARM_PUSH[0]; b.rotation.y += ARM_PUSH[1]; b.rotation.z += ARM_PUSH[2]; } // empurrando: braços pra frente
   }
   remove() { scene.remove(this.root); }
@@ -374,7 +383,7 @@ function updateBombs(snap, now, dt) {
     }
     o.g.position.set(b.x, y, b.z);
     const k = clamp((0.5 - frac) / 0.5, 0, 1), pulse = 1 + 0.07 * k * Math.sin(now / (110 - 60 * k)); // quanto mais perto de estourar, mais vermelha e mais rápido pulsa
-    o.g.scale.set(pulse / Math.sqrt(sq), pulse * sq, pulse / Math.sqrt(sq));
+    o.g.scale.set(0.7 * pulse / Math.sqrt(sq), 0.7 * pulse * sq, 0.7 * pulse / Math.sqrt(sq)); // bomba 30% menor
     o.mat.emissiveIntensity = k * (0.8 + 0.4 * Math.sin(now / (90 - 50 * k)));
     o.mat.color.setRGB(0.07 + 0.35 * k, 0.08 * (1 - k), 0.11 * (1 - k));
     const L = 6 + 40 * frac; o.fuse.scale.y = L; o.fuse.position.y = L / 2; o.spark.position.y = L + 2; o.spark.scale.setScalar(24 + Math.random() * 18 + 14 * k); o.spark.visible = frac > 0.005;
@@ -621,6 +630,7 @@ function onEvents(evs, now) {
       case 'storm': SFX.wind(); toast(e.k === 'sand' ? '🏜 Tempestade de areia!' : '❄ Tempestade de neve!'); break;
       case 'portal': SFX.zap([e.x, e.z]); SFX.zap([e.fx, e.fz]); emit(e.fx, 30, e.fz, 14, '#bfe0ff', 130, 0.6, 20); emit(e.x, 30, e.z, 14, '#ffd0a0', 130, 0.6, 20); break;
       case 'jump': SFX.boing(ppos); if (av) av.shot('Jump_Full_Short', (CL.Jump_Full_Short ? CL.Jump_Full_Short.duration : 1) / 0.5, now); if (pv) emit(pv.x, 6, pv.z, 8, '#d8d2c0', 70, 0.4, 0); break;
+      case 'hzhit': SFX.thud(ppos); if (pv) emit(pv.x, 40, pv.z, 16, '#ffe0a0', 150, 0.5, 100); if (e.pid === V.meId) { toast('Você foi atingido pelo evento do mapa!'); V.shake = Math.max(V.shake, 12); } break;
       case 'jland': if (pv) { emit(pv.x, 6, pv.z, 8, '#d8d2c0', 80, 0.4, 0); SFX.thud(ppos); } break;
       case 'round': V.avatars.forEach((a) => a.remove()); V.avatars.clear(); break;
     }
@@ -662,11 +672,11 @@ function updateHud(snap) {
   V.lastPhase = snap.ph;
 }
 function drawMini(snap) {
-  const N = snap.n, s = 150 / N, now = performance.now(); mini.clearRect(0, 0, 150, 150);
+  const N = snap.n, MW = 190, s = MW / N, now = performance.now(); mini.clearRect(0, 0, MW, MW);
   for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) { const g = snap.g.charCodeAt(z * N + x) - 48; mini.fillStyle = g === 1 ? '#56607e' : g === 2 ? '#c4713a' : '#2f6b3a'; mini.fillRect(x * s, z * s, s + 0.5, s + 0.5); }
   const mpd = BOMBER_MAPS[snap.mp]; if (mpd && mpd.portals) mpd.portals.forEach((pr, i) => { mini.fillStyle = i ? '#ff9a2f' : '#39a0ff'; for (const [x, z] of [[pr[0], pr[1]], [pr[2], pr[3]]]) { mini.beginPath(); mini.arc((x + 0.5) * s, (z + 0.5) * s, s * (snap.po ? 0.5 : 0.25), 0, 7); mini.fill(); } });
   mini.fillStyle = 'rgba(255,40,20,.45)'; // eventos do mapa
-  for (const h of snap.hz) { if (h.w <= 0 && h.k !== 'fire') continue; if (h.k === 'train' || h.k === 'wave') { if (h.ax === 'z') mini.fillRect(h.lo / CELL * s, s, (h.hi - h.lo) / CELL * s, 150 - 2 * s); else mini.fillRect(s, h.lo / CELL * s, 150 - 2 * s, (h.hi - h.lo) / CELL * s); } else if (h.k === 'fire') { if (h.ax === 'x') mini.fillRect(s, h.idx * s, 150 - 2 * s, s); else mini.fillRect(h.idx * s, s, s, 150 - 2 * s); } else if (h.k === 'meteor') mini.fillRect((h.cx - 1) * s, (h.cz - 1) * s, 3 * s, 3 * s); else if (h.k === 'lava') mini.fillRect(h.cx * s, h.cz * s, s, s); else if (h.k === 'ball') { mini.beginPath(); mini.arc(75, 75, h.R / CELL * s, 0, 7); mini.lineWidth = s * 1.4; mini.strokeStyle = 'rgba(255,40,20,.45)'; mini.stroke(); } }
+  for (const h of snap.hz) { if (h.w <= 0 && h.k !== 'fire') continue; if (h.k === 'train' || h.k === 'wave') { if (h.ax === 'z') mini.fillRect(h.lo / CELL * s, s, (h.hi - h.lo) / CELL * s, MW - 2 * s); else mini.fillRect(s, h.lo / CELL * s, MW - 2 * s, (h.hi - h.lo) / CELL * s); } else if (h.k === 'fire') { if (h.ax === 'x') mini.fillRect(s, h.idx * s, MW - 2 * s, s); else mini.fillRect(h.idx * s, s, s, MW - 2 * s); } else if (h.k === 'meteor') mini.fillRect((h.cx - 1) * s, (h.cz - 1) * s, 3 * s, 3 * s); else if (h.k === 'lava') mini.fillRect(h.cx * s, h.cz * s, s, s); else if (h.k === 'ball') { mini.beginPath(); mini.arc(MW / 2, MW / 2, h.R / CELL * s, 0, 7); mini.lineWidth = s * 1.4; mini.strokeStyle = 'rgba(255,40,20,.45)'; mini.stroke(); } }
   const mm = V.mm; mm.bombs = mm.bombs.filter((b) => now - b.t < 2500); mm.booms = mm.booms.filter((b) => now - b.t < 1300); mm.deaths = mm.deaths.filter((d) => now - d.t < 4000);
   for (const b of mm.booms) { mini.fillStyle = `rgba(255,170,40,${0.9 * (1 - (now - b.t) / 1300)})`; for (const c of b.cells) mini.fillRect(c[0] * s, c[1] * s, s, s); }
   for (const b of mm.bombs) { mini.fillStyle = '#000'; mini.beginPath(); mini.arc((b.cx + 0.5) * s, (b.cz + 0.5) * s, s * 0.38, 0, 7); mini.fill(); mini.strokeStyle = '#ff5030'; mini.lineWidth = 1; mini.stroke(); }
@@ -712,6 +722,7 @@ addEventListener('mousedown', (e) => {
   if (e.button === 0) {
     if (V.hand === 'smoke' && mp.sm > 0) { act('smoke'); if (mp.sm <= 1) V.hand = 'bomb'; }
     else if (mp.cr) V.chgT = performance.now();
+    else if (V.throwMode) { act('grab'); V.chgT = performance.now(); }
     else act('bomb');
   } else if (e.button === 2) { if (mp.gl) act('grab'); else V.zoomM = true; }
 });
@@ -748,7 +759,7 @@ function updateCamera(snap, dt, now) {
   if (!alive && V.specTarget && V.vis.get(V.specTarget)) { tv = V.vis.get(V.specTarget); yaw = tv.yaw; }
   if (!tv) return;
   const cy = Math.cos(yaw), sy = Math.sin(yaw), P = V.pitch, hy = tv.y || 0, cp = Math.cos(P), spn = Math.sin(P);
-  if (V.fp) { camera.position.set(tv.x + cy * 10, 58 + hy, tv.z + sy * 10); camera.lookAt(camera.position.x + cy * cp * 200, camera.position.y + spn * 200, camera.position.z + sy * cp * 200); }
+  if (V.fp) { camera.position.set(tv.x + cy * 6, 54 + hy, tv.z + sy * 6); camera.lookAt(camera.position.x + cy * cp * 200, camera.position.y + spn * 200, camera.position.z + sy * cp * 200); }
   else {
     // terceira pessoa baixa: a câmera fica abaixo do topo das paredes (122) e para antes de entrar em parede
     let d = 135; const solid = (x, z) => { const c = V.mirror ? V.mirror.cell(cellOf(x), cellOf(z)) : V.sim.cell(cellOf(x), cellOf(z)); return c !== 0; };
@@ -756,8 +767,17 @@ function updateCamera(snap, dt, now) {
     camera.position.set(tv.x - cy * d, Math.min(126, 94 + Math.max(0, 115 - d) * 0.35) + hy * 0.8, tv.z - sy * d); camera.lookAt(tv.x + cy * 70, 36 + hy * 0.5 + spn * 150, tv.z + sy * 70);
   }
   if (V.shake > 0.1) { camera.position.x += (Math.random() - 0.5) * V.shake; camera.position.y += (Math.random() - 0.5) * V.shake; V.shake *= Math.exp(-dt * 7); }
+  { // mãozinhas (só na 1ª pessoa, vivo)
+    const show = V.fp && alive; fpHands.visible = show;
+    if (show) {
+      const mp = myState(), sp = Math.hypot(me.vx || 0, me.vz || 0) / BM.speed, bob = Math.sin(now / 130) * 0.8 * Math.min(1, sp), carry = mp && mp.cr, push = V.keys.ShiftLeft || V.keys.ShiftRight, smoke = V.hand === 'smoke';
+      fpHands.children.forEach((h) => { const sd = h.userData.sd, up = carry ? 1 : push ? 0.5 : 0, inn = push || carry ? 0.55 : 1;
+        h.position.set(sd * 11 * inn, -11 + 7 * up + bob * sd, -17 - 4 * up); h.rotation.set(0.15 - 0.35 * up, -sd * (push || carry ? 0.1 : 0.25), 0); });
+      if (smoke) fpHands.children[1].position.y += 2;
+    }
+  }
   V.zoomK += ((V.zoomM || V.keys.KeyZ ? 1 : 0) - V.zoomK) * Math.min(1, dt * 12);
-  const base = V.fp ? 80 : 68, fov = base - V.zoomK * (base - 38); if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
+  const base = V.fp ? 92 : 76, fov = base - V.zoomK * (base - 38); if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
 }
 
 // ================= loop =================
@@ -775,7 +795,7 @@ function frame(t) {
   const turn = (V.keys.KeyE || V.keys.ArrowRight ? 1 : 0) - (V.keys.KeyQ || V.keys.ArrowLeft ? 1 : 0); if (mst && mst.al) V.yaw += turn * 2.4 * dt;
   const alive0 = !mst || mst.al; const [dx, dz] = alive0 ? inputDir() : [0, 0];
   if (V.hopT >= 0) { V.hopT += dt; if (V.hopT > 0.42) V.hopT = -1; }
-  if (V.chgT > 0 && (!mst || !mst.cr || !mst.al)) V.chgT = 0;
+  if (V.chgT > 0 && (!mst || !mst.al || (!mst.cr && performance.now() - V.chgT > 600))) V.chgT = 0;
   if (V.chgT > 0 && performance.now() - V.chgT > 1300) releaseCharge();
   if (V.hand === 'smoke' && (!mst || mst.sm <= 0 || !mst.al)) V.hand = 'bomb';
   let snap;
@@ -794,7 +814,7 @@ function frame(t) {
       sendAcc += dt; if (sendAcc >= 1 / 30) { sendAcc = 0; V.socket.emit('bm_in', { x: m.x, z: m.z, dx: V.mirror.phase === 'play' ? dx : 0, dz: V.mirror.phase === 'play' ? dz : 0, yaw: V.yaw, sh: shiftD ? 1 : 0 }); }
     }
   }
-  V.snap = snap; buildMap(snap);
+  V.snap = snap; V.throwMode = !!snap.tm; buildMap(snap);
   // posições visuais (suaviza os outros jogadores) e criação dos bonecos
   for (const p of snap.p) {
     let v = V.vis.get(p.id);
@@ -803,7 +823,7 @@ function frame(t) {
     if (mine && !V.solo) { const m = V.mirror.players.get(V.meId); v.x = m.x; v.z = m.z; v.yaw = V.yaw; v.vx = m.vx; v.vz = m.vz; }
     else if (mine) { v.x = p.x; v.z = p.z; v.yaw = V.yaw; v.vx = p.vx; v.vz = p.vz; }
     else { const k = V.solo ? 1 : 1 - Math.exp(-dt * 16); if (Math.hypot(p.x - v.x, p.z - v.z) > 150) { v.x = p.x; v.z = p.z; } v.x += (p.x - v.x) * k; v.z += (p.z - v.z) * k; let dy = p.yaw - v.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); v.yaw += dy * Math.min(1, dt * 14); v.vx = p.vx; v.vz = p.vz; }
-    Object.assign(v, { jm: mine && !V.solo ? (V.mirror.players.get(V.meId).jmp ? V.mirror.players.get(V.meId).jmp.t / V.mirror.players.get(V.meId).jmp.T : -1) : p.jm, al: p.al, hy: mine && V.hopT >= 0 ? Math.sin(V.hopT / 0.42 * Math.PI) * 24 : 0, sh: mine ? (shiftD && p.kk ? 1 : 0) : p.sh, hand: mine && V.hand === 'smoke', cu: p.cu, iv: p.iv, dt: p.dt, winner: snap.ph === 'roundEnd' && snap.w === p.id });
+    Object.assign(v, { jm: mine && !V.solo ? (V.mirror.players.get(V.meId).jmp ? V.mirror.players.get(V.meId).jmp.t / V.mirror.players.get(V.meId).jmp.T : -1) : p.jm, al: p.al, hy: mine && V.hopT >= 0 ? Math.sin(V.hopT / 0.42 * Math.PI) * 40 : 0, sh: mine ? (shiftD && p.kk ? 1 : 0) : p.sh, fpv: mine && V.fp && !!p.al, hand: mine && V.hand === 'smoke', cu: p.cu, iv: p.iv, dt: p.dt, winner: snap.ph === 'roundEnd' && snap.w === p.id });
     let a = V.avatars.get(p.id); if (!a) { a = new Avatar(p); V.avatars.set(p.id, a); }
     a.update(v, dt, now, mine);
     // passos (os dos outros jogadores dá pra ouvir mesmo atrás da parede)
@@ -814,14 +834,16 @@ function frame(t) {
   if (mp && !mp.al) { const alv = snap.p.filter((p) => p.al && p.id !== V.meId); if (!V.specOn || !alv.length) V.specTarget = null; else if (!alv.some((p) => p.id === V.specTarget)) V.specTarget = alv[0].id; } else V.specTarget = null;
   if (V.solo && snap.ph === 'matchEnd') { V.endT += dt; if (V.endT > 6) { toMenu(); return; } }
   V.me = V.vis.get(V.meId) ? Object.assign(V.vis.get(V.meId), { al: mp ? mp.al : 1 }) : null;
+  { const t = V.specTarget && V.vis.get(V.specTarget) || V.me; if (t) { sun.target.position.set(t.x, 0, t.z); sun.position.set(t.x - 500, 1500, t.z + 700); sun.target.updateMatrixWorld(); } } // a sombra acompanha quem está sendo visto (mapa grande)
   updateBombs(snap, now, dt); updateFires(snap); updateItems(snap, now); updateSmokes(snap, now); updateHz(snap, now, dt); updateDecor(snap, now, dt); updateEnv(snap, dt, now);
   // marcador de onde a bomba / fumaça vai cair + barra de força
   const cgc = V.chgT > 0 ? clamp((performance.now() - V.chgT) / 1200, 0, 1) : 0;
   const showAim = mp && mp.al && (mp.cr || (V.hand === 'smoke' && mp.sm > 0));
   if (showAim) { if (!V.aim) { V.aim = new THREE.Mesh(new THREE.RingGeometry(26, 40, 4, 1, Math.PI / 4), new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0.8, side: THREE.DoubleSide })); V.aim.rotation.x = -Math.PI / 2; V.aim.position.y = 2; scene.add(V.aim); }
-    const c = Math.cos(V.yaw), s = Math.sin(V.yaw), dxn = Math.abs(c) >= Math.abs(s) ? Math.sign(c) : 0, dzn = dxn ? 0 : Math.sign(s), N = snap.n;
-    const lg = BOMBER_MAPS[snap.mp] && BOMBER_MAPS[snap.mp].lowg ? 1.6 : 1, tcs = mp.cr ? Math.round((2 + Math.round(cgc * (BM.throwMax - 2))) * lg) : BM.smoke.dist;
-    V.aim.visible = true; V.aim.position.x = centerOf(clamp(cellOf(V.me.x) + dxn * tcs, 1, N - 2)); V.aim.position.z = centerOf(clamp(cellOf(V.me.z) + dzn * tcs, 1, N - 2)); V.aim.rotation.z = now / 400;
+    const c = Math.cos(V.yaw), s = Math.sin(V.yaw), N = snap.n;
+    const lg = BOMBER_MAPS[snap.mp] && BOMBER_MAPS[snap.mp].lowg ? 1.6 : 1, tcs = mp.cr ? Math.round((2 + Math.round(cgc * (BM.throwMax - 2))) * lg) : BM.smoke.dist, dxn = Math.abs(c) >= Math.abs(s) ? Math.sign(c) : 0, dzn = dxn ? 0 : Math.sign(s);
+    const aimx = mp.cr ? clamp(cellOf(centerOf(cellOf(V.me.x)) + c * tcs * CELL), 1, N - 2) : clamp(cellOf(V.me.x) + dxn * tcs, 1, N - 2), aimz = mp.cr ? clamp(cellOf(centerOf(cellOf(V.me.z)) + s * tcs * CELL), 1, N - 2) : clamp(cellOf(V.me.z) + dzn * tcs, 1, N - 2);
+    V.aim.visible = true; V.aim.position.x = centerOf(aimx); V.aim.position.z = centerOf(aimz); V.aim.rotation.z = now / 400;
   } else if (V.aim) V.aim.visible = false;
   { const pw = $('pwr'), on = V.chgT > 0, hint = !!(mp && mp.al && mp.cr); pw.style.display = hint ? 'block' : 'none'; pw.firstElementChild.style.width = (cgc * 100) + '%'; $('pwrl').style.display = hint ? 'block' : 'none'; $('pwrl').textContent = on ? 'solte para jogar' : 'segure o botão esquerdo'; $('cross').className = (V.zoomM || V.keys.KeyZ) ? 'dot' : ''; }
   // fumaça atrapalha: tela cinza quando você está dentro dela
@@ -860,7 +882,7 @@ $('btn-solo').onclick = async () => {
   resetWorld(); V.solo = true; V.meId = 'me';
   const bots = +$('bots').value, list = [{ id: 'me', name: $('name').value.trim() || 'Você', ch: 'hood' }];
   for (let i = 0; i < bots; i++) list.push({ id: 'bot' + (i + 1), name: 'Bot ' + (i + 1), bot: true, ch: 'hood' });
-  V.sim = new BomberSim({ players: list, rounds: +$('rounds').value, map: $('map').value }); V.mirror = null; enterGame();
+  V.sim = new BomberSim({ players: list, rounds: +$('rounds').value, map: $('map').value, throwMode: $('tmode').value === '1' }); V.mirror = null; enterGame();
 };
 function ensureSocket() {
   if (V.socket) return V.socket;
@@ -894,5 +916,5 @@ $('btn-online').onclick = () => {
   const room = $('room').value.trim().toUpperCase(); if (!/^[A-Z0-9]{1,5}$/.test(room)) return setErr('Sala: 1 a 5 letras ou números.');
   s.emit('bm_join', { room, name: $('name').value.trim() || 'Jogador', ch: 'hood' });
 };
-$('btn-start').onclick = () => { audioInit(); V.socket.emit('bm_start', { bots: +$('lbots').value, rounds: +$('lrounds').value, map: $('lmap').value }); };
+$('btn-start').onclick = () => { audioInit(); V.socket.emit('bm_start', { bots: +$('lbots').value, rounds: +$('lrounds').value, map: $('lmap').value, tm: $('ltmode').value === '1' }); };
 $('btn-leave').onclick = () => { if (V.socket) V.socket.emit('bm_leave'); $('m-main').classList.remove('hidden'); $('m-lobby').classList.add('hidden'); };

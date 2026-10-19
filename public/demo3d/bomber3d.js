@@ -4,7 +4,7 @@
 
 export const CELL = 100;
 export const BM = {
-  size: 15,                      // mapa quadrado de 15 x 15 células (a borda é parede)
+  size: 28,                      // mapa quadrado de 28 x 28 células: labirinto de corredores largos (2 células), a borda é parede
   r: 24,                         // raio do personagem
   speed: 230, skate: 1.4,        // velocidade base e com o patinete
   fuse: 3.0, fire: 0.6,          // pavio da bomba e tempo do fogo (segundos)
@@ -15,7 +15,7 @@ export const BM = {
   itemChance: 0.38,
   smoke: { dist: 4, fly: 0.7, time: 8, r: 170, slow: 0.6 },
   curseTime: 14,
-  roundTime: 180, sudden: 120, hard: 240, ready: 3, endDelay: 3.5,
+  roundTime: 240, sudden: 150, hard: 300, ready: 3, endDelay: 3.5,
   wallH: 122, pillarH: 148,      // paredes bem mais altas que o personagem (64): não dá pra ver o corredor do lado
   jumpCd: 15, lobCd: 3, lobCells: 2, throwMax: 6, superH: 170, jumpTime: 0.5, jumpCells: 2, // super pulo: pula 2 células (por cima de parede/bomba) e só de novo depois de 15 s
   beltSpeed: 110, windSpeed: 100, iceAccel: 2.2
@@ -27,16 +27,21 @@ export const BOMBER_MAPS = {
   metro: { name: 'Estação de metrô', desc: 'Trilhos no meio: a cada 20 s passa um trem', density: 0.85, hz: { k: 'train', first: 12, every: 20 }, q: ['########', '#....,,,', '#.##.#,,', '#.....,,', '#.##.#,,', '#.....,,', '#.#.#.,,', '#.....,,'] },
   mar: { name: 'Plataforma no mar', desc: 'Contêineres e ondas gigantes que varrem corredores', density: 0.8, hz: { k: 'wave', first: 14, every: 20, lines: 2, speed: 900 }, q: ['########', '#.......', '#.##.##.', '#.......', '#.#..#..', '#.......', '#.##.##.', '#.......'] },
   obra: { name: 'Canteiro de obras', desc: 'A bola de demolição gira em volta do guindaste', density: 0.8, hz: { k: 'ball', first: 15, every: 22 }, q: ['########', '#.......', '#.#.#.#.', '#.......', '#.#.#.#.', '#....,,,', '#.#.#,##', '#....,##'] },
-  fabrica: { name: 'Fábrica', desc: 'Esteiras rolantes empurram você e as bombas', density: 0.78, belts: [{ ax: 'x', idx: 3, dir: 1 }, { ax: 'x', idx: 11, dir: -1 }], q: ['########', '#.......', '#.#####.', '#,,,,,,,', '#.#.#.#.', '#.......', '#.#####.', '#.......'] },
+  fabrica: { name: 'Fábrica', desc: 'Esteiras rolantes empurram você e as bombas', density: 0.78, belts: [{ ax: 'x', idx: 2, dir: 1 }, { ax: 'x', idx: 6, dir: -1 }, { ax: 'z', idx: 4, dir: 1 }], q: ['########', '#.......', '#.#####.', '#,,,,,,,', '#.#.#.#.', '#.......', '#.#####.', '#.......'] },
   castelo: { name: 'Castelo', desc: 'O dragão sopra fogo em fileiras inteiras', density: 0.8, hz: { k: 'dragon', first: 16, every: 20, lines: 2 }, q: ['########', '#.......', '#.#.#.#.', '#.......', '#.#.#.#.', '#....##,', '#....#,,', '#....,,#'] },
   navio: { name: 'Navio na tempestade', desc: 'Ondas varrem o convés e caem raios', density: 0.9, hz: { k: 'wave', first: 12, every: 16, lines: 3, speed: 700 }, q: ['########', '#.......', '#.#.#.#.', '#.......', '#.#...#.', '#.......', '#.#.###.', '#.....#,'] },
-  lua: { name: 'Base na Lua', desc: 'Meteoros caem (com aviso) e a gravidade baixa joga a bomba mais longe', density: 0.8, lowg: true, hz: { k: 'meteor', first: 18, every: 18, count: 2 }, q: ['########', '#.......', '#.##.##.', '#.#...#.', '#.....,,', '#.##.#,,', '#.#.,,,,', '#...,,,,'] },
-  portais: { name: 'Portais', desc: 'Dois pares de portais que abrem e fecham', density: 0.8, portals: [[3, 3, 11, 11], [11, 3, 3, 11]], q: ['########', '#.......', '#.#.#.#.', '#..,....', '#.#.#.#.', '#....,,,', '#.#.#,#,', '#....,,,'] },
-  vulcao: { name: 'Vulcão', desc: 'Erupções de lava surgem no chão depois de um aviso', density: 0.8, hz: { k: 'lava', first: 10, every: 11, count: 3 }, q: ['########', '#.......', '#.#.#.#.', '#...#...', '#.#.#.#.', '#.......', '#.#.#.#.', '#...#...'] },
+  lua: { name: 'Base na Lua', desc: 'Meteoros caem (com aviso) e a gravidade baixa joga a bomba mais longe', density: 0.8, lowg: true, hz: { k: 'meteor', first: 16, every: 14, count: 2 }, q: ['########', '#.......', '#.##.##.', '#.#...#.', '#.....,,', '#.##.#,,', '#.#.,,,,', '#...,,,,'] },
+  portais: { name: 'Portais', desc: 'Dois pares de portais que abrem e fecham', density: 0.8, portals: [[2, 2, 6, 6], [6, 2, 2, 6]], q: ['########', '#.......', '#.#.#.#.', '#..,....', '#.#.#.#.', '#....,,,', '#.#.#,#,', '#....,,,'] },
+  vulcao: { name: 'Vulcão', desc: 'Erupções de lava surgem no chão depois de um aviso', density: 0.8, hz: { k: 'lava', first: 10, every: 9, count: 6 }, q: ['########', '#.......', '#.#.#.#.', '#...#...', '#.#.#.#.', '#.......', '#.#.#.#.', '#...#...'] },
   escuro: { name: 'Sala escura', desc: 'A luz apaga e você só enxerga perto', density: 0.85, hz: { k: 'dark', period: 24, lit: 10 }, q: ['########', '#.......', '#.#####.', '#.......', '#.#.#.#.', '#.....#.', '#.#.#.#.', '#.......'] },
   neve: { name: 'Neve', desc: 'Gelo escorregadio e tempestade que atrasa todo mundo', density: 0.8, ice: true, hz: { k: 'blizzard', first: 20, every: 25, dur: 7 }, q: ['########', '#.......', '#.#.#.#.', '#.......', '#.#.##..', '#.......', '#.#.#.#.', '#.......'] },
   deserto: { name: 'Deserto', desc: 'Tempestade de areia empurra todo mundo', density: 0.8, hz: { k: 'sand', first: 18, every: 24, dur: 7 }, q: ['########', '#.......', '#.#...#.', '#.......', '#.....#.', '#.#.....', '#.#...#.', '#.......'] }
 };
+// escala portais e esteiras (escritos em coordenadas de sala) pro tamanho do mapa
+for (const m of Object.values(BOMBER_MAPS)) {
+  if (m.portals) m.portals = m.portals.map((p) => p.map((v) => 1 + 3 * v));
+  if (m.belts) m.belts = m.belts.map((b) => Object.assign({}, b, { idx: 1 + 3 * b.idx }));
+}
 export const MAP_LIST = Object.keys(BOMBER_MAPS).map((id) => ({ id, name: BOMBER_MAPS[id].name, desc: BOMBER_MAPS[id].desc }));
 export function pickMap(id, seed) { return BOMBER_MAPS[id] ? id : id === 'rand' ? MAP_LIST[(seed >>> 0) % MAP_LIST.length].id : 'classic'; }
 export const ITEM_KINDS = ['bomb', 'fire', 'skate', 'glove', 'kick', 'smoke', 'skull', 'jump'];
@@ -70,6 +75,7 @@ export class BomberSim {
     for (const d of (opts.players || []).slice(0, 4)) {
       this.players.set(d.id, { id: d.id, name: d.name || 'Jogador', bot: !!d.bot, ch: d.ch || 'hood', slot: slot++, wins: 0, kills: 0 });
     }
+    this.throwMode = !!opts.throwMode; // modo arremesso: a bomba é jogada (mouse esq. segurado = força), não plantada
     this.practice = this.players.size < 2; // sozinho sem bots: treino livre (a rodada não acaba)
     this.time = 0; this.round = 0; this.phase = 'ready'; this.rt = 0; this.phaseT = 0;
     this.events = []; this.nextId = 1; this.winner = null; this.matchWinner = null;
@@ -79,20 +85,27 @@ export class BomberSim {
   rndRound() { return mulberry32(this.seed + this.round * 7919); }
 
   // ---------- mapa ----------
+  // labirinto: salas de 2x2 células ligadas por passagens largas (2 células) com paredes de 1 célula; alguns caminhos extras (ciclos) e blocos quebráveis
   genGrid() {
-    const N = this.N, g = new Uint8Array(N * N), rnd = this.rndRound(), mp = BOMBER_MAPS[this.mapId || 'classic'];
-    for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
-      const edge = x === 0 || z === 0 || x === N - 1 || z === N - 1;
-      let ch = N === 15 ? mp.q[Math.min(z, N - 1 - z)][Math.min(x, N - 1 - x)] : (x % 2 === 0 && z % 2 === 0 ? '#' : '.');
-      if (edge) ch = '#';
-      g[z * N + x] = ch === '#' ? 1 : ch === ',' ? 0 : (rnd() < mp.density ? 2 : 0);
+    const N = this.N, g = new Uint8Array(N * N).fill(1), rnd = this.rndRound(), mp = BOMBER_MAPS[this.mapId || 'classic'], K = Math.floor((N - 1) / 3);
+    for (let j = 0; j < K; j++) for (let i = 0; i < K; i++) for (let dz = 0; dz < 2; dz++) for (let dx = 0; dx < 2; dx++) g[(1 + 3 * j + dz) * N + 1 + 3 * i + dx] = 0;
+    const open = (i, j, i2, j2) => {
+      if (i !== i2) { const x = 3 + 3 * Math.min(i, i2); for (let d = 0; d < 2; d++) g[(1 + 3 * j + d) * N + x] = 0; }
+      else { const z = 3 + 3 * Math.min(j, j2); for (let d = 0; d < 2; d++) g[z * N + 1 + 3 * i + d] = 0; }
+    };
+    const seen = new Uint8Array(K * K), done = new Set(), stack = [[0, 0]]; seen[0] = 1;
+    while (stack.length) {
+      const [i, j] = stack[stack.length - 1], nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([a, b]) => [i + a, j + b]).filter(([a, b]) => a >= 0 && b >= 0 && a < K && b < K && !seen[b * K + a]);
+      if (!nb.length) { stack.pop(); continue; }
+      const [a, b] = nb[Math.floor(rnd() * nb.length)]; seen[b * K + a] = 1; open(i, j, a, b); done.add(i + ',' + j + ',' + a + ',' + b); done.add(a + ',' + b + ',' + i + ',' + j); stack.push([a, b]);
+    }
+    for (let j = 0; j < K; j++) for (let i = 0; i < K; i++) for (const [a, b] of [[i + 1, j], [i, j + 1]]) if (a < K && b < K && !done.has(i + ',' + j + ',' + a + ',' + b) && rnd() < 0.3) open(i, j, a, b);
+    const sp = spawnCells(N);
+    for (let z = 1; z < N - 1; z++) for (let x = 1; x < N - 1; x++) {
+      if (g[z * N + x] !== 0 || sp.some(([a, b]) => Math.abs(a - x) + Math.abs(b - z) <= 3)) continue;
+      if (rnd() < mp.density * 0.42) g[z * N + x] = 2;
     }
     for (const [ax, az, bx, bz] of (mp.portals || [])) { g[az * N + ax] = 0; g[bz * N + bx] = 0; }
-    // cada canto fica livre em L (nasce + 2 células pra cada lado: dá pra fugir da própria bomba)
-    for (const [sx, sz] of spawnCells(N)) {
-      const dx = sx < N / 2 ? 1 : -1, dz = sz < N / 2 ? 1 : -1;
-      g[sz * N + sx] = 0; for (let i = 1; i <= 2; i++) { g[sz * N + sx + dx * i] = 0; g[(sz + dz * i) * N + sx] = 0; }
-    }
     return g;
   }
   cell(cx, cz) { return cx < 0 || cz < 0 || cx >= this.N || cz >= this.N ? 1 : this.grid[cz * this.N + cx]; }
@@ -112,7 +125,7 @@ export class BomberSim {
       Object.assign(p, {
         x: centerOf(cx), z: centerOf(cz), yaw: cx < this.N / 2 ? 0 : Math.PI, vx: 0, vz: 0, alive: true,
         maxBombs: BM.startBombs, range: BM.startRange, skate: false, glove: false, kick: false, smoke: 0,
-        curse: null, curseLeft: 0, curseCool: 0, carry: null, lobCd: 0, shift: false, jumpItem: false, jumpCd: 0, jmp: null, jumpGuard: 0, portCool: 0, cvx: 0, cvz: 0, inv: 1.2, autoT: 0, lastIn: this.time, ai: null, corr: false, deadT: 0
+        curse: null, curseLeft: 0, curseCool: 0, carry: null, stun: 0, hzCool: 0, lobCd: 0, shift: false, jumpItem: false, jumpCd: 0, jmp: null, jumpGuard: 0, portCool: 0, cvx: 0, cvz: 0, inv: 1.2, autoT: 0, lastIn: this.time, ai: null, corr: false, deadT: 0
       });
     }
     this.events.push({ e: 'round', n: this.round });
@@ -176,6 +189,7 @@ export class BomberSim {
     if (!p.alive || this.phase !== 'play') { p.vx = p.vz = 0; return; }
     dt = Math.min(dt, 0.05);
     if (p.jumpGuard > 0) p.jumpGuard -= dt;
+    if (p.stun > 0) { p.stun -= dt; p.vx = p.vz = 0; return; }
     if (p.jmp) { if (this.isMirror) this.advanceJump(p, dt); p.vx = p.vz = 0; return; }
     if (p.curse === 'reverse') { dx = -dx; dz = -dz; }
     const len = Math.hypot(dx, dz); if (len > 1) { dx /= len; dz /= len; }
@@ -266,7 +280,7 @@ export class BomberSim {
   }
   // mouse direito (com a luva): bomba plantada aqui -> lança com força mínima (recarga 3s); senão pega uma bomba nova na mão
   grabBomb(p) {
-    if (!p.glove) return;
+    if (!p.glove && !this.throwMode) return;
     if (p.carry) { const b = this.bombs.find((x) => x.id === p.carry); const cx = cellOf(p.x), cz = cellOf(p.z); if (b && !this.bombAtCell(cx, cz)) { b.st = 'idle'; b.carrier = null; b.x = centerOf(cx); b.z = centerOf(cz); b.y = 0; p.carry = null; b.pass = new Set([p.id]); (p.pass || (p.pass = new Set())).add(b.id); this.events.push({ e: 'place', id: b.id, pid: p.id, cx, cz }); } return; }
     const cx = cellOf(p.x), cz = cellOf(p.z), [fdx, fdz] = this.snapDir(p.yaw);
     const here = this.bombAtCell(cx, cz) || this.bombAtCell(cx + fdx, cz + fdz); // bomba plantada aqui ou logo na frente
@@ -281,12 +295,7 @@ export class BomberSim {
     const cx = cellOf(p.x), cz = cellOf(p.z), here = this.bombAtCell(cx, cz);
     if (here) return;
     if (!this.canPlace(p) || this.solidCell(cx, cz)) return;
-    // a bomba aparece na frente de quem planta; se a frente está bloqueada (parede/bloco/bomba), cai aqui e o jogador é empurrado pra trás
-    const [dx, dz] = this.snapDir(p.yaw), fx = cx + dx, fz = cz + dz;
-    if (fx > 0 && fz > 0 && fx < this.N - 1 && fz < this.N - 1 && !this.solidCell(fx, fz) && !this.bombAtCell(fx, fz)) { this.placeBomb(p, fx, fz); return; }
-    const bx = cx - dx, bz = cz - dz;
     this.placeBomb(p, cx, cz);
-    if (!this.solidCell(bx, bz) && !this.bombAtCell(bx, bz) && bx > 0 && bz > 0 && bx < this.N - 1 && bz < this.N - 1) { p.x = centerOf(bx); p.z = centerOf(bz); p.corr = true; p.cvx = p.cvz = 0; p.jumpGuard = 0.3; }
   }
   placeBomb(p, cx, cz) {
     const b = { id: this.nextId++, o: p.id, x: centerOf(cx), z: centerOf(cz), y: 0, f: BM.fuse, r: this.rangeOf(p), st: 'idle', dx: 0, dz: 0, pass: new Set(), ft: null };
@@ -303,11 +312,14 @@ export class BomberSim {
   snapDir(yaw) { const c = Math.cos(yaw), s = Math.sin(yaw); return Math.abs(c) >= Math.abs(s) ? [Math.sign(c) || 1, 0] : [0, Math.sign(s) || 1]; }
   throwBomb(p, cells, fromX, fromZ) {
     const b = this.bombs.find((x) => x.id === p.carry); p.carry = null; if (!b) return;
-    const [dx, dz] = this.snapDir(p.yaw), cx = fromX != null ? fromX : cellOf(p.x), cz = fromZ != null ? fromZ : cellOf(p.z);
+    const cx = fromX != null ? fromX : cellOf(p.x), cz = fromZ != null ? fromZ : cellOf(p.z), ux = Math.cos(p.yaw), uz = Math.sin(p.yaw);
     const N = this.N, free = (x, z) => x > 0 && z > 0 && x < N - 1 && z < N - 1 && !this.solidCell(x, z) && !this.bombAtCell(x, z);
-    const tc = Math.round((cells || BM.throwCells) * (this.mp.lowg ? 1.6 : 1)); let tx = clamp(cx + dx * tc, 1, N - 2), tz = clamp(cz + dz * tc, 1, N - 2), found = null;
-    let bestK = 99; // célula livre mais perto da distância pedida, andando na linha da mira
-    for (let k = 1; k <= N; k++) { const x = cx + dx * k, z = cz + dz * k; if (x <= 0 || z <= 0 || x >= N - 1 || z >= N - 1) break; if (free(x, z) && Math.abs(k - tc) < bestK) { bestK = Math.abs(k - tc); found = [x, z]; } }
+    const tc = Math.round((cells || BM.throwCells) * (this.mp.lowg ? 1.6 : 1)); let found = null, bestK = 99, last = -1; // direção livre (qualquer ângulo da mira)
+    for (let t = 0.5; t <= N + 0.5; t += 0.5) {
+      const x = cellOf(centerOf(cx) + ux * t * CELL), z = cellOf(centerOf(cz) + uz * t * CELL); if (x <= 0 || z <= 0 || x >= N - 1 || z >= N - 1) break;
+      const id = z * N + x; if (id === last || (x === cx && z === cz)) continue; last = id;
+      if (free(x, z) && Math.abs(t - tc) < bestK) { bestK = Math.abs(t - tc); found = [x, z]; }
+    }
     if (!found) found = [cx, cz];
     b.st = 'thrown'; b.carrier = null; b.ft = { sx: b.x, sz: b.z, tx: centerOf(found[0]), tz: centerOf(found[1]), t: 0, T: this.mp.lowg ? 0.9 : BM.throwTime };
     this.events.push({ e: 'throw', pid: p.id, id: b.id });
@@ -394,7 +406,7 @@ export class BomberSim {
       if (!p.alive) continue;
       if (p.inv > 0) p.inv -= dt;
       if (p.curseCool > 0) p.curseCool -= dt;
-      if (p.jumpCd > 0) p.jumpCd -= dt; if (p.lobCd > 0) p.lobCd -= dt;
+      if (p.jumpCd > 0) p.jumpCd -= dt; if (p.lobCd > 0) p.lobCd -= dt; if (p.hzCool > 0) p.hzCool -= dt;
       if (p.portCool > 0) p.portCool -= dt;
       if (p.jmp) this.advanceJump(p, dt);
       this.portalCheck(p);
@@ -406,7 +418,7 @@ export class BomberSim {
         if (!b || !this.overlapsCell(p, cellOf(b.x), cellOf(b.z))) { p.pass.delete(id); if (b) b.pass.delete(p.id); }
       }
       // fogo mata
-      if (p.inv <= 0 && !p.jmp) for (const f of this.fires) if (this.overlapsCell(p, f.cx, f.cz, -9)) { this.kill(p, f); break; }
+      if (p.inv <= 0 && !p.jmp) for (const f of this.fires) if (this.overlapsCell(p, f.cx, f.cz, -9)) { if (f.hz) this.hazardHit(p, p.x - centerOf(f.cx), p.z - centerOf(f.cz)); else this.kill(p, f); break; }
       if (!p.alive) continue;
       // pega item
       for (let i = this.items.length - 1; i >= 0; i--) {
@@ -505,7 +517,7 @@ export class BomberSim {
     while (this.dropT <= 0 && this.dropI < this.spiral.length) {
       const [cx, cz] = this.spiral[this.dropI++];
       if (this.cell(cx, cz) === 1) continue; // já era parede: pula sem esperar
-      this.dropT += 0.28;
+      this.dropT += 0.12;
       this.grid[cz * this.N + cx] = 1;
       this.bombs = this.bombs.filter((b) => !(cellOf(b.x) === cx && cellOf(b.z) === cz && b.st !== 'thrown' && b.st !== 'carried'));
       this.items = this.items.filter((it) => !(it.cx === cx && it.cz === cz));
@@ -561,13 +573,13 @@ export class BomberSim {
   spawnStrikes(h) {
     const N = this.N, id = () => this.nextId++;
     switch (h.k) {
-      case 'train': this.trainN = (this.trainN || 0) + 1; this.strikes.push(this.bandStrike({ k: 'train', ax: 'z', lo: 6 * CELL, hi: 9 * CELL, dir: this.trainN % 2 ? 1 : -1, len: 380, sp: 1500, w: 3 })); this.events.push({ e: 'warn', k: 'train' }); break;
+      case 'train': this.trainN = (this.trainN || 0) + 1; this.strikes.push(this.bandStrike({ k: 'train', ax: 'z', lo: Math.floor(N / 2 - 1.5) * CELL, hi: (Math.floor(N / 2 - 1.5) + 3) * CELL, dir: this.trainN % 2 ? 1 : -1, len: 380, sp: 1500, w: 3 })); this.events.push({ e: 'warn', k: 'train' }); break;
       case 'wave': {
-        const ax = Math.random() < 0.5 ? 'x' : 'z', idx = [1, 3, 5, 7, 9, 11, 13].sort(() => Math.random() - 0.5).slice(0, h.lines || 2);
+        const ax = Math.random() < 0.5 ? 'x' : 'z', idx = Array.from({ length: N - 2 }, (_, q) => q + 1).sort(() => Math.random() - 0.5).slice(0, h.lines || 2);
         for (const i of idx) this.strikes.push(this.bandStrike({ k: 'wave', ax, lo: i * CELL, hi: (i + 1) * CELL, dir: Math.random() < 0.5 ? 1 : -1, len: 320, sp: h.speed || 900, w: 2.6 }));
         this.events.push({ e: 'warn', k: 'wave' }); break;
       }
-      case 'ball': this.strikes.push({ id: id(), k: 'ball', cx: N * CELL / 2, cz: N * CELL / 2, R: 2 * CELL, ang0: Math.random() * 6.283, dir: Math.random() < 0.5 ? 1 : -1, laps: 2, w: 2.6, T: 4.4, a: 4.4, bx: 0, bz: 0 }); this.events.push({ e: 'warn', k: 'ball' }); break;
+      case 'ball': this.strikes.push({ id: id(), k: 'ball', cx: N * CELL / 2, cz: N * CELL / 2, R: 3.5 * CELL, ang0: Math.random() * 6.283, dir: Math.random() < 0.5 ? 1 : -1, laps: 2, w: 2.6, T: 4.4, a: 4.4, bx: 0, bz: 0 }); this.events.push({ e: 'warn', k: 'ball' }); break;
       case 'meteor': {
         const c1 = this.randomCell(4); if (!c1) break; const c2 = [N - 1 - c1[0], N - 1 - c1[1]];
         for (const c of (h.count || 2) > 1 && this.cell(c2[0], c2[1]) !== 1 ? [c1, c2] : [c1]) this.strikes.push({ id: id(), k: 'meteor', cx: c[0], cz: c[1], w: 2.6, T: 0.9, a: 0.9 });
@@ -578,7 +590,7 @@ export class BomberSim {
         this.events.push({ e: 'warn', k: 'lava' }); break;
       }
       case 'dragon': {
-        const ax = Math.random() < 0.5 ? 'x' : 'z', idx = [1, 3, 5, 7, 9, 11, 13].sort(() => Math.random() - 0.5).slice(0, h.lines || 2);
+        const ax = Math.random() < 0.5 ? 'x' : 'z', idx = Array.from({ length: N - 2 }, (_, q) => q + 1).sort(() => Math.random() - 0.5).slice(0, h.lines || 2);
         for (const i of idx) this.strikes.push({ id: id(), k: 'fire', ax, idx: i, dir: Math.random() < 0.5 ? 1 : -1, w: 2.8, T: 1.1, a: 1.1 });
         this.events.push({ e: 'warn', k: 'dragon' }); break;
       }
@@ -599,18 +611,25 @@ export class BomberSim {
       this.events.push({ e: 'dragon', ax: s.ax, idx: s.idx });
     }
   }
-  killAt(p, byHazard) { if (p.alive && p.inv <= 0 && !p.jmp) this.kill(p, byHazard || null); }
+  killAt(p, byHazard, dx, dz) { if (p.alive && p.inv <= 0 && !p.jmp) this.hazardHit(p, dx, dz); }
+  // evento do mapa NÃO mata: empurra o jogador e deixa ele atordoado um instante
+  hazardHit(p, dx, dz) {
+    if (!p.alive || p.hzCool > 0 || p.jmp) return;
+    const l = Math.hypot(dx, dz) || 1; p.hzCool = 1.8; p.stun = 1.0; p.vx = p.vz = 0; p.cvx = p.cvz = 0;
+    const [nx, nz] = this.resolve(p, p.x + dx / l * 150, p.z + dz / l * 150); p.x = nx; p.z = nz; p.corr = true;
+    this.events.push({ e: 'hzhit', pid: p.id });
+  }
   runStrike(s) {
     if (s.k === 'train' || s.k === 'wave') {
       const u = clamp(1 - s.a / s.T, 0, 1), start = s.dir > 0 ? -s.len : s.L + s.len, end = s.dir > 0 ? s.L + s.len : -s.len, f = start + (end - start) * u;
       s.f = f; const b0 = Math.min(f, f - s.dir * s.len), b1 = Math.max(f, f - s.dir * s.len);
       const inBand = (x, z, m) => { const al = s.ax === 'z' ? z : x, cr = s.ax === 'z' ? x : z; return al >= b0 - m && al <= b1 + m && cr >= s.lo - m && cr <= s.hi + m; };
-      for (const p of this.players.values()) if (p.alive && inBand(p.x, p.z, 8)) this.killAt(p, s);
+      for (const p of this.players.values()) if (p.alive && inBand(p.x, p.z, 8)) this.killAt(p, s, s.ax === 'z' ? 0 : s.dir, s.ax === 'z' ? s.dir : 0);
       this.bombs = this.bombs.filter((b) => !((b.st === 'idle' || b.st === 'slide') && inBand(b.x, b.z, 0)));
       for (let j = this.items.length - 1; j >= 0; j--) { const it = this.items[j]; if (inBand(centerOf(it.cx), centerOf(it.cz), 0)) { this.items.splice(j, 1); this.events.push({ e: 'item_burn', cx: it.cx, cz: it.cz }); } }
     } else if (s.k === 'ball') {
       const u = clamp(1 - s.a / s.T, 0, 1), ang = s.ang0 + s.dir * s.laps * 6.283 * u; s.bx = s.cx + Math.cos(ang) * s.R; s.bz = s.cz + Math.sin(ang) * s.R;
-      for (const p of this.players.values()) if (p.alive && Math.hypot(p.x - s.bx, p.z - s.bz) < 64) this.killAt(p, s);
+      for (const p of this.players.values()) if (p.alive && Math.hypot(p.x - s.bx, p.z - s.bz) < 64) this.killAt(p, s, p.x - s.bx, p.z - s.bz);
       for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const cx = cellOf(s.bx) + dx, cz = cellOf(s.bz) + dz; if (Math.hypot(centerOf(cx) - s.bx, centerOf(cz) - s.bz) < 80) this.breakBlock(cx, cz); }
       this.bombs = this.bombs.filter((b) => !((b.st === 'idle' || b.st === 'slide') && Math.hypot(b.x - s.bx, b.z - s.bz) < 60));
     }
@@ -740,10 +759,10 @@ export class BomberSim {
     }
     if (ai.path.length) {
       const [px, pz] = ai.path[0], dx = centerOf(px) - p.x, dz = centerOf(pz) - p.z, d = Math.hypot(dx, dz) || 1;
-      p.yaw = Math.atan2(dz, dx); this.moveLocal(p, dx / d, dz / d, dt);
+      p.yaw = Math.atan2(dz, dx); const rv = p.curse === 'reverse' ? -1 : 1; this.moveLocal(p, rv * dx / d, rv * dz / d, dt); // com a caveira 'invertido' o bot compensa
     } else { // parado: vai pro centro da própria célula (não fica com o corpo metade em cima de uma célula perigosa)
       const ox = centerOf(cx) - p.x, oz = centerOf(cz) - p.z, d = Math.hypot(ox, oz);
-      if (d > 6) { p.yaw = Math.atan2(oz, ox); this.moveLocal(p, ox / d, oz / d, dt); } else { p.vx = p.vz = 0; }
+      if (d > 6) { p.yaw = Math.atan2(oz, ox); const rv = p.curse === 'reverse' ? -1 : 1; this.moveLocal(p, rv * ox / d, rv * oz / d, dt); } else { p.vx = p.vz = 0; }
     }
   }
   overlapDanger(p, danger) {
@@ -770,11 +789,11 @@ export class BomberSim {
     for (const p of this.players.values()) {
       pl.push({ id: p.id, nm: p.name, sl: p.slot, bt: p.bot ? 1 : 0, ch: p.ch, x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10, yaw: Math.round(p.yaw * 100) / 100,
         vx: Math.round(p.vx), vz: Math.round(p.vz), al: p.alive ? 1 : 0, mb: p.maxBombs, rg: p.range, sk: p.skate ? 1 : 0, gl: p.glove ? 1 : 0, kk: p.kick ? 1 : 0, sm: p.smoke,
-        cu: p.curse, cl: p.curse ? Math.round(p.curseLeft * 10) / 10 : 0, cr: p.carry || 0, jp: p.jumpItem ? 1 : 0, jc: Math.round(Math.max(0, p.jumpCd) * 10) / 10, lc: Math.round(Math.max(0, p.lobCd || 0) * 10) / 10, sh: p.kick && p.shift ? 1 : 0, jm: p.jmp ? Math.round(p.jmp.t / p.jmp.T * 100) / 100 : -1, wn: p.wins, sp: p.inSmoke ? 1 : 0, iv: p.inv > 0 ? 1 : 0, dt: Math.round(p.deadT * 10) / 10, ab: this.activeBombs(p) });
+        cu: p.curse, cl: p.curse ? Math.round(p.curseLeft * 10) / 10 : 0, cr: p.carry || 0, jp: p.jumpItem ? 1 : 0, jc: Math.round(Math.max(0, p.jumpCd) * 10) / 10, sn: p.stun > 0 ? 1 : 0, lc: Math.round(Math.max(0, p.lobCd || 0) * 10) / 10, sh: p.kick && p.shift ? 1 : 0, jm: p.jmp ? Math.round(p.jmp.t / p.jmp.T * 100) / 100 : -1, wn: p.wins, sp: p.inSmoke ? 1 : 0, iv: p.inv > 0 ? 1 : 0, dt: Math.round(p.deadT * 10) / 10, ab: this.activeBombs(p) });
     }
     return {
       t: Math.round(this.time * 1000) / 1000, ph: this.phase, pt: Math.max(0, Math.round(this.phaseT * 10) / 10), rt: Math.round(this.rt * 10) / 10, rn: this.round, rl: this.roundTime, n: this.N, g: this.gridString(),
-      mp: this.mapId, w: this.winner, mw: this.matchWinner, wn: this.winsNeeded, pr: this.practice ? 1 : 0, p: pl,
+      tm: this.throwMode ? 1 : 0, mp: this.mapId, w: this.winner, mw: this.matchWinner, wn: this.winsNeeded, pr: this.practice ? 1 : 0, p: pl,
       b: this.bombs.map((b) => ({ id: b.id, o: b.o, x: Math.round(b.x), z: Math.round(b.z), y: Math.round(b.y), f: Math.round(b.f * 100) / 100, r: b.r, st: b.st })),
       fi: this.fires.map((f) => ({ cx: f.cx, cz: f.cz, k: f.k, t: Math.round(f.t * 100) / 100, T: Math.round((f.T || BM.fire) * 100) / 100, h: f.hz ? 1 : 0 })),
       hz: this.strikes.map((s) => { const o = { id: s.id, k: s.k, w: Math.round(s.w * 100) / 100, a: Math.round(s.a * 100) / 100, T: s.T }; if (s.k === 'train' || s.k === 'wave') Object.assign(o, { ax: s.ax, lo: s.lo, hi: s.hi, dir: s.dir, len: s.len, L: s.L, f: Math.round(s.f) }); else if (s.k === 'ball') Object.assign(o, { cx: s.cx, cz: s.cz, R: s.R, bx: Math.round(s.bx), bz: Math.round(s.bz) }); else if (s.k === 'fire') Object.assign(o, { ax: s.ax, idx: s.idx, dir: s.dir }); else Object.assign(o, { cx: s.cx, cz: s.cz }); return o; }),
@@ -801,7 +820,7 @@ export class BomberMirror extends BomberSim {
     const sp = s.p.find((q) => q.id === meId);
     if (sp) {
       if (!me) this.players.set(meId, { id: meId, x: sp.x, z: sp.z, yaw: sp.yaw, vx: 0, vz: 0, alive: !!sp.al, cvx: 0, cvz: 0, jmp: null, jumpGuard: 0, jumpCd: 0, jumpItem: false });
-      const m = this.players.get(meId); m.alive = !!sp.al; m.skate = !!sp.sk; m.curse = sp.cu; m.inSmoke = !!sp.sp; m.kick = !!sp.kk; m.sx = sp.x; m.sz = sp.z; m.jumpItem = !!sp.jp; if (!(m.jumpGuard > 0)) m.jumpCd = sp.jc; // sx/sz: onde o servidor diz que estou
+      const m = this.players.get(meId); m.alive = !!sp.al; m.skate = !!sp.sk; m.curse = sp.cu; m.inSmoke = !!sp.sp; m.kick = !!sp.kk; m.sx = sp.x; m.sz = sp.z; m.jumpItem = !!sp.jp; m.stun = sp.sn ? 0.25 : 0; if (!(m.jumpGuard > 0)) m.jumpCd = sp.jc; // sx/sz: onde o servidor diz que estou
     }
     const keep = new Map(this.bombs.map((b) => [b.id, b]));
     this.bombs = s.b.map((b) => { const o = keep.get(b.id) || { id: b.id, pass: new Set() }; Object.assign(o, { x: b.x, z: b.z, y: b.y, f: b.f, st: b.st, o: b.o }); return o; });

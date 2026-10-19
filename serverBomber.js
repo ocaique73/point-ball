@@ -23,11 +23,11 @@ async function setupBomber(io) {
     if (r.host === sock.id) r.host = r.members.keys().next().value;
     if (!r.sim) sendLobby(r);
   }
-  function startGame(r, bots, rounds, map) {
+  function startGame(r, bots, rounds, map, tm) {
     const list = [...r.members.values()].map((m) => ({ id: m.id, name: m.name, ch: m.ch }));
     const nbots = Math.max(0, Math.min(4 - list.length, bots | 0));
     for (let i = 0; i < nbots; i++) list.push({ id: 'bot' + (i + 1), name: 'Bot ' + (i + 1), bot: true, ch: CHARS[(i + 1) % CHARS.length] });
-    r.sim = new BomberSim({ players: list, rounds: Math.max(1, Math.min(9, rounds | 0 || 3)), map: String(map || 'classic') });
+    r.sim = new BomberSim({ players: list, rounds: Math.max(1, Math.min(9, rounds | 0 || 3)), map: String(map || 'classic'), throwMode: !!tm });
     sendLobby(r);
     let acc = 0, last = Date.now(), tick = 0;
     r.timer = setInterval(() => {
@@ -65,7 +65,7 @@ async function setupBomber(io) {
     });
     sock.on('bm_start', (d) => {
       const r = rooms.get(sock.data.bmRoom); if (!r || r.sim || r.host !== sock.id) return;
-      d = d || {}; startGame(r, d.bots, d.rounds, d.map);
+      d = d || {}; startGame(r, d.bots, d.rounds, d.map, d.tm);
     });
     sock.on('bm_in', (d) => {
       const r = rooms.get(sock.data.bmRoom); if (!r || !r.sim || !d) return;
